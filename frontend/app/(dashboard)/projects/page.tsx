@@ -8,7 +8,8 @@ import {
   Clock,
   CheckCircle2,
   Circle,
-  PlayCircle
+  PlayCircle,
+  X
 } from 'lucide-react';
 
 interface Project {
@@ -33,6 +34,17 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    customer: null,
+    status: 'planning',
+    progress: 0,
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: '',
+    value: 0
+  });
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -75,6 +87,41 @@ export default function ProjectsPage() {
     return filteredProjects.filter(p => p.status === status);
   };
 
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      
+      const res = await fetch(`${apiUrl}/projects/projects/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      if (res.ok) {
+        const newProject = await res.json();
+        setProjects([newProject, ...projects]);
+        setShowModal(false);
+        setFormData({
+          name: '',
+          description: '',
+          customer: null,
+          status: 'planning',
+          progress: 0,
+          start_date: new Date().toISOString().split('T')[0],
+          end_date: '',
+          value: 0
+        });
+      }
+    } catch (error) {
+      console.error('Error creating project:', error);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -82,7 +129,10 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-semibold text-text-primary">Projetos</h1>
           <p className="text-text-secondary mt-1">Gerencie seus projetos e tarefas</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
+        <button 
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
+        >
           <Plus className="w-5 h-5" />
           Novo Projeto
         </button>
@@ -156,11 +206,83 @@ export default function ProjectsPage() {
                         <p className="text-xs text-text-secondary mt-1 text-right">{project.progress}%</p>
                       </div>
                     ))
-                  )}
-                </div>
+        )}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">Novo Projeto</h2>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Nome do Projeto</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
               </div>
-            );
-          })}
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Data de Início</label>
+                <input
+                  type="date"
+                  required
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({...formData, start_date: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Data de Término</label>
+                <input
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) => setFormData({...formData, end_date: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Valor</label>
+                <input
+                  type="number"
+                  value={formData.value}
+                  onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
+                >
+                  Criar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

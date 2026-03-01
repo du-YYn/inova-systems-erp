@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   Bell,
-  Search,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -140,14 +139,6 @@ export default function DashboardLayout({
               >
                 <Menu className="w-6 h-6 text-slate-600" />
               </button>
-              <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-slate-100 rounded-xl">
-                <Search className="w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar..." 
-                  className="bg-transparent border-none outline-none text-sm w-64"
-                />
-              </div>
             </div>
             <div className="flex items-center gap-3">
               <button className="relative p-2 hover:bg-slate-100 rounded-xl transition-colors">

@@ -11,7 +11,8 @@ import {
   Users,
   FileText,
   DollarSign,
-  TrendingUp
+  TrendingUp,
+  X
 } from 'lucide-react';
 
 interface Prospect {
@@ -28,6 +29,15 @@ export default function CRMPage() {
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [formData, setFormData] = useState({
+    company_name: '',
+    contact_name: '',
+    contact_email: '',
+    source: 'website',
+    status: 'new',
+    estimated_value: 0
+  });
 
   useEffect(() => {
     const fetchProspects = async () => {
@@ -92,6 +102,39 @@ export default function CRMPage() {
 
   const pipelineValue = prospects.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
 
+  const handleCreateProspect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      
+      const res = await fetch(`${apiUrl}/sales/prospects/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      if (res.ok) {
+        const newProspect = await res.json();
+        setProspects([newProspect, ...prospects]);
+        setShowModal(false);
+        setFormData({
+          company_name: '',
+          contact_name: '',
+          contact_email: '',
+          source: 'website',
+          status: 'new',
+          estimated_value: 0
+        });
+      }
+    } catch (error) {
+      console.error('Error creating prospect:', error);
+    }
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -99,7 +142,10 @@ export default function CRMPage() {
           <h1 className="text-2xl font-semibold text-text-primary">CRM</h1>
           <p className="text-text-secondary mt-1">Gestão de Prospecção e Clientes</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
+        <button 
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
+        >
           <Plus className="w-5 h-5" />
           Novo Prospect
         </button>
@@ -229,6 +275,90 @@ export default function CRMPage() {
           </table>
         </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">Novo Prospect</h2>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateProspect} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Empresa</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.company_name}
+                  onChange={(e) => setFormData({...formData, company_name: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Contato</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.contact_name}
+                  onChange={(e) => setFormData({...formData, contact_name: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.contact_email}
+                  onChange={(e) => setFormData({...formData, contact_email: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Origem</label>
+                <select
+                  value={formData.source}
+                  onChange={(e) => setFormData({...formData, source: e.target.value})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                >
+                  <option value="website">Website</option>
+                  <option value="referral">Indicação</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="cold_call">Cold Call</option>
+                  <option value="event">Evento</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Valor Estimado</label>
+                <input
+                  type="number"
+                  value={formData.estimated_value}
+                  onChange={(e) => setFormData({...formData, estimated_value: parseFloat(e.target.value) || 0})}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
+                >
+                  Criar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
