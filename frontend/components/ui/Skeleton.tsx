@@ -1,6 +1,6 @@
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
-    <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
+    <div className={`skeleton ${className}`} />
   );
 }
 
@@ -20,8 +20,8 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
 
 export function CardSkeleton() {
   return (
-    <div className="bg-white p-6 rounded-lg border border-gray-100 space-y-3">
-      <Skeleton className="h-10 w-10 rounded-lg" />
+    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-card space-y-3">
+      <Skeleton className="h-10 w-10 rounded-xl" />
       <Skeleton className="h-3 w-1/2" />
       <Skeleton className="h-6 w-3/4" />
     </div>
