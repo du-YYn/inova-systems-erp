@@ -16,6 +16,13 @@ import {
   Plus,
   Pencil,
   Trash2,
+  Landmark,
+  Receipt,
+  CheckCircle2,
+  Clock,
+  ArrowLeftRight,
+  Filter,
+  XCircle,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
@@ -82,6 +89,52 @@ interface CostCenter {
   is_active: boolean;
 }
 
+interface FullInvoice {
+  id: number;
+  number: string;
+  invoice_type: 'receivable' | 'payable';
+  description: string;
+  customer: number | null;
+  customer_name: string | null;
+  value: string;
+  discount: string;
+  total: string;
+  issue_date: string;
+  due_date: string;
+  paid_date: string | null;
+  status: 'pending' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  bank_account: number | null;
+  bank_account_name: string | null;
+  category: number | null;
+  category_name: string | null;
+}
+
+interface FullTransaction {
+  id: number;
+  transaction_type: 'income' | 'expense';
+  description: string;
+  amount: string;
+  date: string;
+  bank_account: number | null;
+  bank_account_name: string | null;
+  category: number | null;
+  category_name: string | null;
+  doc_type: string;
+}
+
+interface FullBankAccount {
+  id: number;
+  name: string;
+  bank: string;
+  account_type: string;
+  agency: string;
+  account_number: string;
+  pix_key: string;
+  balance: string;
+  is_active: boolean;
+  is_default: boolean;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const formatCurrency = (value: number | string) =>
@@ -105,7 +158,7 @@ const BUDGET_PERIODS = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
-type Tab = 'overview' | 'categories' | 'budgets' | 'cost_centers';
+type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categories' | 'budgets' | 'cost_centers';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -164,6 +217,47 @@ export default function FinancePage() {
   const [savingCostCenter, setSavingCostCenter] = useState(false);
   const [confirmDeleteCostCenter, setConfirmDeleteCostCenter] = useState<CostCenter | null>(null);
   const [costCenterForm, setCostCenterForm] = useState({ name: '', code: '', description: '' });
+
+  // Invoices state
+  const [invoices, setInvoices] = useState<FullInvoice[]>([]);
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [invoiceTypeFilter, setInvoiceTypeFilter] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('');
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<FullInvoice | null>(null);
+  const [savingInvoice, setSavingInvoice] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState<number | null>(null);
+  const [confirmDeleteInvoice, setConfirmDeleteInvoice] = useState<FullInvoice | null>(null);
+  const [invoiceForm, setInvoiceForm] = useState({
+    invoice_type: 'receivable', description: '', value: '', due_date: today,
+    issue_date: today, bank_account: '', category: '',
+  });
+
+  // Transactions state
+  const [transactions, setTransactions] = useState<FullTransaction[]>([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [txTypeFilter, setTxTypeFilter] = useState('');
+  const [txBankFilter, setTxBankFilter] = useState('');
+  const [txFromDate, setTxFromDate] = useState('');
+  const [txToDate, setTxToDate] = useState('');
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [savingTransaction, setSavingTransaction] = useState(false);
+  const [confirmDeleteTransaction, setConfirmDeleteTransaction] = useState<FullTransaction | null>(null);
+  const [transactionForm, setTransactionForm] = useState({
+    transaction_type: 'income', description: '', amount: '', date: today,
+    bank_account: '', category: '',
+  });
+
+  // Full Bank Accounts state
+  const [fullBankAccounts, setFullBankAccounts] = useState<FullBankAccount[]>([]);
+  const [loadingFullBankAccounts, setLoadingFullBankAccounts] = useState(false);
+  const [showBankAccountModal, setShowBankAccountModal] = useState(false);
+  const [editingBankAccount, setEditingBankAccount] = useState<FullBankAccount | null>(null);
+  const [savingBankAccount, setSavingBankAccount] = useState(false);
+  const [confirmDeleteBankAccount, setConfirmDeleteBankAccount] = useState<FullBankAccount | null>(null);
+  const [bankAccountForm, setBankAccountForm] = useState({
+    name: '', bank: '', account_type: 'checking', agency: '', account_number: '', pix_key: '',
+  });
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
   const getHeaders = () => ({ 'Content-Type': 'application/json' });
@@ -257,6 +351,65 @@ export default function FinancePage() {
     }
   }, []);
 
+  // ── Invoices fetch ────────────────────────────────────────────────────────
+
+  const fetchInvoices = useCallback(async (typeF = invoiceTypeFilter, statusF = invoiceStatusFilter) => {
+    setLoadingInvoices(true);
+    try {
+      const params = new URLSearchParams();
+      if (typeF) params.set('invoice_type', typeF);
+      if (statusF) params.set('status', statusF);
+      const res = await fetch(`${apiUrl}/finance/invoices/?${params}`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const list = data.results || data;
+      setInvoices(Array.isArray(list) ? list : []);
+    } catch {
+      toast.error('Erro ao carregar faturas.');
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [invoiceTypeFilter, invoiceStatusFilter]);
+
+  // ── Transactions fetch ────────────────────────────────────────────────────
+
+  const fetchTransactions = useCallback(async (typeF = txTypeFilter, bankF = txBankFilter, fromF = txFromDate, toF = txToDate) => {
+    setLoadingTransactions(true);
+    try {
+      const params = new URLSearchParams();
+      if (typeF) params.set('type', typeF);
+      if (bankF) params.set('bank', bankF);
+      if (fromF) params.set('from', fromF);
+      if (toF) params.set('to', toF);
+      const res = await fetch(`${apiUrl}/finance/transactions/?${params}`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const list = data.results || data;
+      setTransactions(Array.isArray(list) ? list : []);
+    } catch {
+      toast.error('Erro ao carregar transações.');
+    } finally {
+      setLoadingTransactions(false);
+    }
+  }, [txTypeFilter, txBankFilter, txFromDate, txToDate]);
+
+  // ── Full Bank Accounts fetch ───────────────────────────────────────────────
+
+  const fetchFullBankAccounts = useCallback(async () => {
+    setLoadingFullBankAccounts(true);
+    try {
+      const res = await fetch(`${apiUrl}/finance/bank-accounts/`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const list = data.results || data;
+      setFullBankAccounts(Array.isArray(list) ? list : []);
+    } catch {
+      toast.error('Erro ao carregar contas bancárias.');
+    } finally {
+      setLoadingFullBankAccounts(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'categories' && categories.length === 0) fetchCategories();
     if (activeTab === 'budgets') {
@@ -264,6 +417,12 @@ export default function FinancePage() {
       if (categories.length === 0) fetchCategories();
     }
     if (activeTab === 'cost_centers' && costCenters.length === 0) fetchCostCenters();
+    if (activeTab === 'invoices') fetchInvoices();
+    if (activeTab === 'transactions') {
+      fetchTransactions();
+      if (bankAccounts.length === 0) fetchData();
+    }
+    if (activeTab === 'bank_accounts') fetchFullBankAccounts();
   }, [activeTab]);
 
   // ── Revenue / Expense handlers ────────────────────────────────────────────
@@ -444,6 +603,158 @@ export default function FinancePage() {
     }
   };
 
+  // ── Invoice handlers ──────────────────────────────────────────────────────
+
+  const openNewInvoice = () => {
+    setEditingInvoice(null);
+    setInvoiceForm({ invoice_type: 'receivable', description: '', value: '', due_date: today, issue_date: today, bank_account: bankAccounts.length > 0 ? String(bankAccounts[0].id) : '', category: '' });
+    setShowInvoiceModal(true);
+  };
+
+  const openEditInvoice = (inv: FullInvoice) => {
+    setEditingInvoice(inv);
+    setInvoiceForm({
+      invoice_type: inv.invoice_type, description: inv.description, value: inv.value,
+      due_date: inv.due_date, issue_date: inv.issue_date,
+      bank_account: inv.bank_account ? String(inv.bank_account) : '',
+      category: inv.category ? String(inv.category) : '',
+    });
+    setShowInvoiceModal(true);
+  };
+
+  const handleSaveInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingInvoice(true);
+    try {
+      const url = editingInvoice ? `${apiUrl}/finance/invoices/${editingInvoice.id}/` : `${apiUrl}/finance/invoices/`;
+      const method = editingInvoice ? 'PATCH' : 'POST';
+      const body: Record<string, unknown> = {
+        invoice_type: invoiceForm.invoice_type, description: invoiceForm.description,
+        value: invoiceForm.value, due_date: invoiceForm.due_date, issue_date: invoiceForm.issue_date,
+      };
+      if (invoiceForm.bank_account) body.bank_account = Number(invoiceForm.bank_account);
+      if (invoiceForm.category) body.category = Number(invoiceForm.category);
+      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
+      if (!res.ok) throw new Error();
+      toast.success(editingInvoice ? 'Fatura atualizada!' : 'Fatura criada!');
+      setShowInvoiceModal(false);
+      fetchInvoices();
+    } catch {
+      toast.error('Erro ao salvar fatura.');
+    } finally {
+      setSavingInvoice(false);
+    }
+  };
+
+  const handleMarkPaid = async (inv: FullInvoice) => {
+    setMarkingPaid(inv.id);
+    try {
+      const res = await fetch(`${apiUrl}/finance/invoices/${inv.id}/mark_paid/`, { method: 'POST', headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error();
+      toast.success(`Fatura ${inv.number} marcada como paga!`);
+      fetchInvoices();
+      fetchData();
+    } catch {
+      toast.error('Erro ao marcar fatura como paga.');
+    } finally {
+      setMarkingPaid(null);
+    }
+  };
+
+  const handleDeleteInvoice = async () => {
+    if (!confirmDeleteInvoice) return;
+    try {
+      await fetch(`${apiUrl}/finance/invoices/${confirmDeleteInvoice.id}/`, { method: 'DELETE', credentials: 'include' });
+      toast.success('Fatura removida.');
+      setConfirmDeleteInvoice(null);
+      fetchInvoices();
+    } catch {
+      toast.error('Erro ao remover fatura.');
+    }
+  };
+
+  // ── Transaction handlers ──────────────────────────────────────────────────
+
+  const handleSaveTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingTransaction(true);
+    try {
+      const body: Record<string, unknown> = {
+        transaction_type: transactionForm.transaction_type, description: transactionForm.description,
+        amount: transactionForm.amount, date: transactionForm.date, doc_type: 'manual',
+      };
+      if (transactionForm.bank_account) body.bank_account = Number(transactionForm.bank_account);
+      if (transactionForm.category) body.category = Number(transactionForm.category);
+      const res = await fetch(`${apiUrl}/finance/transactions/`, { method: 'POST', headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
+      if (!res.ok) throw new Error();
+      toast.success('Transação criada!');
+      setShowTransactionModal(false);
+      setTransactionForm({ transaction_type: 'income', description: '', amount: '', date: today, bank_account: '', category: '' });
+      fetchTransactions();
+    } catch {
+      toast.error('Erro ao criar transação.');
+    } finally {
+      setSavingTransaction(false);
+    }
+  };
+
+  const handleDeleteTransaction = async () => {
+    if (!confirmDeleteTransaction) return;
+    try {
+      await fetch(`${apiUrl}/finance/transactions/${confirmDeleteTransaction.id}/`, { method: 'DELETE', credentials: 'include' });
+      toast.success('Transação removida.');
+      setConfirmDeleteTransaction(null);
+      fetchTransactions();
+    } catch {
+      toast.error('Erro ao remover transação.');
+    }
+  };
+
+  // ── Bank Account handlers ─────────────────────────────────────────────────
+
+  const openNewBankAccount = () => {
+    setEditingBankAccount(null);
+    setBankAccountForm({ name: '', bank: '', account_type: 'checking', agency: '', account_number: '', pix_key: '' });
+    setShowBankAccountModal(true);
+  };
+
+  const openEditBankAccount = (ba: FullBankAccount) => {
+    setEditingBankAccount(ba);
+    setBankAccountForm({ name: ba.name, bank: ba.bank || '', account_type: ba.account_type || 'checking', agency: ba.agency || '', account_number: ba.account_number || '', pix_key: ba.pix_key || '' });
+    setShowBankAccountModal(true);
+  };
+
+  const handleSaveBankAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingBankAccount(true);
+    try {
+      const url = editingBankAccount ? `${apiUrl}/finance/bank-accounts/${editingBankAccount.id}/` : `${apiUrl}/finance/bank-accounts/`;
+      const method = editingBankAccount ? 'PATCH' : 'POST';
+      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(bankAccountForm) });
+      if (!res.ok) throw new Error();
+      toast.success(editingBankAccount ? 'Conta atualizada!' : 'Conta criada!');
+      setShowBankAccountModal(false);
+      fetchFullBankAccounts();
+      fetchData();
+    } catch {
+      toast.error('Erro ao salvar conta bancária.');
+    } finally {
+      setSavingBankAccount(false);
+    }
+  };
+
+  const handleDeleteBankAccount = async () => {
+    if (!confirmDeleteBankAccount) return;
+    try {
+      await fetch(`${apiUrl}/finance/bank-accounts/${confirmDeleteBankAccount.id}/`, { method: 'DELETE', credentials: 'include' });
+      toast.success('Conta removida.');
+      setConfirmDeleteBankAccount(null);
+      fetchFullBankAccounts();
+    } catch {
+      toast.error('Erro ao remover conta bancária.');
+    }
+  };
+
   // ── Budget progress color ─────────────────────────────────────────────────
 
   const budgetColor = (progress: number) => {
@@ -456,6 +767,9 @@ export default function FinancePage() {
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Visão Geral', icon: <TrendingUp className="w-4 h-4" /> },
+    { key: 'invoices', label: 'Faturas', icon: <Receipt className="w-4 h-4" /> },
+    { key: 'transactions', label: 'Transações', icon: <ArrowLeftRight className="w-4 h-4" /> },
+    { key: 'bank_accounts', label: 'Contas Bancárias', icon: <Landmark className="w-4 h-4" /> },
     { key: 'categories', label: 'Categorias', icon: <Tag className="w-4 h-4" /> },
     { key: 'budgets', label: 'Orçamentos', icon: <PieChart className="w-4 h-4" /> },
     { key: 'cost_centers', label: 'Centros de Custo', icon: <Building className="w-4 h-4" /> },
@@ -480,6 +794,24 @@ export default function FinancePage() {
               <ArrowDownRight className="w-5 h-5" /> Nova Despesa
             </button>
           </div>
+        )}
+        {activeTab === 'invoices' && (
+          <button onClick={openNewInvoice}
+            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            <Plus className="w-5 h-5" /> Nova Fatura
+          </button>
+        )}
+        {activeTab === 'transactions' && (
+          <button onClick={() => setShowTransactionModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            <Plus className="w-5 h-5" /> Nova Transação
+          </button>
+        )}
+        {activeTab === 'bank_accounts' && (
+          <button onClick={openNewBankAccount}
+            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            <Plus className="w-5 h-5" /> Nova Conta
+          </button>
         )}
         {activeTab === 'categories' && (
           <button onClick={openNewCategory}
@@ -651,6 +983,271 @@ export default function FinancePage() {
         </>
       )}
 
+      {/* ─── Invoices Tab ─────────────────────────────────────────────────── */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
+            <Filter className="w-4 h-4 text-text-secondary" />
+            <select value={invoiceTypeFilter}
+              onChange={e => { setInvoiceTypeFilter(e.target.value); fetchInvoices(e.target.value, invoiceStatusFilter); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              <option value="">Todos os tipos</option>
+              <option value="receivable">A Receber</option>
+              <option value="payable">A Pagar</option>
+            </select>
+            <select value={invoiceStatusFilter}
+              onChange={e => { setInvoiceStatusFilter(e.target.value); fetchInvoices(invoiceTypeFilter, e.target.value); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              <option value="">Todos os status</option>
+              <option value="pending">Pendente</option>
+              <option value="sent">Enviada</option>
+              <option value="paid">Paga</option>
+              <option value="overdue">Vencida</option>
+              <option value="cancelled">Cancelada</option>
+            </select>
+            {(invoiceTypeFilter || invoiceStatusFilter) && (
+              <button onClick={() => { setInvoiceTypeFilter(''); setInvoiceStatusFilter(''); fetchInvoices('', ''); }}
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+                <XCircle className="w-4 h-4" /> Limpar
+              </button>
+            )}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-lg border border-gray-100">
+            {loadingInvoices ? (
+              <div className="p-6 space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+                <Receipt className="w-12 h-12 mb-3 opacity-30" />
+                <p className="font-medium">Nenhuma fatura encontrada</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Número</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Descrição</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Tipo</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Vencimento</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Total</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Status</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {invoices.map((inv) => (
+                    <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-3 px-4 text-sm font-mono text-text-primary">{inv.number}</td>
+                      <td className="py-3 px-4">
+                        <p className="text-sm font-medium text-text-primary">{inv.description || '—'}</p>
+                        {inv.customer_name && <p className="text-xs text-text-secondary">{inv.customer_name}</p>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${inv.invoice_type === 'receivable' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {inv.invoice_type === 'receivable' ? 'A Receber' : 'A Pagar'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-text-secondary">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                      <td className="py-3 px-4 text-right text-sm font-medium text-text-primary">{formatCurrency(inv.total)}</td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                          inv.status === 'paid' ? 'bg-green-100 text-green-800' :
+                          inv.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                          inv.status === 'cancelled' ? 'bg-gray-100 text-gray-600' :
+                          'bg-orange-100 text-orange-800'
+                        }`}>
+                          {inv.status === 'paid' ? <CheckCircle2 className="w-3 h-3" /> :
+                           inv.status === 'overdue' ? <AlertCircle className="w-3 h-3" /> :
+                           <Clock className="w-3 h-3" />}
+                          {inv.status === 'paid' ? 'Paga' : inv.status === 'overdue' ? 'Vencida' :
+                           inv.status === 'cancelled' ? 'Cancelada' : inv.status === 'sent' ? 'Enviada' : 'Pendente'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-end gap-1">
+                          {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                            <button onClick={() => handleMarkPaid(inv)} disabled={markingPaid === inv.id}
+                              title="Marcar como paga"
+                              className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-text-secondary hover:text-green-600 disabled:opacity-50">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button onClick={() => openEditInvoice(inv)}
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setConfirmDeleteInvoice(inv)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Transactions Tab ──────────────────────────────────────────────── */}
+      {activeTab === 'transactions' && (
+        <div className="space-y-4">
+          {/* Filters */}
+          <div className="bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
+            <Filter className="w-4 h-4 text-text-secondary" />
+            <select value={txTypeFilter}
+              onChange={e => { setTxTypeFilter(e.target.value); fetchTransactions(e.target.value, txBankFilter, txFromDate, txToDate); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              <option value="">Todos os tipos</option>
+              <option value="income">Receita</option>
+              <option value="expense">Despesa</option>
+            </select>
+            <select value={txBankFilter}
+              onChange={e => { setTxBankFilter(e.target.value); fetchTransactions(txTypeFilter, e.target.value, txFromDate, txToDate); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              <option value="">Todas as contas</option>
+              {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <input type="date" value={txFromDate} placeholder="De"
+              onChange={e => { setTxFromDate(e.target.value); fetchTransactions(txTypeFilter, txBankFilter, e.target.value, txToDate); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+            <input type="date" value={txToDate} placeholder="Até"
+              onChange={e => { setTxToDate(e.target.value); fetchTransactions(txTypeFilter, txBankFilter, txFromDate, e.target.value); }}
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+            {(txTypeFilter || txBankFilter || txFromDate || txToDate) && (
+              <button onClick={() => { setTxTypeFilter(''); setTxBankFilter(''); setTxFromDate(''); setTxToDate(''); fetchTransactions('', '', '', ''); }}
+                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+                <XCircle className="w-4 h-4" /> Limpar
+              </button>
+            )}
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-lg border border-gray-100">
+            {loadingTransactions ? (
+              <div className="p-6 space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+                <ArrowLeftRight className="w-12 h-12 mb-3 opacity-30" />
+                <p className="font-medium">Nenhuma transação encontrada</p>
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Data</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Descrição</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Categoria</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Conta</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Valor</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {transactions.map((tx) => (
+                    <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="py-3 px-4 text-sm text-text-secondary whitespace-nowrap">{formatDate(tx.date)}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-text-primary">{tx.description || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-text-secondary">{tx.category_name || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-text-secondary">{tx.bank_account_name || '—'}</td>
+                      <td className="py-3 px-4 text-right">
+                        <span className={`text-sm font-semibold ${tx.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                          {tx.transaction_type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button onClick={() => setConfirmDeleteTransaction(tx)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Bank Accounts Tab ────────────────────────────────────────────── */}
+      {activeTab === 'bank_accounts' && (
+        <div className="bg-white rounded-lg border border-gray-100">
+          {loadingFullBankAccounts ? (
+            <div className="p-6 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+            </div>
+          ) : fullBankAccounts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+              <Landmark className="w-12 h-12 mb-3 opacity-30" />
+              <p className="font-medium">Nenhuma conta bancária cadastrada</p>
+              <p className="text-sm mt-1">Cadastre contas para gerenciar seu fluxo de caixa</p>
+            </div>
+          ) : (
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Nome</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Banco</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Agência / Conta</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Tipo</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Saldo</th>
+                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {fullBankAccounts.map((ba) => (
+                  <tr key={ba.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-text-primary">{ba.name}</span>
+                        {ba.is_default && (
+                          <span className="px-1.5 py-0.5 bg-[#A6864A]/10 text-[#A6864A] text-xs rounded">Padrão</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-text-secondary">{ba.bank || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-text-secondary">
+                      {ba.agency ? `Ag. ${ba.agency}` : ''}{ba.agency && ba.account_number ? ' / ' : ''}{ba.account_number || '—'}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded capitalize">
+                        {ba.account_type === 'checking' ? 'Corrente' : ba.account_type === 'savings' ? 'Poupança' : ba.account_type || '—'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className={`text-sm font-semibold ${Number(ba.balance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(ba.balance)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button onClick={() => openEditBankAccount(ba)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setConfirmDeleteBankAccount(ba)}
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
       {/* ─── Categories Tab ────────────────────────────────────────────────── */}
       {activeTab === 'categories' && (
         <div className="bg-white rounded-lg border border-gray-100">
@@ -815,6 +1412,240 @@ export default function FinancePage() {
       )}
 
       {/* ═══════════════════════ MODALS ══════════════════════════════════════ */}
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">{editingInvoice ? 'Editar Fatura' : 'Nova Fatura'}</h2>
+              <button onClick={() => setShowInvoiceModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveInvoice} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <select required value={invoiceForm.invoice_type}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, invoice_type: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  <option value="receivable">A Receber</option>
+                  <option value="payable">A Pagar</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <input type="text" required value={invoiceForm.description}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, description: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                  <input type="number" step="0.01" required value={invoiceForm.value}
+                    onChange={e => setInvoiceForm({ ...invoiceForm, value: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Emissão *</label>
+                  <input type="date" required value={invoiceForm.issue_date}
+                    onChange={e => setInvoiceForm({ ...invoiceForm, issue_date: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Vencimento *</label>
+                <input type="date" required value={invoiceForm.due_date}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              {bankAccounts.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária</label>
+                  <select value={invoiceForm.bank_account}
+                    onChange={e => setInvoiceForm({ ...invoiceForm, bank_account: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    <option value="">Selecione uma conta</option>
+                    {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {categories.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Categoria</label>
+                  <select value={invoiceForm.category}
+                    onChange={e => setInvoiceForm({ ...invoiceForm, category: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    <option value="">Sem categoria</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowInvoiceModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingInvoice}
+                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  {savingInvoice ? 'Salvando...' : editingInvoice ? 'Atualizar' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Transaction Modal */}
+      {showTransactionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">Nova Transação</h2>
+              <button onClick={() => setShowTransactionModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveTransaction} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <select required value={transactionForm.transaction_type}
+                  onChange={e => setTransactionForm({ ...transactionForm, transaction_type: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  <option value="income">Receita</option>
+                  <option value="expense">Despesa</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <input type="text" required value={transactionForm.description}
+                  onChange={e => setTransactionForm({ ...transactionForm, description: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                  <input type="number" step="0.01" required value={transactionForm.amount}
+                    onChange={e => setTransactionForm({ ...transactionForm, amount: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Data *</label>
+                  <input type="date" required value={transactionForm.date}
+                    onChange={e => setTransactionForm({ ...transactionForm, date: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+              </div>
+              {bankAccounts.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária</label>
+                  <select value={transactionForm.bank_account}
+                    onChange={e => setTransactionForm({ ...transactionForm, bank_account: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    <option value="">Selecione uma conta</option>
+                    {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {categories.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Categoria</label>
+                  <select value={transactionForm.category}
+                    onChange={e => setTransactionForm({ ...transactionForm, category: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    <option value="">Sem categoria</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowTransactionModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingTransaction}
+                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  {savingTransaction ? 'Salvando...' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bank Account Modal */}
+      {showBankAccountModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-text-primary">{editingBankAccount ? 'Editar Conta' : 'Nova Conta Bancária'}</h2>
+              <button onClick={() => setShowBankAccountModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveBankAccount} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Nome da Conta *</label>
+                <input type="text" required value={bankAccountForm.name}
+                  onChange={e => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
+                  placeholder="Ex: Conta Principal"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Banco</label>
+                <input type="text" value={bankAccountForm.bank}
+                  onChange={e => setBankAccountForm({ ...bankAccountForm, bank: e.target.value })}
+                  placeholder="Ex: Itaú, Nubank..."
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo de Conta</label>
+                <select value={bankAccountForm.account_type}
+                  onChange={e => setBankAccountForm({ ...bankAccountForm, account_type: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  <option value="checking">Conta Corrente</option>
+                  <option value="savings">Poupança</option>
+                  <option value="investment">Investimento</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Agência</label>
+                  <input type="text" value={bankAccountForm.agency}
+                    onChange={e => setBankAccountForm({ ...bankAccountForm, agency: e.target.value })}
+                    placeholder="0001"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Número da Conta</label>
+                  <input type="text" value={bankAccountForm.account_number}
+                    onChange={e => setBankAccountForm({ ...bankAccountForm, account_number: e.target.value })}
+                    placeholder="12345-6"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Chave Pix</label>
+                <input type="text" value={bankAccountForm.pix_key}
+                  onChange={e => setBankAccountForm({ ...bankAccountForm, pix_key: e.target.value })}
+                  placeholder="CPF, CNPJ, e-mail ou telefone"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowBankAccountModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingBankAccount}
+                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  {savingBankAccount ? 'Salvando...' : editingBankAccount ? 'Atualizar' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Revenue Modal */}
       {showRevenueModal && (
@@ -1112,6 +1943,27 @@ export default function FinancePage() {
         description={`Deseja remover o centro de custo "${confirmDeleteCostCenter?.name}"?`}
         onConfirm={handleDeleteCostCenter}
         onCancel={() => setConfirmDeleteCostCenter(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteInvoice}
+        title="Remover Fatura"
+        description={`Deseja remover a fatura "${confirmDeleteInvoice?.number}"? Esta ação não pode ser desfeita.`}
+        onConfirm={handleDeleteInvoice}
+        onCancel={() => setConfirmDeleteInvoice(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteTransaction}
+        title="Remover Transação"
+        description={`Deseja remover a transação "${confirmDeleteTransaction?.description}"? Esta ação não pode ser desfeita.`}
+        onConfirm={handleDeleteTransaction}
+        onCancel={() => setConfirmDeleteTransaction(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteBankAccount}
+        title="Remover Conta Bancária"
+        description={`Deseja remover a conta "${confirmDeleteBankAccount?.name}"?`}
+        onConfirm={handleDeleteBankAccount}
+        onCancel={() => setConfirmDeleteBankAccount(null)}
       />
     </div>
   );

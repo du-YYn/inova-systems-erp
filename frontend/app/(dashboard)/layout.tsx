@@ -14,6 +14,8 @@ import {
   ScrollText,
   Settings,
   X,
+  BarChart2,
+  UserCircle,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -56,7 +58,9 @@ export default function DashboardLayout({
     { href: '/contratos', label: 'Contratos', icon: ScrollText },
     { href: '/projects', label: 'Projetos', icon: FolderKanban },
     { href: '/finance', label: 'Financeiro', icon: DollarSign },
+    { href: '/relatorios', label: 'Relatórios', icon: BarChart2 },
     { href: '/usuarios', label: 'Usuários', icon: Settings },
+    { href: '/perfil', label: 'Meu Perfil', icon: UserCircle },
   ];
 
   return (

@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Plus, Search, Eye, Edit, Trash2,
-  FileText, TrendingUp, CheckCircle, X
+  Plus, Search, Edit, Trash2,
+  FileText, TrendingUp, CheckCircle, X,
+  Send, ThumbsUp, ThumbsDown, ArrowRight, MoreHorizontal,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -22,6 +23,9 @@ interface Proposal {
   total_value: string;
   status: string;
   valid_until: string | null;
+  notes: string;
+  hours_estimated: string;
+  hourly_rate: string;
   created_at: string;
 }
 
@@ -65,8 +69,11 @@ export default function SalesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [editingProposal, setEditingProposal] = useState<Proposal | null>(null);
   const [saving, setSaving] = useState(false);
+  const [performingAction, setPerformingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
+  const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -102,19 +109,45 @@ export default function SalesPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const close = () => setOpenActionMenu(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, []);
+
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const approvedValue = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.total_value || 0), 0);
   const approvedCount = proposals.filter(p => p.status === 'approved').length;
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openNewModal = () => {
+    setEditingProposal(null);
+    setFormData(EMPTY_FORM);
+    setShowModal(true);
+  };
+
+  const openEditModal = (p: Proposal) => {
+    setEditingProposal(p);
+    setFormData({
+      title: p.title, proposal_type: p.proposal_type, billing_type: p.billing_type,
+      total_value: p.total_value || '', hours_estimated: p.hours_estimated || '',
+      hourly_rate: p.hourly_rate || '', customer: p.customer ? String(p.customer) : '',
+      notes: p.notes || '', valid_until: p.valid_until || '',
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
+      const url = editingProposal
+        ? `${apiUrl}/sales/proposals/${editingProposal.id}/`
+        : `${apiUrl}/sales/proposals/`;
+      const method = editingProposal ? 'PATCH' : 'POST';
       const body: Record<string, unknown> = {
-        title: formData.title,
-        proposal_type: formData.proposal_type,
-        billing_type: formData.billing_type,
-        notes: formData.notes,
+        title: formData.title, proposal_type: formData.proposal_type,
+        billing_type: formData.billing_type, notes: formData.notes,
       };
       if (formData.customer) body.customer = Number(formData.customer);
       if (formData.total_value) body.total_value = formData.total_value;
@@ -122,18 +155,37 @@ export default function SalesPage() {
       if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
       if (formData.valid_until) body.valid_until = formData.valid_until;
 
-      const res = await fetch(`${apiUrl}/sales/proposals/`, {
-        method: 'POST', headers: getHeaders(), credentials: 'include', body: JSON.stringify(body),
-      });
+      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
       if (!res.ok) throw new Error();
-      toast.success('Proposta criada com sucesso!');
+      toast.success(editingProposal ? 'Proposta atualizada!' : 'Proposta criada!');
       setShowModal(false);
-      setFormData(EMPTY_FORM);
       fetchData();
     } catch {
-      toast.error('Erro ao criar proposta. Verifique os dados e tente novamente.');
+      toast.error('Erro ao salvar proposta.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAction = async (proposal: Proposal, action: 'send' | 'approve' | 'reject' | 'convert_to_contract') => {
+    const actionKey = `${proposal.id}-${action}`;
+    setPerformingAction(actionKey);
+    setOpenActionMenu(null);
+    try {
+      const res = await fetch(`${apiUrl}/sales/proposals/${proposal.id}/${action}/`, {
+        method: 'POST', headers: getHeaders(), credentials: 'include',
+      });
+      if (!res.ok) throw new Error();
+      const labels: Record<string, string> = {
+        send: 'Proposta enviada!', approve: 'Proposta aprovada!',
+        reject: 'Proposta rejeitada.', convert_to_contract: 'Contrato criado com sucesso!',
+      };
+      toast.success(labels[action]);
+      fetchData();
+    } catch {
+      toast.error('Erro ao executar ação.');
+    } finally {
+      setPerformingAction(null);
     }
   };
 
@@ -159,10 +211,9 @@ export default function SalesPage() {
           <h1 className="text-2xl font-semibold text-text-primary">Vendas</h1>
           <p className="text-text-secondary mt-1">Gerencie suas propostas e contratos</p>
         </div>
-        <button onClick={() => setShowModal(true)}
+        <button onClick={openNewModal}
           className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-          <Plus className="w-5 h-5" />
-          Nova Proposta
+          <Plus className="w-5 h-5" /> Nova Proposta
         </button>
       </div>
 
@@ -229,20 +280,19 @@ export default function SalesPage() {
                   <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Tipo</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Valor</th>
                   <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Status</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Criada em</th>
                   <th className="text-right px-4 py-3 text-sm font-medium text-text-secondary">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {proposals.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-text-secondary">
+                    <td colSpan={7} className="px-4 py-10 text-center text-text-secondary">
                       Nenhuma proposta encontrada
                     </td>
                   </tr>
                 ) : proposals.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-text-primary">{p.number}</td>
+                    <td className="px-4 py-3 font-mono text-sm text-text-primary">{p.number}</td>
                     <td className="px-4 py-3 text-text-primary">{p.title}</td>
                     <td className="px-4 py-3 text-text-secondary">{p.customer_name || p.prospect_company || '—'}</td>
                     <td className="px-4 py-3 text-text-secondary">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
@@ -254,15 +304,53 @@ export default function SalesPage() {
                         {statusLabels[p.status] || p.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-text-secondary">
-                      {new Date(p.created_at).toLocaleDateString('pt-BR')}
-                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"><Eye className="w-4 h-4" /></button>
-                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"><Edit className="w-4 h-4" /></button>
+                        {/* Lifecycle action buttons based on status */}
+                        {p.status === 'draft' && (
+                          <button
+                            onClick={() => handleAction(p, 'send')}
+                            disabled={performingAction === `${p.id}-send`}
+                            title="Enviar proposta"
+                            className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50">
+                            <Send className="w-4 h-4" />
+                          </button>
+                        )}
+                        {['sent', 'viewed', 'discussion'].includes(p.status) && (
+                          <>
+                            <button
+                              onClick={() => handleAction(p, 'approve')}
+                              disabled={!!performingAction}
+                              title="Aprovar"
+                              className="p-1.5 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50">
+                              <ThumbsUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleAction(p, 'reject')}
+                              disabled={!!performingAction}
+                              title="Rejeitar"
+                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+                              <ThumbsDown className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        {p.status === 'approved' && (
+                          <button
+                            onClick={() => handleAction(p, 'convert_to_contract')}
+                            disabled={!!performingAction}
+                            title="Converter em Contrato"
+                            className="p-1.5 text-gray-400 hover:text-[#A6864A] transition-colors disabled:opacity-50">
+                            <ArrowRight className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button onClick={() => openEditModal(p)}
+                          className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
+                          <Edit className="w-4 h-4" />
+                        </button>
                         <button onClick={() => setConfirmDelete(p)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -275,17 +363,27 @@ export default function SalesPage() {
         <Pagination page={page} totalPages={totalPages} totalItems={total} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
-      {/* Modal */}
+      {/* Legend */}
+      <div className="mt-3 flex items-center gap-4 text-xs text-text-secondary">
+        <div className="flex items-center gap-1"><Send className="w-3.5 h-3.5 text-blue-500" /> Enviar</div>
+        <div className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5 text-green-500" /> Aprovar</div>
+        <div className="flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5 text-red-500" /> Rejeitar</div>
+        <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-[#A6864A]" /> Converter em Contrato</div>
+      </div>
+
+      {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Nova Proposta</h2>
+              <h2 className="text-xl font-semibold text-text-primary">
+                {editingProposal ? 'Editar Proposta' : 'Nova Proposta'}
+              </h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleSave} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Título *</label>
                 <input type="text" required value={formData.title}
@@ -339,7 +437,7 @@ export default function SalesPage() {
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Observações</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  rows={3} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowModal(false)}
@@ -348,7 +446,7 @@ export default function SalesPage() {
                 </button>
                 <button type="submit" disabled={saving}
                   className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
-                  {saving ? 'Salvando...' : 'Criar Proposta'}
+                  {saving ? 'Salvando...' : editingProposal ? 'Atualizar' : 'Criar Proposta'}
                 </button>
               </div>
             </form>
