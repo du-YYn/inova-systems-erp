@@ -9,6 +9,8 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     environment: staging
+    # Só executa se os secrets de deploy estiverem configurados
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
 
     steps:
       - uses: actions/checkout@v4

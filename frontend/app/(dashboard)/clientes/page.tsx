@@ -344,7 +344,7 @@ export default function ClientesPage() {
 
       {!loading && totalPages > 1 && (
         <div className="mt-4">
-          <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+          <Pagination page={page} totalPages={totalPages} totalItems={total} pageSize={PAGE_SIZE} onChange={setPage} />
         </div>
       )}
 
