@@ -184,11 +184,11 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Projetos</h1>
-          <p className="text-text-secondary mt-1">Gerencie seus projetos e tarefas</p>
+          <h1 className="text-2xl font-bold text-gray-900">Projetos</h1>
+          <p className="text-gray-500 mt-1">Gerencie seus projetos e tarefas</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -222,8 +222,8 @@ export default function ProjectsPage() {
               <div key={column.key} className={`${column.color} rounded-lg p-4`}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <column.icon className="w-5 h-5 text-text-secondary" />
-                    <h3 className="font-medium text-text-primary">{column.label}</h3>
+                    <column.icon className="w-5 h-5 text-gray-500" />
+                    <h3 className="font-medium text-gray-900">{column.label}</h3>
                   </div>
                   <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-sm rounded-full">
                     {columnProjects.length}
@@ -232,7 +232,7 @@ export default function ProjectsPage() {
 
                 <div className="space-y-3">
                   {columnProjects.length === 0 ? (
-                    <p className="text-sm text-text-secondary text-center py-4">Nenhum projeto</p>
+                    <p className="text-sm text-gray-500 text-center py-4">Nenhum projeto</p>
                   ) : (
                     columnProjects.map((project) => (
                       <div
@@ -241,7 +241,7 @@ export default function ProjectsPage() {
                         onClick={() => router.push(`/projects/${project.id}`)}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-medium text-text-primary mb-1 flex-1">{project.name}</h4>
+                          <h4 className="font-medium text-gray-900 mb-1 flex-1">{project.name}</h4>
                           <button
                             onClick={() => setDeleteTarget(project)}
                             className="p-1 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
@@ -251,11 +251,11 @@ export default function ProjectsPage() {
                           </button>
                         </div>
                         {project.customer_name && (
-                          <p className="text-sm text-text-secondary mb-3">{project.customer_name}</p>
+                          <p className="text-sm text-gray-500 mb-3">{project.customer_name}</p>
                         )}
 
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-text-secondary">
+                          <span className="text-xs text-gray-500">
                             {project.start_date && new Date(project.start_date).toLocaleDateString('pt-BR')}
                             {project.end_date && ` - ${new Date(project.end_date).toLocaleDateString('pt-BR')}`}
                           </span>
@@ -272,7 +272,7 @@ export default function ProjectsPage() {
                             style={{ width: `${project.progress}%` }}
                           />
                         </div>
-                        <p className="text-xs text-text-secondary mt-1 text-right">{project.progress}%</p>
+                        <p className="text-xs text-gray-500 mt-1 text-right">{project.progress}%</p>
                       </div>
                     ))
                   )}
@@ -285,42 +285,42 @@ export default function ProjectsPage() {
 
       {/* Create Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Novo Projeto</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Novo Projeto</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                  className="input-field"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                  className="input-field"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Cliente</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cliente</label>
                 <select
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                  className="input-field bg-white"
                 >
                   <option value="">Selecione um cliente</option>
                   {customers.map((c) => (
@@ -333,11 +333,11 @@ export default function ProjectsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo</label>
                   <select
                     value={formData.project_type}
                     onChange={(e) => setFormData({ ...formData, project_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                    className="input-field bg-white"
                   >
                     <option value="custom_dev">Desenvolvimento</option>
                     <option value="saas">SaaS</option>
@@ -348,11 +348,11 @@ export default function ProjectsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Cobrança</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cobrança</label>
                   <select
                     value={formData.billing_type}
                     onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                    className="input-field bg-white"
                   >
                     <option value="fixed">Valor Fixo</option>
                     <option value="hourly">Por Hora</option>
@@ -365,44 +365,44 @@ export default function ProjectsPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Início</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Início</label>
                   <input
                     type="date"
                     value={formData.start_date}
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Prazo</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Prazo</label>
                   <input
                     type="date"
                     value={formData.end_date}
                     onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="input-field"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$)</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.budget_value}
                     onChange={(e) => setFormData({ ...formData, budget_value: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Horas Orçadas</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Horas Orçadas</label>
                   <input
                     type="number"
                     step="0.5"
                     value={formData.budget_hours}
                     onChange={(e) => setFormData({ ...formData, budget_hours: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="input-field"
                   />
                 </div>
               </div>

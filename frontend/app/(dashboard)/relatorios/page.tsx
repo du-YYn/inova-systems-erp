@@ -193,12 +193,12 @@ export default function RelatoriosPage() {
   ];
 
   return (
-    <div className="p-8">
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Relatórios</h1>
-          <p className="text-text-secondary mt-1">Análises e indicadores do seu negócio</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Relatórios</h1>
+          <p className="text-gray-500 mt-1">Análises e indicadores do seu negócio</p>
         </div>
       </div>
 
@@ -209,7 +209,7 @@ export default function RelatoriosPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#A6864A] text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-gray-50'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -220,15 +220,15 @@ export default function RelatoriosPage() {
       {activeTab === 'cashflow' && (
         <div className="space-y-6">
           {/* Date filters */}
-          <div className="bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap items-center gap-4">
+          <div className="card p-4 flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-text-secondary">De:</label>
+              <label className="text-sm text-gray-500">De:</label>
               <input type="date" value={cashFromDate}
                 onChange={e => { setCashFromDate(e.target.value); fetchCashFlow(e.target.value, cashToDate); }}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm text-text-secondary">Até:</label>
+              <label className="text-sm text-gray-500">Até:</label>
               <input type="date" value={cashToDate}
                 onChange={e => { setCashToDate(e.target.value); fetchCashFlow(cashFromDate, e.target.value); }}
                 className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
@@ -237,16 +237,16 @@ export default function RelatoriosPage() {
 
           {/* Summary cards */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
-              <p className="text-sm text-text-secondary mb-1">Total Receitas</p>
+            <div className="card p-5">
+              <p className="text-sm text-gray-500 mb-1">Total Receitas</p>
               <p className="text-2xl font-bold text-green-600">{formatCurrency(cashSummary.income)}</p>
             </div>
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
-              <p className="text-sm text-text-secondary mb-1">Total Despesas</p>
+            <div className="card p-5">
+              <p className="text-sm text-gray-500 mb-1">Total Despesas</p>
               <p className="text-2xl font-bold text-red-600">{formatCurrency(cashSummary.expense)}</p>
             </div>
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
-              <p className="text-sm text-text-secondary mb-1">Saldo</p>
+            <div className="card p-5">
+              <p className="text-sm text-gray-500 mb-1">Saldo</p>
               <p className={`text-2xl font-bold ${cashSummary.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 {formatCurrency(cashSummary.balance)}
               </p>
@@ -254,12 +254,12 @@ export default function RelatoriosPage() {
           </div>
 
           {/* Chart */}
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-text-primary mb-4">Receitas x Despesas por Dia</h2>
+          <div className="card p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Receitas x Despesas por Dia</h2>
             {loadingCash ? (
               <div className="h-64 bg-gray-50 rounded-lg animate-pulse" />
             ) : cashFlowData.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-text-secondary">
+              <div className="h-64 flex items-center justify-center text-gray-500">
                 Sem dados para o período selecionado
               </div>
             ) : (
@@ -288,10 +288,10 @@ export default function RelatoriosPage() {
             </div>
           ) : (
             <>
-              <div className="bg-white rounded-lg border border-gray-100 p-6">
-                <h2 className="text-lg font-semibold text-text-primary mb-4">Horas Lançadas por Projeto (Top 10)</h2>
+              <div className="card p-6">
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Horas Lançadas por Projeto (Top 10)</h2>
                 {hoursByProject.length === 0 ? (
-                  <div className="h-48 flex items-center justify-center text-text-secondary">
+                  <div className="h-48 flex items-center justify-center text-gray-500">
                     Nenhuma hora lançada
                   </div>
                 ) : (
@@ -307,25 +307,25 @@ export default function RelatoriosPage() {
                 )}
               </div>
 
-              <div className="bg-white rounded-lg border border-gray-100">
+              <div className="card">
                 <div className="p-4 border-b border-gray-100">
-                  <h2 className="text-lg font-semibold text-text-primary">Orçamento por Projeto</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">Orçamento por Projeto</h2>
                 </div>
                 {projectBudgets.length === 0 ? (
-                  <div className="py-10 text-center text-text-secondary">Nenhum projeto com orçamento</div>
+                  <div className="py-10 text-center text-gray-500">Nenhum projeto com orçamento</div>
                 ) : (
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Projeto</th>
-                        <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Status</th>
-                        <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Orçamento</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Projeto</th>
+                        <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Orçamento</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {projectBudgets.map((p, i) => (
                         <tr key={i} className="hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm font-medium text-text-primary">{p.name}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-900">{p.name}</td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               p.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -337,7 +337,7 @@ export default function RelatoriosPage() {
                                p.status === 'on_hold' ? 'Em pausa' : p.status === 'planning' ? 'Planejamento' : p.status}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right text-sm font-medium text-text-primary">
+                          <td className="py-3 px-4 text-right text-sm font-medium text-gray-900">
                             {p.total_budget > 0 ? formatCurrency(p.total_budget) : '—'}
                           </td>
                         </tr>
@@ -357,26 +357,26 @@ export default function RelatoriosPage() {
           {/* Summary totals */}
           {!loadingPipeline && pipelineData.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg border border-gray-100 p-4">
-                <p className="text-sm text-text-secondary">Total Prospects</p>
-                <p className="text-xl font-bold text-text-primary">
+              <div className="card p-4">
+                <p className="text-sm text-gray-500">Total Prospects</p>
+                <p className="text-xl font-bold text-gray-900">
                   {pipelineData.reduce((s, d) => s + d.count, 0)}
                 </p>
               </div>
-              <div className="bg-white rounded-lg border border-gray-100 p-4">
-                <p className="text-sm text-text-secondary">Valor Total</p>
+              <div className="card p-4">
+                <p className="text-sm text-gray-500">Valor Total</p>
                 <p className="text-xl font-bold text-[#A6864A]">
                   {formatCurrency(pipelineData.reduce((s, d) => s + d.value, 0))}
                 </p>
               </div>
-              <div className="bg-white rounded-lg border border-gray-100 p-4">
-                <p className="text-sm text-text-secondary">Fechados</p>
+              <div className="card p-4">
+                <p className="text-sm text-gray-500">Fechados</p>
                 <p className="text-xl font-bold text-green-600">
                   {pipelineData.find(d => d.label === 'Fechado')?.count || 0}
                 </p>
               </div>
-              <div className="bg-white rounded-lg border border-gray-100 p-4">
-                <p className="text-sm text-text-secondary">Em Proposta</p>
+              <div className="card p-4">
+                <p className="text-sm text-gray-500">Em Proposta</p>
                 <p className="text-xl font-bold text-orange-600">
                   {pipelineData.find(d => d.label === 'Proposta')?.count || 0}
                 </p>
@@ -384,12 +384,12 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-text-primary mb-4">Prospects por Fase do Pipeline</h2>
+          <div className="card p-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Prospects por Fase do Pipeline</h2>
             {loadingPipeline ? (
               <div className="h-64 bg-gray-50 rounded-lg animate-pulse" />
             ) : pipelineData.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-text-secondary">Nenhum prospect encontrado</div>
+              <div className="h-64 flex items-center justify-center text-gray-500">Nenhum prospect encontrado</div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={pipelineData} margin={{ top: 5, right: 20, bottom: 20, left: 0 }}>
@@ -405,20 +405,20 @@ export default function RelatoriosPage() {
 
           {/* Pipeline value table */}
           {!loadingPipeline && pipelineData.length > 0 && (
-            <div className="bg-white rounded-lg border border-gray-100">
+            <div className="card">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Fase</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Qtd</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Valor Est.</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Fase</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Qtd</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor Est.</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {pipelineData.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm font-medium text-text-primary">{row.label}</td>
-                      <td className="py-3 px-4 text-right text-sm text-text-secondary">{row.count}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{row.label}</td>
+                      <td className="py-3 px-4 text-right text-sm text-gray-500">{row.count}</td>
                       <td className="py-3 px-4 text-right text-sm font-medium text-[#A6864A]">{formatCurrency(row.value)}</td>
                     </tr>
                   ))}

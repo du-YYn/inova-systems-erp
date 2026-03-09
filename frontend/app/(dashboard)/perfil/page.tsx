@@ -115,23 +115,23 @@ export default function PerfilPage() {
   ];
 
   return (
-    <div className="p-8">
+    <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-text-primary">Meu Perfil</h1>
-        <p className="text-text-secondary mt-1">Gerencie suas informações pessoais e segurança</p>
+        <h1 className="text-2xl font-semibold text-gray-900">Meu Perfil</h1>
+        <p className="text-gray-500 mt-1">Gerencie suas informações pessoais e segurança</p>
       </div>
 
       {/* Profile header card */}
       {!loading && profile && (
-        <div className="bg-white rounded-lg border border-gray-100 p-6 mb-6 flex items-center gap-4">
+        <div className="card p-6 mb-6 flex items-center gap-4">
           <div className="w-16 h-16 bg-gradient-to-br from-[#A6864A] to-[#8B6F3D] rounded-full flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
             {profile.first_name?.charAt(0) || profile.username?.charAt(0) || 'U'}
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-text-primary">
+            <h2 className="text-xl font-semibold text-gray-900">
               {[profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username}
             </h2>
-            <p className="text-text-secondary text-sm">{profile.email}</p>
+            <p className="text-gray-500 text-sm">{profile.email}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 profile.role === 'admin' ? 'bg-purple-100 text-purple-800' :
@@ -149,8 +149,8 @@ export default function PerfilPage() {
             </div>
           </div>
           <div className="ml-auto text-right">
-            <p className="text-xs text-text-secondary">Membro desde</p>
-            <p className="text-sm font-medium text-text-primary">
+            <p className="text-xs text-gray-500">Membro desde</p>
+            <p className="text-sm font-medium text-gray-900">
               {new Date(profile.date_joined).toLocaleDateString('pt-BR')}
             </p>
           </div>
@@ -164,7 +164,7 @@ export default function PerfilPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#A6864A] text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-gray-50'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -173,7 +173,7 @@ export default function PerfilPage() {
 
       {/* ─── Profile Tab ──────────────────────────────────────────────────── */}
       {activeTab === 'profile' && (
-        <div className="bg-white rounded-lg border border-gray-100 p-6 max-w-lg">
+        <div className="card p-6 max-w-lg">
           {loading ? (
             <div className="space-y-4">
               {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
@@ -182,29 +182,29 @@ export default function PerfilPage() {
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Nome</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome</label>
                   <input type="text" value={profileForm.first_name}
                     onChange={e => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Sobrenome</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Sobrenome</label>
                   <input type="text" value={profileForm.last_name}
                     onChange={e => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">E-mail</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">E-mail</label>
                 <input type="email" value={profileForm.email}
                   onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Usuário</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Usuário</label>
                 <input type="text" value={profile?.username || ''} disabled
-                  className="w-full px-4 py-2 border border-gray-100 bg-gray-50 rounded-lg text-text-secondary cursor-not-allowed" />
-                <p className="text-xs text-text-secondary mt-1">O nome de usuário não pode ser alterado.</p>
+                  className="w-full px-4 py-2 border border-gray-100 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed" />
+                <p className="text-xs text-gray-500 mt-1">O nome de usuário não pode ser alterado.</p>
               </div>
               <div className="pt-2">
                 <button type="submit" disabled={savingProfile}
@@ -220,10 +220,10 @@ export default function PerfilPage() {
 
       {/* ─── Password Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'password' && (
-        <div className="bg-white rounded-lg border border-gray-100 p-6 max-w-lg">
+        <div className="card p-6 max-w-lg">
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Senha Atual *</label>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Senha Atual *</label>
               <div className="relative">
                 <input type={showOld ? 'text' : 'password'} required value={passwordForm.old_password}
                   onChange={e => setPasswordForm({ ...passwordForm, old_password: e.target.value })}
@@ -235,7 +235,7 @@ export default function PerfilPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Nova Senha *</label>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Nova Senha *</label>
               <div className="relative">
                 <input type={showNew ? 'text' : 'password'} required minLength={8} value={passwordForm.new_password}
                   onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
@@ -245,10 +245,10 @@ export default function PerfilPage() {
                   {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-xs text-text-secondary mt-1">Mínimo 8 caracteres.</p>
+              <p className="text-xs text-gray-500 mt-1">Mínimo 8 caracteres.</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text-secondary mb-1">Confirmar Nova Senha *</label>
+              <label className="block text-sm font-medium text-gray-500 mb-1">Confirmar Nova Senha *</label>
               <div className="relative">
                 <input type={showConfirm ? 'text' : 'password'} required value={passwordForm.confirm_password}
                   onChange={e => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
@@ -280,7 +280,7 @@ export default function PerfilPage() {
       {/* ─── Security Tab ─────────────────────────────────────────────────── */}
       {activeTab === 'security' && (
         <div className="space-y-4 max-w-lg">
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
+          <div className="card p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
@@ -289,8 +289,8 @@ export default function PerfilPage() {
                   <Shield className={`w-5 h-5 ${profile?.is_2fa_enabled ? 'text-green-600' : 'text-gray-400'}`} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-text-primary">Autenticação em dois fatores (2FA)</h3>
-                  <p className="text-sm text-text-secondary mt-0.5">
+                  <h3 className="text-sm font-semibold text-gray-900">Autenticação em dois fatores (2FA)</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">
                     {profile?.is_2fa_enabled
                       ? 'O 2FA está ativado. Sua conta está protegida.'
                       : 'O 2FA não está ativado. Recomendamos ativar para maior segurança.'}
@@ -312,16 +312,16 @@ export default function PerfilPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
-            <h3 className="text-sm font-semibold text-text-primary mb-1">Informações da Conta</h3>
+          <div className="card p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Informações da Conta</h3>
             <div className="space-y-2 mt-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-text-secondary">Nível de acesso</span>
-                <span className="font-medium text-text-primary">{profile ? (roleLabels[profile.role] || profile.role) : '—'}</span>
+                <span className="text-gray-500">Nível de acesso</span>
+                <span className="font-medium text-gray-900">{profile ? (roleLabels[profile.role] || profile.role) : '—'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-text-secondary">Membro desde</span>
-                <span className="font-medium text-text-primary">
+                <span className="text-gray-500">Membro desde</span>
+                <span className="font-medium text-gray-900">
                   {profile ? new Date(profile.date_joined).toLocaleDateString('pt-BR') : '—'}
                 </span>
               </div>

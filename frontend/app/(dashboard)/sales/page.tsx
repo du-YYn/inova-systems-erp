@@ -2,14 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Plus, Search, Edit, Trash2,
-  FileText, TrendingUp, CheckCircle, X,
-  Send, ThumbsUp, ThumbsDown, ArrowRight, MoreHorizontal,
+  Plus, Search, Edit, Trash2, FileText, TrendingUp, CheckCircle,
+  X, Send, ThumbsUp, ThumbsDown, ArrowRight,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 interface Proposal {
   id: number;
@@ -33,11 +34,11 @@ interface Customer { id: number; company_name: string; name: string; }
 
 const PAGE_SIZE = 10;
 
-const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-800', sent: 'bg-blue-100 text-blue-800',
-  viewed: 'bg-indigo-100 text-indigo-800', discussion: 'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800',
-  expired: 'bg-orange-100 text-orange-800',
+type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'purple' | 'gold' | 'neutral';
+
+const statusBadge: Record<string, BadgeVariant> = {
+  draft: 'neutral', sent: 'info', viewed: 'info',
+  discussion: 'warning', approved: 'success', rejected: 'error', expired: 'warning',
 };
 
 const statusLabels: Record<string, string> = {
@@ -73,7 +74,6 @@ export default function SalesPage() {
   const [saving, setSaving] = useState(false);
   const [performingAction, setPerformingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
-  const [openActionMenu, setOpenActionMenu] = useState<number | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -109,22 +109,11 @@ export default function SalesPage() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
-  // Close action menu when clicking outside
-  useEffect(() => {
-    const close = () => setOpenActionMenu(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
-
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const approvedValue = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.total_value || 0), 0);
   const approvedCount = proposals.filter(p => p.status === 'approved').length;
 
-  const openNewModal = () => {
-    setEditingProposal(null);
-    setFormData(EMPTY_FORM);
-    setShowModal(true);
-  };
+  const openNewModal = () => { setEditingProposal(null); setFormData(EMPTY_FORM); setShowModal(true); };
 
   const openEditModal = (p: Proposal) => {
     setEditingProposal(p);
@@ -141,9 +130,7 @@ export default function SalesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const url = editingProposal
-        ? `${apiUrl}/sales/proposals/${editingProposal.id}/`
-        : `${apiUrl}/sales/proposals/`;
+      const url = editingProposal ? `${apiUrl}/sales/proposals/${editingProposal.id}/` : `${apiUrl}/sales/proposals/`;
       const method = editingProposal ? 'PATCH' : 'POST';
       const body: Record<string, unknown> = {
         title: formData.title, proposal_type: formData.proposal_type,
@@ -154,7 +141,6 @@ export default function SalesPage() {
       if (formData.hours_estimated) body.hours_estimated = formData.hours_estimated;
       if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
       if (formData.valid_until) body.valid_until = formData.valid_until;
-
       const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
       if (!res.ok) throw new Error();
       toast.success(editingProposal ? 'Proposta atualizada!' : 'Proposta criada!');
@@ -170,7 +156,6 @@ export default function SalesPage() {
   const handleAction = async (proposal: Proposal, action: 'send' | 'approve' | 'reject' | 'convert_to_contract') => {
     const actionKey = `${proposal.id}-${action}`;
     setPerformingAction(actionKey);
-    setOpenActionMenu(null);
     try {
       const res = await fetch(`${apiUrl}/sales/proposals/${proposal.id}/${action}/`, {
         method: 'POST', headers: getHeaders(), credentials: 'include',
@@ -178,7 +163,7 @@ export default function SalesPage() {
       if (!res.ok) throw new Error();
       const labels: Record<string, string> = {
         send: 'Proposta enviada!', approve: 'Proposta aprovada!',
-        reject: 'Proposta rejeitada.', convert_to_contract: 'Contrato criado com sucesso!',
+        reject: 'Proposta rejeitada.', convert_to_contract: 'Contrato criado!',
       };
       toast.success(labels[action]);
       fetchData();
@@ -204,151 +189,130 @@ export default function SalesPage() {
     }
   };
 
+  const labelInput = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5';
+
   return (
-    <div className="p-8">
+    <div>
+      {/* Page header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Vendas</h1>
-          <p className="text-text-secondary mt-1">Gerencie suas propostas e contratos</p>
+          <h1 className="text-2xl font-bold text-gray-900">Vendas</h1>
+          <p className="text-sm text-gray-500 mt-1">Propostas e ciclo de vida comercial</p>
         </div>
-        <button onClick={openNewModal}
-          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-          <Plus className="w-5 h-5" /> Nova Proposta
-        </button>
+        <Button onClick={openNewModal}>
+          <Plus className="w-4 h-4" /> Nova Proposta
+        </Button>
       </div>
 
-      {/* Stats */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {loading ? Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
-            <div className="bg-white p-4 rounded-lg border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-text-secondary">Total de Propostas</p>
-                  <p className="text-lg font-semibold text-text-primary">{total}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-text-secondary">Aprovadas</p>
-                  <p className="text-lg font-semibold text-text-primary">{approvedCount}</p>
+            {[
+              { icon: FileText, bg: 'bg-blue-50', color: 'text-blue-600', label: 'Total de Propostas', value: total },
+              { icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600', label: 'Aprovadas', value: approvedCount },
+              { icon: TrendingUp, bg: 'bg-violet-50', color: 'text-violet-600', label: 'Valor Aprovado', value: formatCurrency(approvedValue) },
+            ].map(({ icon: Icon, bg, color, label, value }) => (
+              <div key={label} className="card card-hover p-5">
+                <div className="flex items-center gap-3">
+                  <div className={`w-11 h-11 ${bg} rounded-xl flex items-center justify-center flex-shrink-0`}>
+                    <Icon className={`w-5 h-5 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
+                    <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="bg-white p-4 rounded-lg border border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-text-secondary">Valor Aprovado</p>
-                  <p className="text-lg font-semibold text-text-primary">{formatCurrency(approvedValue)}</p>
-                </div>
-              </div>
-            </div>
+            ))}
           </>
         )}
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-100">
+      <div className="card overflow-hidden">
         <div className="p-4 border-b border-gray-100">
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input type="text" placeholder="Buscar propostas..."
               value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+              className="input-field pl-9" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
           {loading ? <TableSkeleton rows={6} cols={8} /> : (
             <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Número</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Título</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Cliente</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Tipo</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Valor</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Status</th>
-                  <th className="text-right px-4 py-3 text-sm font-medium text-text-secondary">Ações</th>
+              <thead>
+                <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Número</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Título</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-50">
                 {proposals.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-text-secondary">
+                    <td colSpan={7} className="px-4 py-16 text-center text-gray-400 text-sm">
                       Nenhuma proposta encontrada
                     </td>
                   </tr>
                 ) : proposals.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono text-sm text-text-primary">{p.number}</td>
-                    <td className="px-4 py-3 text-text-primary">{p.title}</td>
-                    <td className="px-4 py-3 text-text-secondary">{p.customer_name || p.prospect_company || '—'}</td>
-                    <td className="px-4 py-3 text-text-secondary">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
-                    <td className="px-4 py-3 font-medium text-text-primary">
+                  <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.number}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.title}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{p.customer_name || p.prospect_company || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 tabular-nums">
                       {p.total_value ? formatCurrency(p.total_value) : '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[p.status] || 'bg-gray-100 text-gray-800'}`}>
+                      <Badge variant={statusBadge[p.status] || 'neutral'}>
                         {statusLabels[p.status] || p.status}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {/* Lifecycle action buttons based on status */}
                         {p.status === 'draft' && (
                           <button
                             onClick={() => handleAction(p, 'send')}
                             disabled={performingAction === `${p.id}-send`}
                             title="Enviar proposta"
-                            className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50">
+                            className="p-1.5 text-gray-300 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50">
                             <Send className="w-4 h-4" />
                           </button>
                         )}
                         {['sent', 'viewed', 'discussion'].includes(p.status) && (
                           <>
-                            <button
-                              onClick={() => handleAction(p, 'approve')}
-                              disabled={!!performingAction}
+                            <button onClick={() => handleAction(p, 'approve')} disabled={!!performingAction}
                               title="Aprovar"
-                              className="p-1.5 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50">
+                              className="p-1.5 text-gray-300 hover:text-emerald-600 transition-colors rounded-lg hover:bg-emerald-50 disabled:opacity-50">
                               <ThumbsUp className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleAction(p, 'reject')}
-                              disabled={!!performingAction}
+                            <button onClick={() => handleAction(p, 'reject')} disabled={!!performingAction}
                               title="Rejeitar"
-                              className="p-1.5 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+                              className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 disabled:opacity-50">
                               <ThumbsDown className="w-4 h-4" />
                             </button>
                           </>
                         )}
                         {p.status === 'approved' && (
-                          <button
-                            onClick={() => handleAction(p, 'convert_to_contract')}
-                            disabled={!!performingAction}
+                          <button onClick={() => handleAction(p, 'convert_to_contract')} disabled={!!performingAction}
                             title="Converter em Contrato"
-                            className="p-1.5 text-gray-400 hover:text-[#A6864A] transition-colors disabled:opacity-50">
+                            className="p-1.5 text-gray-300 hover:text-[#A6864A] transition-colors rounded-lg hover:bg-[#A6864A]/5 disabled:opacity-50">
                             <ArrowRight className="w-4 h-4" />
                           </button>
                         )}
                         <button onClick={() => openEditModal(p)}
-                          className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
+                          className="p-1.5 text-gray-300 hover:text-[#A6864A] transition-colors rounded-lg hover:bg-[#A6864A]/5">
                           <Edit className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDelete(p)}
-                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                          className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -364,45 +328,45 @@ export default function SalesPage() {
       </div>
 
       {/* Legend */}
-      <div className="mt-3 flex items-center gap-4 text-xs text-text-secondary">
-        <div className="flex items-center gap-1"><Send className="w-3.5 h-3.5 text-blue-500" /> Enviar</div>
-        <div className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5 text-green-500" /> Aprovar</div>
-        <div className="flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5 text-red-500" /> Rejeitar</div>
+      <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
+        <div className="flex items-center gap-1"><Send className="w-3.5 h-3.5 text-blue-400" /> Enviar</div>
+        <div className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5 text-emerald-500" /> Aprovar</div>
+        <div className="flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5 text-red-400" /> Rejeitar</div>
         <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-[#A6864A]" /> Converter em Contrato</div>
       </div>
 
-      {/* Create / Edit Modal */}
+      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">
+              <h2 className="text-lg font-bold text-gray-900">
                 {editingProposal ? 'Editar Proposta' : 'Nova Proposta'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
+                <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Título *</label>
+                <label className={labelInput}>Título *</label>
                 <input type="text" required value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  className="input-field" placeholder="Título da proposta" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Cliente</label>
+                <label className={labelInput}>Cliente</label>
                 <select value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                  className="input-field bg-white">
                   <option value="">Selecione um cliente</option>
                   {customers.map((c) => <option key={c.id} value={c.id}>{c.company_name || c.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo</label>
+                  <label className={labelInput}>Tipo</label>
                   <select value={formData.proposal_type} onChange={(e) => setFormData({ ...formData, proposal_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                    className="input-field bg-white">
                     <option value="software_dev">Desenvolvimento</option>
                     <option value="maintenance">Manutenção</option>
                     <option value="consulting">Consultoria</option>
@@ -410,9 +374,9 @@ export default function SalesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Cobrança</label>
+                  <label className={labelInput}>Cobrança</label>
                   <select value={formData.billing_type} onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                    className="input-field bg-white">
                     <option value="fixed">Valor Fixo</option>
                     <option value="hourly">Por Hora</option>
                     <option value="monthly">Mensal</option>
@@ -420,34 +384,32 @@ export default function SalesPage() {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor Total (R$)</label>
+                  <label className={labelInput}>Valor Total (R$)</label>
                   <input type="number" step="0.01" value={formData.total_value}
                     onChange={(e) => setFormData({ ...formData, total_value: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Validade</label>
+                  <label className={labelInput}>Validade</label>
                   <input type="date" value={formData.valid_until}
                     onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Observações</label>
+                <label className={labelInput}>Observações</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none" />
+                  rows={3} className="input-field resize-none" placeholder="Observações sobre a proposta..." />
               </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowModal(false)}>
                   Cancelar
-                </button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
-                  {saving ? 'Salvando...' : editingProposal ? 'Atualizar' : 'Criar Proposta'}
-                </button>
+                </Button>
+                <Button type="submit" loading={saving} className="flex-1">
+                  {editingProposal ? 'Atualizar' : 'Criar Proposta'}
+                </Button>
               </div>
             </form>
           </div>
@@ -457,7 +419,7 @@ export default function SalesPage() {
       <ConfirmDialog
         open={!!confirmDelete}
         title="Excluir proposta"
-        description={`Tem certeza que deseja excluir a proposta "${confirmDelete?.number || confirmDelete?.title}"? Esta ação não pode ser desfeita.`}
+        description={`Tem certeza que deseja excluir a proposta "${confirmDelete?.number || confirmDelete?.title}"?`}
         confirmLabel="Excluir"
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(null)}

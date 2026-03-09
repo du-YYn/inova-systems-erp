@@ -776,12 +776,12 @@ export default function FinancePage() {
   ];
 
   return (
-    <div className="p-8">
+    <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Financeiro</h1>
-          <p className="text-text-secondary mt-1">Controle de receitas, despesas e orçamentos</p>
+          <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
+          <p className="text-sm text-gray-500 mt-1">Controle de receitas, despesas e orçamentos</p>
         </div>
         {activeTab === 'overview' && (
           <div className="flex items-center gap-3">
@@ -840,7 +840,7 @@ export default function FinancePage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-[#A6864A] text-white'
-                : 'text-text-secondary hover:text-text-primary hover:bg-gray-50'
+                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -860,22 +860,22 @@ export default function FinancePage() {
                   <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4">
                     <ArrowUpRight className="w-6 h-6 text-green-600" />
                   </div>
-                  <p className="text-text-secondary text-sm">Receitas do Mês</p>
-                  <p className="text-2xl font-semibold text-text-primary mt-1">{formatCurrency(stats.received_this_month)}</p>
+                  <p className="text-gray-500 text-sm">Receitas do Mês</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.received_this_month)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-lg border border-gray-100">
                   <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center mb-4">
                     <ArrowDownRight className="w-6 h-6 text-red-600" />
                   </div>
-                  <p className="text-text-secondary text-sm">Despesas do Mês</p>
-                  <p className="text-2xl font-semibold text-text-primary mt-1">{formatCurrency(stats.paid_this_month)}</p>
+                  <p className="text-gray-500 text-sm">Despesas do Mês</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.paid_this_month)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-lg border border-gray-100">
                   <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4">
                     <DollarSign className="w-6 h-6 text-blue-600" />
                   </div>
-                  <p className="text-text-secondary text-sm">A Receber</p>
-                  <p className="text-2xl font-semibold text-text-primary mt-1">{formatCurrency(stats.pending_receivables)}</p>
+                  <p className="text-gray-500 text-sm">A Receber</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.pending_receivables)}</p>
                 </div>
                 <div className="bg-white p-6 rounded-lg border border-gray-100">
                   <div className="flex items-start justify-between mb-4">
@@ -888,8 +888,8 @@ export default function FinancePage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-text-secondary text-sm">A Pagar</p>
-                  <p className="text-2xl font-semibold text-text-primary mt-1">{formatCurrency(stats.pending_payables)}</p>
+                  <p className="text-gray-500 text-sm">A Pagar</p>
+                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.pending_payables)}</p>
                 </div>
               </>
             )}
@@ -897,14 +897,14 @@ export default function FinancePage() {
 
           {/* Receivables and Payables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white rounded-lg border border-gray-100 p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">Contas a Receber</h2>
+            <div className="card p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Contas a Receber</h2>
               {loading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
                 </div>
               ) : receivables.length === 0 ? (
-                <p className="text-sm text-text-secondary text-center py-4">Nenhuma conta pendente</p>
+                <p className="text-sm text-gray-500 text-center py-4">Nenhuma conta pendente</p>
               ) : (
                 <div className="space-y-3">
                   {receivables.map((inv) => (
@@ -914,8 +914,8 @@ export default function FinancePage() {
                           <DollarSign className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-text-primary">{inv.number || inv.description || `Fatura #${inv.id}`}</p>
-                          <p className="text-xs text-text-secondary">{inv.customer_name || '—'}{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
+                          <p className="text-sm font-medium text-gray-900">{inv.number || inv.description || `Fatura #${inv.id}`}</p>
+                          <p className="text-xs text-gray-500">{inv.customer_name || '—'}{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
                         </div>
                       </div>
                       <span className="text-sm font-medium text-green-600 ml-4">{formatCurrency(inv.total)}</span>
@@ -925,14 +925,14 @@ export default function FinancePage() {
               )}
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-100 p-6">
-              <h2 className="text-lg font-semibold text-text-primary mb-4">Contas a Pagar</h2>
+            <div className="card p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Contas a Pagar</h2>
               {loading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
                 </div>
               ) : payables.length === 0 ? (
-                <p className="text-sm text-text-secondary text-center py-4">Nenhuma conta pendente</p>
+                <p className="text-sm text-gray-500 text-center py-4">Nenhuma conta pendente</p>
               ) : (
                 <div className="space-y-3">
                   {payables.map((inv) => (
@@ -942,8 +942,8 @@ export default function FinancePage() {
                           <CreditCard className="w-5 h-5 text-red-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-text-primary">{inv.number || inv.description || `Despesa #${inv.id}`}</p>
-                          <p className="text-xs text-text-secondary">{inv.due_date ? `Vence ${formatDate(inv.due_date)}` : '—'}</p>
+                          <p className="text-sm font-medium text-gray-900">{inv.number || inv.description || `Despesa #${inv.id}`}</p>
+                          <p className="text-xs text-gray-500">{inv.due_date ? `Vence ${formatDate(inv.due_date)}` : '—'}</p>
                         </div>
                       </div>
                       <span className="text-sm font-medium text-red-600 ml-4">{formatCurrency(inv.total)}</span>
@@ -955,8 +955,8 @@ export default function FinancePage() {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-lg border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-text-primary mb-4">Ações Rápidas</h2>
+          <div className="card p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <button onClick={() => setShowRevenueModal(true)}
                 className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left">
@@ -987,18 +987,18 @@ export default function FinancePage() {
       {activeTab === 'invoices' && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
-            <Filter className="w-4 h-4 text-text-secondary" />
+          <div className="card p-4 flex flex-wrap gap-3 items-center">
+            <Filter className="w-4 h-4 text-gray-500" />
             <select value={invoiceTypeFilter}
               onChange={e => { setInvoiceTypeFilter(e.target.value); fetchInvoices(e.target.value, invoiceStatusFilter); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
               <option value="">Todos os tipos</option>
               <option value="receivable">A Receber</option>
               <option value="payable">A Pagar</option>
             </select>
             <select value={invoiceStatusFilter}
               onChange={e => { setInvoiceStatusFilter(e.target.value); fetchInvoices(invoiceTypeFilter, e.target.value); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
               <option value="">Todos os status</option>
               <option value="pending">Pendente</option>
               <option value="sent">Enviada</option>
@@ -1015,13 +1015,13 @@ export default function FinancePage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-100">
+          <div className="card">
             {loadingInvoices ? (
               <div className="p-6 space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
               </div>
             ) : invoices.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
                 <Receipt className="w-12 h-12 mb-3 opacity-30" />
                 <p className="font-medium">Nenhuma fatura encontrada</p>
               </div>
@@ -1029,30 +1029,30 @@ export default function FinancePage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Número</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Descrição</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Tipo</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Vencimento</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Total</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Status</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Número</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Vencimento</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-mono text-text-primary">{inv.number}</td>
+                      <td className="py-3 px-4 text-sm font-mono text-gray-900">{inv.number}</td>
                       <td className="py-3 px-4">
-                        <p className="text-sm font-medium text-text-primary">{inv.description || '—'}</p>
-                        {inv.customer_name && <p className="text-xs text-text-secondary">{inv.customer_name}</p>}
+                        <p className="text-sm font-medium text-gray-900">{inv.description || '—'}</p>
+                        {inv.customer_name && <p className="text-xs text-gray-500">{inv.customer_name}</p>}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${inv.invoice_type === 'receivable' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                           {inv.invoice_type === 'receivable' ? 'A Receber' : 'A Pagar'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-text-secondary">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
-                      <td className="py-3 px-4 text-right text-sm font-medium text-text-primary">{formatCurrency(inv.total)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                      <td className="py-3 px-4 text-right text-sm font-medium text-gray-900">{formatCurrency(inv.total)}</td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                           inv.status === 'paid' ? 'bg-green-100 text-green-800' :
@@ -1072,16 +1072,16 @@ export default function FinancePage() {
                           {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                             <button onClick={() => handleMarkPaid(inv)} disabled={markingPaid === inv.id}
                               title="Marcar como paga"
-                              className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-text-secondary hover:text-green-600 disabled:opacity-50">
+                              className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-500 hover:text-green-600 disabled:opacity-50">
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
                           )}
                           <button onClick={() => openEditInvoice(inv)}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button onClick={() => setConfirmDeleteInvoice(inv)}
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -1099,18 +1099,18 @@ export default function FinancePage() {
       {activeTab === 'transactions' && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="bg-white rounded-lg border border-gray-100 p-4 flex flex-wrap gap-3 items-center">
-            <Filter className="w-4 h-4 text-text-secondary" />
+          <div className="card p-4 flex flex-wrap gap-3 items-center">
+            <Filter className="w-4 h-4 text-gray-500" />
             <select value={txTypeFilter}
               onChange={e => { setTxTypeFilter(e.target.value); fetchTransactions(e.target.value, txBankFilter, txFromDate, txToDate); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
               <option value="">Todos os tipos</option>
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
             </select>
             <select value={txBankFilter}
               onChange={e => { setTxBankFilter(e.target.value); fetchTransactions(txTypeFilter, e.target.value, txFromDate, txToDate); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-text-primary">
+              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
               <option value="">Todas as contas</option>
               {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
@@ -1129,13 +1129,13 @@ export default function FinancePage() {
           </div>
 
           {/* Table */}
-          <div className="bg-white rounded-lg border border-gray-100">
+          <div className="card">
             {loadingTransactions ? (
               <div className="p-6 space-y-3">
                 {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
               </div>
             ) : transactions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
                 <ArrowLeftRight className="w-12 h-12 mb-3 opacity-30" />
                 <p className="font-medium">Nenhuma transação encontrada</p>
               </div>
@@ -1143,21 +1143,21 @@ export default function FinancePage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Data</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Descrição</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Categoria</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Conta</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Valor</th>
-                    <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Data</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoria</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conta</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {transactions.map((tx) => (
                     <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 text-sm text-text-secondary whitespace-nowrap">{formatDate(tx.date)}</td>
-                      <td className="py-3 px-4 text-sm font-medium text-text-primary">{tx.description || '—'}</td>
-                      <td className="py-3 px-4 text-sm text-text-secondary">{tx.category_name || '—'}</td>
-                      <td className="py-3 px-4 text-sm text-text-secondary">{tx.bank_account_name || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500 whitespace-nowrap">{formatDate(tx.date)}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{tx.description || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500">{tx.category_name || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500">{tx.bank_account_name || '—'}</td>
                       <td className="py-3 px-4 text-right">
                         <span className={`text-sm font-semibold ${tx.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                           {tx.transaction_type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
@@ -1165,7 +1165,7 @@ export default function FinancePage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button onClick={() => setConfirmDeleteTransaction(tx)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
@@ -1180,13 +1180,13 @@ export default function FinancePage() {
 
       {/* ─── Bank Accounts Tab ────────────────────────────────────────────── */}
       {activeTab === 'bank_accounts' && (
-        <div className="bg-white rounded-lg border border-gray-100">
+        <div className="card">
           {loadingFullBankAccounts ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
             </div>
           ) : fullBankAccounts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <Landmark className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhuma conta bancária cadastrada</p>
               <p className="text-sm mt-1">Cadastre contas para gerenciar seu fluxo de caixa</p>
@@ -1195,12 +1195,12 @@ export default function FinancePage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Nome</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Banco</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Agência / Conta</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Tipo</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Saldo</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Banco</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Agência / Conta</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Saldo</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -1208,14 +1208,14 @@ export default function FinancePage() {
                   <tr key={ba.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-text-primary">{ba.name}</span>
+                        <span className="text-sm font-medium text-gray-900">{ba.name}</span>
                         {ba.is_default && (
                           <span className="px-1.5 py-0.5 bg-[#A6864A]/10 text-[#A6864A] text-xs rounded">Padrão</span>
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-sm text-text-secondary">{ba.bank || '—'}</td>
-                    <td className="py-3 px-4 text-sm text-text-secondary">
+                    <td className="py-3 px-4 text-sm text-gray-500">{ba.bank || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-500">
                       {ba.agency ? `Ag. ${ba.agency}` : ''}{ba.agency && ba.account_number ? ' / ' : ''}{ba.account_number || '—'}
                     </td>
                     <td className="py-3 px-4">
@@ -1231,11 +1231,11 @@ export default function FinancePage() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditBankAccount(ba)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteBankAccount(ba)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1250,13 +1250,13 @@ export default function FinancePage() {
 
       {/* ─── Categories Tab ────────────────────────────────────────────────── */}
       {activeTab === 'categories' && (
-        <div className="bg-white rounded-lg border border-gray-100">
+        <div className="card">
           {loadingCategories ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
             </div>
           ) : categories.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <Tag className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhuma categoria cadastrada</p>
               <p className="text-sm mt-1">Crie categorias para organizar receitas e despesas</p>
@@ -1265,17 +1265,17 @@ export default function FinancePage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Nome</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Tipo</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Cor</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cor</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {categories.map((cat) => (
                   <tr key={cat.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4">
-                      <span className="text-sm font-medium text-text-primary">{cat.full_name || cat.name}</span>
+                      <span className="text-sm font-medium text-gray-900">{cat.full_name || cat.name}</span>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1292,11 +1292,11 @@ export default function FinancePage() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditCategory(cat)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteCategory(cat)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1315,7 +1315,7 @@ export default function FinancePage() {
           {loadingBudgets ? (
             Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
           ) : budgets.length === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-100 flex flex-col items-center justify-center py-20 text-text-secondary">
+            <div className="card flex flex-col items-center justify-center py-20 text-gray-500">
               <PieChart className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhum orçamento cadastrado</p>
               <p className="text-sm mt-1">Crie orçamentos para monitorar seus gastos por categoria</p>
@@ -1324,11 +1324,11 @@ export default function FinancePage() {
             budgets.map((budget) => {
               const progress = Math.min(budget.progress, 100);
               return (
-                <div key={budget.id} className="bg-white rounded-lg border border-gray-100 p-6">
+                <div key={budget.id} className="card p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h3 className="font-semibold text-text-primary">{budget.name}</h3>
-                      <p className="text-sm text-text-secondary mt-0.5">
+                      <h3 className="font-semibold text-gray-900">{budget.name}</h3>
+                      <p className="text-sm text-gray-500 mt-0.5">
                         {budget.category_name} · {formatDate(budget.start_date)} – {formatDate(budget.end_date)}
                       </p>
                     </div>
@@ -1341,7 +1341,7 @@ export default function FinancePage() {
                         {budget.progress.toFixed(0)}%
                       </span>
                       <button onClick={() => setConfirmDeleteBudget(budget)}
-                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1351,8 +1351,8 @@ export default function FinancePage() {
                       style={{ width: `${progress}%` }} />
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-text-secondary">Realizado: <span className="font-medium text-text-primary">{formatCurrency(budget.actual)}</span></span>
-                    <span className="text-text-secondary">Planejado: <span className="font-medium text-text-primary">{formatCurrency(budget.planned)}</span></span>
+                    <span className="text-gray-500">Realizado: <span className="font-medium text-gray-900">{formatCurrency(budget.actual)}</span></span>
+                    <span className="text-gray-500">Planejado: <span className="font-medium text-gray-900">{formatCurrency(budget.planned)}</span></span>
                   </div>
                 </div>
               );
@@ -1363,13 +1363,13 @@ export default function FinancePage() {
 
       {/* ─── Cost Centers Tab ─────────────────────────────────────────────── */}
       {activeTab === 'cost_centers' && (
-        <div className="bg-white rounded-lg border border-gray-100">
+        <div className="card">
           {loadingCostCenters ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
             </div>
           ) : costCenters.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <Building className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhum centro de custo cadastrado</p>
             </div>
@@ -1377,28 +1377,28 @@ export default function FinancePage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Nome</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Código</th>
-                  <th className="text-left py-3 px-4 text-sm font-medium text-text-secondary">Descrição</th>
-                  <th className="text-right py-3 px-4 text-sm font-medium text-text-secondary">Ações</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {costCenters.map((cc) => (
                   <tr key={cc.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-4 text-sm font-medium text-text-primary">{cc.name}</td>
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{cc.name}</td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded font-mono">{cc.code || '—'}</span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-text-secondary">{cc.description || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-500">{cc.description || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditCostCenter(cc)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteCostCenter(cc)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1415,56 +1415,56 @@ export default function FinancePage() {
 
       {/* Invoice Modal */}
       {showInvoiceModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">{editingInvoice ? 'Editar Fatura' : 'Nova Fatura'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{editingInvoice ? 'Editar Fatura' : 'Nova Fatura'}</h2>
               <button onClick={() => setShowInvoiceModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveInvoice} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
                 <select required value={invoiceForm.invoice_type}
                   onChange={e => setInvoiceForm({ ...invoiceForm, invoice_type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   <option value="receivable">A Receber</option>
                   <option value="payable">A Pagar</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={invoiceForm.description}
                   onChange={e => setInvoiceForm({ ...invoiceForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={invoiceForm.value}
                     onChange={e => setInvoiceForm({ ...invoiceForm, value: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Emissão *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Emissão *</label>
                   <input type="date" required value={invoiceForm.issue_date}
                     onChange={e => setInvoiceForm({ ...invoiceForm, issue_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Vencimento *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Vencimento *</label>
                 <input type="date" required value={invoiceForm.due_date}
                   onChange={e => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária</label>
                   <select value={invoiceForm.bank_account}
                     onChange={e => setInvoiceForm({ ...invoiceForm, bank_account: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    className="input-field bg-white">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1472,10 +1472,10 @@ export default function FinancePage() {
               )}
               {categories.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Categoria</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria</label>
                   <select value={invoiceForm.category}
                     onChange={e => setInvoiceForm({ ...invoiceForm, category: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    className="input-field bg-white">
                     <option value="">Sem categoria</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
                   </select>
@@ -1498,50 +1498,50 @@ export default function FinancePage() {
 
       {/* Transaction Modal */}
       {showTransactionModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Nova Transação</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Nova Transação</h2>
               <button onClick={() => setShowTransactionModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveTransaction} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
                 <select required value={transactionForm.transaction_type}
                   onChange={e => setTransactionForm({ ...transactionForm, transaction_type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   <option value="income">Receita</option>
                   <option value="expense">Despesa</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={transactionForm.description}
                   onChange={e => setTransactionForm({ ...transactionForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={transactionForm.amount}
                     onChange={e => setTransactionForm({ ...transactionForm, amount: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Data *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
                   <input type="date" required value={transactionForm.date}
                     onChange={e => setTransactionForm({ ...transactionForm, date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária</label>
                   <select value={transactionForm.bank_account}
                     onChange={e => setTransactionForm({ ...transactionForm, bank_account: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    className="input-field bg-white">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1549,10 +1549,10 @@ export default function FinancePage() {
               )}
               {categories.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Categoria</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria</label>
                   <select value={transactionForm.category}
                     onChange={e => setTransactionForm({ ...transactionForm, category: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                    className="input-field bg-white">
                     <option value="">Sem categoria</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
                   </select>
@@ -1575,34 +1575,34 @@ export default function FinancePage() {
 
       {/* Bank Account Modal */}
       {showBankAccountModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">{editingBankAccount ? 'Editar Conta' : 'Nova Conta Bancária'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{editingBankAccount ? 'Editar Conta' : 'Nova Conta Bancária'}</h2>
               <button onClick={() => setShowBankAccountModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveBankAccount} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome da Conta *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome da Conta *</label>
                 <input type="text" required value={bankAccountForm.name}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
                   placeholder="Ex: Conta Principal"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Banco</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Banco</label>
                 <input type="text" value={bankAccountForm.bank}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, bank: e.target.value })}
                   placeholder="Ex: Itaú, Nubank..."
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo de Conta</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Conta</label>
                 <select value={bankAccountForm.account_type}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, account_type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   <option value="checking">Conta Corrente</option>
                   <option value="savings">Poupança</option>
                   <option value="investment">Investimento</option>
@@ -1611,26 +1611,26 @@ export default function FinancePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Agência</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Agência</label>
                   <input type="text" value={bankAccountForm.agency}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, agency: e.target.value })}
                     placeholder="0001"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Número da Conta</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Número da Conta</label>
                   <input type="text" value={bankAccountForm.account_number}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, account_number: e.target.value })}
                     placeholder="12345-6"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Chave Pix</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Chave Pix</label>
                 <input type="text" value={bankAccountForm.pix_key}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, pix_key: e.target.value })}
                   placeholder="CPF, CNPJ, e-mail ou telefone"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBankAccountModal(false)}
@@ -1649,36 +1649,36 @@ export default function FinancePage() {
 
       {/* Revenue Modal */}
       {showRevenueModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Nova Receita</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Nova Receita</h2>
               <button onClick={() => setShowRevenueModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleCreateRevenue} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={revenueForm.description}
                   onChange={(e) => setRevenueForm({ ...revenueForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={revenueForm.amount}
                   onChange={(e) => setRevenueForm({ ...revenueForm, amount: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Data *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
                 <input type="date" required value={revenueForm.date}
                   onChange={(e) => setRevenueForm({ ...revenueForm, date: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária *</label>
                   <select required value={revenueForm.bank_account}
                     onChange={(e) => setRevenueForm({ ...revenueForm, bank_account: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500 bg-white">
@@ -1704,36 +1704,36 @@ export default function FinancePage() {
 
       {/* Expense Modal */}
       {showExpenseModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Nova Despesa</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Nova Despesa</h2>
               <button onClick={() => setShowExpenseModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleCreateExpense} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Valor (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={expenseForm.amount}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Data *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
                 <input type="date" required value={expenseForm.date}
                   onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Conta Bancária *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária *</label>
                   <select required value={expenseForm.bank_account}
                     onChange={(e) => setExpenseForm({ ...expenseForm, bank_account: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 bg-white">
@@ -1759,36 +1759,36 @@ export default function FinancePage() {
 
       {/* Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</h2>
               <button onClick={() => setShowCategoryModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
                 <select value={categoryForm.category_type}
                   onChange={(e) => setCategoryForm({ ...categoryForm, category_type: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   {CATEGORY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Cor</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cor</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={categoryForm.color}
                     onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
                     className="w-12 h-10 border border-gray-200 rounded-lg cursor-pointer" />
-                  <span className="text-sm text-text-secondary">{categoryForm.color}</span>
+                  <span className="text-sm text-gray-500">{categoryForm.color}</span>
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
@@ -1808,26 +1808,26 @@ export default function FinancePage() {
 
       {/* Budget Modal */}
       {showBudgetModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Novo Orçamento</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Novo Orçamento</h2>
               <button onClick={() => setShowBudgetModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveBudget} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={budgetForm.name}
                   onChange={(e) => setBudgetForm({ ...budgetForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Categoria *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria *</label>
                 <select required value={budgetForm.category}
                   onChange={(e) => setBudgetForm({ ...budgetForm, category: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   <option value="">Selecione uma categoria</option>
                   {categories.filter(c => c.category_type !== 'income').map(c => (
                     <option key={c.id} value={c.id}>{c.full_name || c.name}</option>
@@ -1835,32 +1835,32 @@ export default function FinancePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Período *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Período *</label>
                 <select value={budgetForm.period}
                   onChange={(e) => setBudgetForm({ ...budgetForm, period: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white">
+                  className="input-field bg-white">
                   {BUDGET_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Início *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Início *</label>
                   <input type="date" required value={budgetForm.start_date}
                     onChange={(e) => setBudgetForm({ ...budgetForm, start_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Fim *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fim *</label>
                   <input type="date" required value={budgetForm.end_date}
                     onChange={(e) => setBudgetForm({ ...budgetForm, end_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Valor Planejado (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor Planejado (R$) *</label>
                 <input type="number" step="0.01" required value={budgetForm.planned}
                   onChange={(e) => setBudgetForm({ ...budgetForm, planned: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBudgetModal(false)}
@@ -1879,33 +1879,33 @@ export default function FinancePage() {
 
       {/* Cost Center Modal */}
       {showCostCenterModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
           <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">{editingCostCenter ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{editingCostCenter ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}</h2>
               <button onClick={() => setShowCostCenterModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSaveCostCenter} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={costCenterForm.name}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Código</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Código</label>
                 <input type="text" value={costCenterForm.code}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, code: e.target.value })}
                   placeholder="Ex: CC-001"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição</label>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição</label>
                 <textarea value={costCenterForm.description} rows={3}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] resize-none" />
+                  className="input-field resize-none" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowCostCenterModal(false)}
