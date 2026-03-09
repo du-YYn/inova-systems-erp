@@ -1,0 +1,29 @@
+name: CD — Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/inova-systems-erp
+            git pull origin main
+            docker compose pull
+            docker compose up -d --build --remove-orphans
+            docker compose exec -T backend python manage.py migrate --no-input
+            docker compose exec -T backend python manage.py collectstatic --no-input
+            echo "Deploy concluído: $(date)"

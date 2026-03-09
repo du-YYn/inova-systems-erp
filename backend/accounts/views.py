@@ -1,14 +1,16 @@
+import logging
 from rest_framework import status, generics
-from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.hashers import make_password
-from django.core.mail import send_mail
 from django.utils import timezone
 from datetime import timedelta
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 import pyotp
 import qrcode
 import io
@@ -17,21 +19,69 @@ import secrets
 
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
-    TwoFactorVerifySerializer, PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
-    ChangePasswordSerializer
+    TwoFactorVerifySerializer, PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer, ChangePasswordSerializer
 )
+from .permissions import IsAdmin
+from .throttles import LoginRateThrottle, PasswordResetThrottle
+from .tasks import send_password_reset_email
 
+logger = logging.getLogger('accounts')
 User = get_user_model()
 
+_SECURE = getattr(django_settings, 'JWT_COOKIE_SECURE', False)
+_SAMESITE = getattr(django_settings, 'JWT_COOKIE_SAMESITE', 'Lax')
 
+
+def _set_auth_cookies(response: Response, refresh: RefreshToken) -> None:
+    """Define os cookies httpOnly de access e refresh token na resposta."""
+    response.set_cookie(
+        'access_token',
+        str(refresh.access_token),
+        max_age=int(django_settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+        httponly=True,
+        secure=_SECURE,
+        samesite=_SAMESITE,
+        path='/',
+    )
+    response.set_cookie(
+        'refresh_token',
+        str(refresh),
+        max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        httponly=True,
+        secure=_SECURE,
+        samesite=_SAMESITE,
+        path='/',
+    )
+    # Cookie não-httpOnly lido pelo middleware Next.js para proteção de rotas
+    response.set_cookie(
+        'inova_session',
+        '1',
+        max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        httponly=False,
+        secure=_SECURE,
+        samesite=_SAMESITE,
+        path='/',
+    )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    """Remove todos os cookies de autenticação."""
+    for name in ('access_token', 'refresh_token', 'inova_session'):
+        response.delete_cookie(name, path='/')
+
+
+@extend_schema(tags=['auth'])
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
 
 
+@extend_schema(tags=['auth'], summary='Login com username/senha')
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -43,6 +93,7 @@ class LoginView(APIView):
         )
 
         if not user:
+            logger.warning(f"Login falhou para: {serializer.validated_data['username']}")
             return Response(
                 {'error': 'Credenciais inválidas'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -52,27 +103,26 @@ class LoginView(APIView):
             return Response(
                 {'error': 'Usuário inativo'},
                 status=status.HTTP_401_UNAUTHORIZED
-        )
+            )
 
         if user.is_2fa_enabled:
             temp_token = secrets.token_urlsafe(32)
             user.temp_2fa_token = temp_token
             user.save(update_fields=['temp_2fa_token'])
-            
             return Response({
                 'requires_2fa': True,
                 'temp_token': temp_token,
                 'message': 'Código 2FA requerido'
             })
 
+        logger.info(f"Login bem-sucedido: {user.username} (role={user.role})")
         refresh = RefreshToken.for_user(user)
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': UserSerializer(user).data
-        })
+        response = Response({'user': UserSerializer(user).data})
+        _set_auth_cookies(response, refresh)
+        return response
 
 
+@extend_schema(tags=['auth'], summary='Verificar código TOTP (2FA)')
 class TwoFactorVerifyView(APIView):
     permission_classes = [AllowAny]
 
@@ -86,39 +136,35 @@ class TwoFactorVerifyView(APIView):
         try:
             user = User.objects.get(temp_2fa_token=temp_token)
         except User.DoesNotExist:
-            return Response(
-                {'error': 'Token inválido'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({'error': 'Token inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
         totp = pyotp.TOTP(user.totp_secret)
         if not totp.verify(code):
-            return Response(
-                {'error': 'Código 2FA inválido'},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            logger.warning(f"Código 2FA inválido: {user.username}")
+            return Response({'error': 'Código 2FA inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
         user.temp_2fa_token = None
         user.save(update_fields=['temp_2fa_token'])
 
+        logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': UserSerializer(user).data
-        })
+        response = Response({'user': UserSerializer(user).data})
+        _set_auth_cookies(response, refresh)
+        return response
 
 
+@extend_schema(tags=['auth'], summary='Ativar/desativar 2FA para o usuário autenticado')
 class TwoFactorSetupView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
-        
+
         if user.is_2fa_enabled:
             user.is_2fa_enabled = False
             user.totp_secret = None
             user.save(update_fields=['is_2fa_enabled', 'totp_secret'])
+            logger.info(f"2FA desativado: {user.username}")
             return Response({'message': '2FA desativado', 'enabled': False})
 
         secret = pyotp.random_base32()
@@ -137,6 +183,7 @@ class TwoFactorSetupView(APIView):
         img.save(buffered, format='PNG')
         qr_code_b64 = base64.b64encode(buffered.getvalue()).decode()
 
+        logger.info(f"2FA ativado: {user.username}")
         return Response({
             'secret': secret,
             'qr_code': f'data:image/png;base64,{qr_code_b64}',
@@ -144,6 +191,7 @@ class TwoFactorSetupView(APIView):
         })
 
 
+@extend_schema(tags=['auth'])
 class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -152,6 +200,7 @@ class ProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user
 
 
+@extend_schema(tags=['auth'], summary='Alterar senha do usuário autenticado')
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -161,53 +210,159 @@ class ChangePasswordView(APIView):
 
         user = request.user
         if not user.check_password(serializer.validated_data['old_password']):
-            return Response(
-                {'error': 'Senha atual incorreta'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Senha atual incorreta'}, status=status.HTTP_400_BAD_REQUEST)
 
         user.password = make_password(serializer.validated_data['new_password'])
         user.save()
-
+        logger.info(f"Senha alterada: {user.username}")
         return Response({'message': 'Senha alterada com sucesso'})
 
 
+@extend_schema(tags=['auth'], summary='Encerrar sessão e invalidar refresh token')
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh')
+            refresh_token = request.COOKIES.get('refresh_token') or request.data.get('refresh')
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
         except Exception:
             pass
-        return Response({'message': 'Logout realizado'})
+        logger.info(f"Logout: {request.user.username}")
+        response = Response({'message': 'Logout realizado'})
+        _clear_auth_cookies(response)
+        return response
 
 
+@extend_schema(tags=['auth'], summary='Solicitar link de redefinição de senha por email')
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         email = serializer.validated_data['email']
+        # Mesma resposta independente de o email existir (evita enumeração)
+        safe_response = Response({'message': 'Se o email existir, você receberá instruções'})
+
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({'message': 'Se o email existir, você receberá instruções'})
+            return safe_response
 
         token = secrets.token_urlsafe(32)
         user.password_reset_token = token
         user.password_reset_expires = timezone.now() + timedelta(hours=24)
         user.save(update_fields=['password_reset_token', 'password_reset_expires'])
 
-        return Response({'message': 'Se o email existir, você receberá instruções'})
+        send_password_reset_email.delay(user.id, token)
+        logger.info(f"Task de reset de senha enfileirada para: {email}")
+
+        return safe_response
 
 
-class UserListView(generics.ListAPIView):
+@extend_schema(tags=['auth'], summary='Confirmar redefinição de senha com token')
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token = request.data.get('token')
+        new_password = request.data.get('new_password')
+
+        if not token or not new_password:
+            return Response(
+                {'error': 'Token e nova senha são obrigatórios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(password_reset_token=token)
+        except User.DoesNotExist:
+            return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user.password_reset_expires < timezone.now():
+            return Response({'error': 'Token expirado'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response({'error': 'A senha deve ter no mínimo 8 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.password = make_password(new_password)
+        user.password_reset_token = None
+        user.password_reset_expires = None
+        user.save(update_fields=['password', 'password_reset_token', 'password_reset_expires'])
+
+        logger.info(f"Senha redefinida via token: {user.username}")
+        return Response({'message': 'Senha redefinida com sucesso'})
+
+
+@extend_schema(tags=['auth'], summary='Listar e criar usuários (somente admin)')
+class UserListView(generics.ListCreateAPIView):
+    queryset = User.objects.all().order_by('-created_at')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdmin]
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return RegisterSerializer
+        return UserSerializer
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
+@extend_schema(tags=['auth'], summary='Detalhar, atualizar e remover usuário (somente admin)')
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdmin]
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        if user == request.user:
+            return Response({'error': 'Não é possível remover o próprio usuário.'}, status=status.HTTP_400_BAD_REQUEST)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(tags=['auth'], summary='Renovar access token via cookie de refresh')
+class CookieTokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response(
+                {'error': 'Refresh token não encontrado'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        serializer = TokenRefreshSerializer(data={'refresh': refresh_token})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception:
+            response = Response(
+                {'error': 'Token inválido ou expirado'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+            _clear_auth_cookies(response)
+            return response
+
+        response = Response({'message': 'Token renovado'})
+        # Seta novo access_token; se ROTATE_REFRESH_TOKENS=True, seta novo refresh também
+        access = serializer.validated_data['access']
+        response.set_cookie(
+            'access_token', access,
+            max_age=int(django_settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+            httponly=True, secure=_SECURE, samesite=_SAMESITE, path='/',
+        )
+        if 'refresh' in serializer.validated_data:
+            response.set_cookie(
+                'refresh_token', serializer.validated_data['refresh'],
+                max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+                httponly=True, secure=_SECURE, samesite=_SAMESITE, path='/',
+            )
+        return response

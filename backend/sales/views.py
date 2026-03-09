@@ -9,15 +9,16 @@ from datetime import timedelta
 
 from .models import Customer, Prospect, Proposal, Contract
 from .serializers import (
-    CustomerSerializer, ProspectSerializer, 
+    CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer
 )
+from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
 
 
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -38,7 +39,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 class ProspectViewSet(viewsets.ModelViewSet):
     queryset = Prospect.objects.all()
     serializer_class = ProspectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -63,7 +64,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
 class ProposalViewSet(viewsets.ModelViewSet):
     queryset = Proposal.objects.all()
     serializer_class = ProposalSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -131,7 +132,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
 class ContractViewSet(viewsets.ModelViewSet):
     queryset = Contract.objects.all()
     serializer_class = ContractSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
         queryset = super().get_queryset()

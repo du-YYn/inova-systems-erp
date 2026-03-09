@@ -45,7 +45,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                   'description', 'items', 'status', 'paid_amount', 'payment_method',
                   'payment_details', 'is_recurring', 'notes', 'created_by', 'created_by_name',
                   'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'number', 'created_by', 'created_at', 'updated_at']
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -60,7 +60,7 @@ class TransactionSerializer(serializers.ModelSerializer):
                   'contract', 'bank_account', 'bank_account_name', 'bank_account_to',
                   'category', 'category_name', 'date', 'amount', 'description', 
                   'notes', 'tags', 'created_by', 'created_by_name', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
 
 class CostCenterSerializer(serializers.ModelSerializer):
@@ -80,8 +80,8 @@ class BudgetSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'period', 'start_date', 'end_date', 'category', 'category_name',
                   'cost_center', 'cost_center_name', 'planned', 'actual', 'progress', 
                   'is_active', 'created_by', 'created_at']
-        read_only_fields = ['id', 'created_at']
-    
+        read_only_fields = ['id', 'created_by', 'created_at']
+
     def get_progress(self, obj):
         if obj.planned > 0:
             return float((obj.actual / obj.planned) * 100)

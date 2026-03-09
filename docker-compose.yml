@@ -65,6 +65,56 @@ services:
         python manage.py runserver 0.0.0.0:8000
       "
 
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inova_celery_worker
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-inova_erp}
+      - DB_USER=${DB_USER:-inova_user}
+      - DB_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-change_me_in_production}
+      - DEBUG=${DEBUG:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A config worker --loglevel=info --concurrency=2
+
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inova_celery_beat
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=${DB_NAME:-inova_erp}
+      - DB_USER=${DB_USER:-inova_user}
+      - DB_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+      - DB_PORT=5432
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-change_me_in_production}
+      - DEBUG=${DEBUG:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
   frontend:
     build:
       context: ./frontend

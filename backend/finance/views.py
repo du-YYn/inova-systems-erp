@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from django.db import models
 from django.db.models import Sum, Count, Avg
 from django.db.models.functions import TruncMonth, TruncDay
@@ -14,38 +15,42 @@ from .serializers import (
     BankAccountSerializer, CategorySerializer, InvoiceSerializer,
     TransactionSerializer, CostCenterSerializer, BudgetSerializer
 )
+from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
 
 
+@extend_schema(tags=['finance'])
 class BankAccountViewSet(viewsets.ModelViewSet):
     queryset = BankAccount.objects.all()
     serializer_class = BankAccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
 
+@extend_schema(tags=['finance'])
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.filter(is_active=True)
     serializer_class = CategorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
 
+@extend_schema(tags=['finance'])
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all()
     serializer_class = InvoiceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        invoice_type = self.request.query_params.get('type', None)
+        invoice_type = self.request.query_params.get('invoice_type', None)
         status_filter = self.request.query_params.get('status', None)
         customer_id = self.request.query_params.get('customer', None)
-        
+
         if invoice_type:
             queryset = queryset.filter(invoice_type=invoice_type)
         if status_filter:
             queryset = queryset.filter(status=status_filter)
         if customer_id:
             queryset = queryset.filter(customer_id=customer_id)
-            
+
         return queryset
 
     def perform_create(self, serializer):
@@ -118,10 +123,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return Response(InvoiceSerializer(invoice).data)
 
 
+@extend_schema(tags=['finance'])
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -177,16 +183,18 @@ class TransactionViewSet(viewsets.ModelViewSet):
         })
 
 
+@extend_schema(tags=['finance'])
 class CostCenterViewSet(viewsets.ModelViewSet):
     queryset = CostCenter.objects.all()
     serializer_class = CostCenterSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
 
+@extend_schema(tags=['finance'])
 class BudgetViewSet(viewsets.ModelViewSet):
     queryset = Budget.objects.all()
     serializer_class = BudgetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

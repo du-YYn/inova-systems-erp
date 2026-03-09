@@ -13,3 +13,11 @@ qrcode==7.4.2
 redis==5.0.1
 django-redis==5.4.0
 pytz==2024.1
+sentry-sdk[django]==1.40.0
+celery==5.3.6
+django-celery-beat==2.6.0
+django-celery-results==2.5.1
+kombu==5.3.4
+pytest-django==4.8.0
+pytest-cov==4.1.0
+drf-spectacular==0.27.2

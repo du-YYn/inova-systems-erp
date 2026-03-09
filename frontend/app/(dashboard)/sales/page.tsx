@@ -1,141 +1,152 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { 
-  Plus, 
-  Search, 
-  MoreVertical,
-  Eye,
-  Edit,
-  Trash2,
-  ShoppingCart,
-  Users,
-  FileText,
-  X
+import { useEffect, useState, useCallback } from 'react';
+import {
+  Plus, Search, Eye, Edit, Trash2,
+  FileText, TrendingUp, CheckCircle, X
 } from 'lucide-react';
+import { useToast } from '@/components/ui/Toast';
+import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Pagination } from '@/components/ui/Pagination';
+
+interface Proposal {
+  id: number;
+  number: string;
+  title: string;
+  customer: number | null;
+  customer_name: string;
+  prospect_company: string;
+  proposal_type: string;
+  billing_type: string;
+  total_value: string;
+  status: string;
+  valid_until: string | null;
+  created_at: string;
+}
+
+interface Customer { id: number; company_name: string; name: string; }
+
+const PAGE_SIZE = 10;
+
+const statusColors: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-800', sent: 'bg-blue-100 text-blue-800',
+  viewed: 'bg-indigo-100 text-indigo-800', discussion: 'bg-yellow-100 text-yellow-800',
+  approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800',
+  expired: 'bg-orange-100 text-orange-800',
+};
+
+const statusLabels: Record<string, string> = {
+  draft: 'Rascunho', sent: 'Enviada', viewed: 'Visualizada',
+  discussion: 'Em Negociação', approved: 'Aprovada', rejected: 'Rejeitada', expired: 'Expirada',
+};
+
+const proposalTypeLabels: Record<string, string> = {
+  software_dev: 'Desenvolvimento', maintenance: 'Manutenção',
+  consulting: 'Consultoria', support: 'Suporte',
+};
+
+const formatCurrency = (v: string | number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
+
+const EMPTY_FORM = {
+  title: '', proposal_type: 'software_dev', billing_type: 'fixed',
+  total_value: '', hours_estimated: '', hourly_rate: '',
+  customer: '', notes: '', valid_until: '',
+};
 
 export default function SalesPage() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const toast = useToast();
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [formData, setFormData] = useState({
-    customer: null,
-    items: [{ description: '', quantity: 1, unit_price: 0 }],
-    notes: '',
-    status: 'pending'
-  });
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
+  const [formData, setFormData] = useState(EMPTY_FORM);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const getHeaders = () => ({ 'Content-Type': 'application/json' });
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
+      if (search) params.set('search', search);
+      const [propRes, custRes] = await Promise.all([
+        fetch(`${apiUrl}/sales/proposals/?${params}`, { headers: getHeaders(), credentials: 'include' }),
+        fetch(`${apiUrl}/sales/customers/`, { headers: getHeaders(), credentials: 'include' }),
+      ]);
+      const [propData, custData] = await Promise.all([propRes.json(), custRes.json()]);
+      setProposals(propData.results || propData);
+      setTotal(propData.count ?? (propData.results || propData).length);
+      setCustomers(custData.results || custData);
+    } catch {
+      toast.error('Erro ao carregar propostas');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-        
-        const res = await fetch(`${apiUrl}/sales/orders/`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-        
-        const data = await res.json();
-        setOrders(data.results || data);
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
-    fetchOrders();
-  }, []);
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const approvedValue = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.total_value || 0), 0);
+  const approvedCount = proposals.filter(p => p.status === 'approved').length;
 
-  const statusColors: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    approved: 'bg-blue-100 text-blue-800',
-    in_production: 'bg-purple-100 text-purple-800',
-    shipped: 'bg-indigo-100 text-indigo-800',
-    delivered: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
-  };
-
-  const statusLabels: Record<string, string> = {
-    pending: 'Pendente',
-    approved: 'Aprovado',
-    in_production: 'Em Produção',
-    shipped: 'Enviado',
-    delivered: 'Entregue',
-    cancelled: 'Cancelado',
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(value);
-  };
-
-  const filteredOrders = orders.filter(order => 
-    order.number?.toLowerCase().includes(search.toLowerCase()) ||
-    order.customer_name?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleCreateOrder = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      
-      const total = formData.items.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
-      
-      const res = await fetch(`${apiUrl}/sales/orders/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...formData,
-          total
-        }),
+      const body: Record<string, unknown> = {
+        title: formData.title,
+        proposal_type: formData.proposal_type,
+        billing_type: formData.billing_type,
+        notes: formData.notes,
+      };
+      if (formData.customer) body.customer = Number(formData.customer);
+      if (formData.total_value) body.total_value = formData.total_value;
+      if (formData.hours_estimated) body.hours_estimated = formData.hours_estimated;
+      if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
+      if (formData.valid_until) body.valid_until = formData.valid_until;
+
+      const res = await fetch(`${apiUrl}/sales/proposals/`, {
+        method: 'POST', headers: getHeaders(), credentials: 'include', body: JSON.stringify(body),
       });
-      
-      if (res.ok) {
-        const newOrder = await res.json();
-        setOrders([newOrder, ...orders]);
-        setShowModal(false);
-        setFormData({
-          customer: null,
-          items: [{ description: '', quantity: 1, unit_price: 0 }],
-          notes: '',
-          status: 'pending'
-        });
-      }
-    } catch (error) {
-      console.error('Error creating order:', error);
+      if (!res.ok) throw new Error();
+      toast.success('Proposta criada com sucesso!');
+      setShowModal(false);
+      setFormData(EMPTY_FORM);
+      fetchData();
+    } catch {
+      toast.error('Erro ao criar proposta. Verifique os dados e tente novamente.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { description: '', quantity: 1, unit_price: 0 }]
-    });
-  };
-
-  const removeItem = (index: number) => {
-    setFormData({
-      ...formData,
-      items: formData.items.filter((_, i) => i !== index)
-    });
-  };
-
-  const updateItem = (index: number, field: string, value: any) => {
-    const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setFormData({ ...formData, items: newItems });
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    try {
+      const res = await fetch(`${apiUrl}/sales/proposals/${confirmDelete.id}/`, {
+        method: 'DELETE', headers: getHeaders(), credentials: 'include',
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`Proposta "${confirmDelete.number || confirmDelete.title}" excluída.`);
+      setConfirmDelete(null);
+      fetchData();
+    } catch {
+      toast.error('Erro ao excluir proposta.');
+    }
   };
 
   return (
@@ -143,210 +154,213 @@ export default function SalesPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary">Vendas</h1>
-          <p className="text-text-secondary mt-1">Gerencie seus pedidos e orçamentos</p>
+          <p className="text-text-secondary mt-1">Gerencie suas propostas e contratos</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
-        >
+        <button onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
           <Plus className="w-5 h-5" />
-          Novo Pedido
+          Nova Proposta
         </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg border border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-              <ShoppingCart className="w-5 h-5 text-blue-600" />
+        {loading ? Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />) : (
+          <>
+            <div className="bg-white p-4 rounded-lg border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-text-secondary">Total de Propostas</p>
+                  <p className="text-lg font-semibold text-text-primary">{total}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-text-secondary">Pedidos</p>
-              <p className="text-lg font-semibold text-text-primary">{orders.length}</p>
+            <div className="bg-white p-4 rounded-lg border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-text-secondary">Aprovadas</p>
+                  <p className="text-lg font-semibold text-text-primary">{approvedCount}</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-              <Users className="w-5 h-5 text-green-600" />
+            <div className="bg-white p-4 rounded-lg border border-gray-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-text-secondary">Valor Aprovado</p>
+                  <p className="text-lg font-semibold text-text-primary">{formatCurrency(approvedValue)}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-text-secondary">Clientes</p>
-              <p className="text-lg font-semibold text-text-primary">0</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-text-secondary">Orçamentos</p>
-              <p className="text-lg font-semibold text-text-primary">0</p>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-lg border border-gray-100">
         <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar pedidos..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
-              />
-            </div>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input type="text" placeholder="Buscar propostas..."
+              value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Número</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Cliente</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Valor</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Status</th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Data</th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-text-secondary">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {loading ? (
+          {loading ? <TableSkeleton rows={6} cols={8} /> : (
+            <table className="w-full">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-text-secondary">
-                    Carregando...
-                  </td>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Número</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Título</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Cliente</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Tipo</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Valor</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Status</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-text-secondary">Criada em</th>
+                  <th className="text-right px-4 py-3 text-sm font-medium text-text-secondary">Ações</th>
                 </tr>
-              ) : filteredOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-text-secondary">
-                    Nenhum pedido encontrado
-                  </td>
-                </tr>
-              ) : (
-                filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-text-primary">{order.number}</td>
-                    <td className="px-4 py-3 text-text-secondary">{order.customer_name}</td>
-                    <td className="px-4 py-3 text-text-primary font-medium">{formatCurrency(order.total)}</td>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {proposals.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-text-secondary">
+                      Nenhuma proposta encontrada
+                    </td>
+                  </tr>
+                ) : proposals.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-text-primary">{p.number}</td>
+                    <td className="px-4 py-3 text-text-primary">{p.title}</td>
+                    <td className="px-4 py-3 text-text-secondary">{p.customer_name || p.prospect_company || '—'}</td>
+                    <td className="px-4 py-3 text-text-secondary">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
+                    <td className="px-4 py-3 font-medium text-text-primary">
+                      {p.total_value ? formatCurrency(p.total_value) : '—'}
+                    </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
-                        {statusLabels[order.status] || order.status}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[p.status] || 'bg-gray-100 text-gray-800'}`}>
+                        {statusLabels[p.status] || p.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-text-secondary">
-                      {new Date(order.created_at).toLocaleDateString('pt-BR')}
+                      {new Date(p.created_at).toLocaleDateString('pt-BR')}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
-                          <Edit className="w-4 h-4" />
-                        </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"><Eye className="w-4 h-4" /></button>
+                        <button className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => setConfirmDelete(p)}
+                          className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
+
+        <Pagination page={page} totalPages={totalPages} totalItems={total} pageSize={PAGE_SIZE} onChange={setPage} />
       </div>
 
+      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Novo Pedido</h2>
+              <h2 className="text-xl font-semibold text-text-primary">Nova Proposta</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
-            <form onSubmit={handleCreateOrder} className="space-y-4">
+            <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">Itens do Pedido</label>
-                {formData.items.map((item, index) => (
-                  <div key={index} className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Descrição"
-                      value={item.description}
-                      onChange={(e) => updateItem(index, 'description', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
-                      required
-                    />
-                    <input
-                      type="number"
-                      placeholder="Qtd"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                      className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
-                      min="1"
-                    />
-                    <input
-                      type="number"
-                      placeholder="Preço"
-                      value={item.unit_price}
-                      onChange={(e) => updateItem(index, 'unit_price', parseFloat(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
-                    />
-                    {formData.items.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeItem(index)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addItem}
-                  className="text-sm text-accent-gold hover:underline"
-                >
-                  + Adicionar Item
-                </button>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Título *</label>
+                <input type="text" required value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-text-secondary mb-1">Cliente</label>
+                <select value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                  <option value="">Selecione um cliente</option>
+                  {customers.map((c) => <option key={c.id} value={c.id}>{c.company_name || c.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo</label>
+                  <select value={formData.proposal_type} onChange={(e) => setFormData({ ...formData, proposal_type: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                    <option value="software_dev">Desenvolvimento</option>
+                    <option value="maintenance">Manutenção</option>
+                    <option value="consulting">Consultoria</option>
+                    <option value="support">Suporte</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Cobrança</label>
+                  <select value={formData.billing_type} onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
+                    <option value="fixed">Valor Fixo</option>
+                    <option value="hourly">Por Hora</option>
+                    <option value="monthly">Mensal</option>
+                    <option value="milestone">Por Marco</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor Total (R$)</label>
+                  <input type="number" step="0.01" value={formData.total_value}
+                    onChange={(e) => setFormData({ ...formData, total_value: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Validade</label>
+                  <input type="date" value={formData.valid_until}
+                    onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-secondary mb-1">Observações</label>
-                <textarea
-                  value={formData.notes}
-                  onChange={(e) => setFormData({...formData, notes: e.target.value})}
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
-                />
+                <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={3} className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
               </div>
               <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-                >
+                <button type="button" onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
-                >
-                  Criar Pedido
+                <button type="submit" disabled={saving}
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
+                  {saving ? 'Salvando...' : 'Criar Proposta'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Excluir proposta"
+        description={`Tem certeza que deseja excluir a proposta "${confirmDelete?.number || confirmDelete?.title}"? Esta ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

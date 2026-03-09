@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from drf_spectacular.utils import extend_schema
 from django.db import models
 from django.db.models import Sum, Count
 from django.utils import timezone
@@ -11,18 +12,21 @@ from .serializers import (
     ProjectTemplateSerializer, ProjectSerializer, ProjectPhaseSerializer,
     MilestoneSerializer, ProjectTaskSerializer, TimeEntrySerializer, ProjectCommentSerializer
 )
+from accounts.permissions import IsAdminOrManagerOrOperator
 
 
+@extend_schema(tags=['projects'])
 class ProjectTemplateViewSet(viewsets.ModelViewSet):
     queryset = ProjectTemplate.objects.all()
     serializer_class = ProjectTemplateSerializer
     permission_classes = [IsAuthenticated]
 
 
+@extend_schema(tags=['projects'])
 class ProjectViewSet(viewsets.ModelViewSet):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -80,10 +84,11 @@ class ProjectViewSet(viewsets.ModelViewSet):
         })
 
 
+@extend_schema(tags=['projects'])
 class ProjectPhaseViewSet(viewsets.ModelViewSet):
     queryset = ProjectPhase.objects.all()
     serializer_class = ProjectPhaseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     @action(detail=True, methods=['post'])
     def toggle_complete(self, request, pk=None):
@@ -102,10 +107,11 @@ class ProjectPhaseViewSet(viewsets.ModelViewSet):
         return Response(ProjectPhaseSerializer(phase).data)
 
 
+@extend_schema(tags=['projects'])
 class MilestoneViewSet(viewsets.ModelViewSet):
     queryset = Milestone.objects.all()
     serializer_class = MilestoneSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
@@ -116,10 +122,11 @@ class MilestoneViewSet(viewsets.ModelViewSet):
         return Response(MilestoneSerializer(milestone).data)
 
 
+@extend_schema(tags=['projects'])
 class ProjectTaskViewSet(viewsets.ModelViewSet):
     queryset = ProjectTask.objects.all()
     serializer_class = ProjectTaskSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -155,10 +162,11 @@ class ProjectTaskViewSet(viewsets.ModelViewSet):
         return Response(ProjectTaskSerializer(tasks, many=True).data)
 
 
+@extend_schema(tags=['projects'])
 class TimeEntryViewSet(viewsets.ModelViewSet):
     queryset = TimeEntry.objects.all()
     serializer_class = TimeEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def perform_create(self, serializer):
         entry = serializer.save(user=self.request.user)
@@ -199,10 +207,11 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
         })
 
 
+@extend_schema(tags=['projects'])
 class ProjectCommentViewSet(viewsets.ModelViewSet):
     queryset = ProjectComment.objects.all()
     serializer_class = ProjectCommentSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManagerOrOperator]
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

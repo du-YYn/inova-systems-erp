@@ -47,18 +47,13 @@ export default function DashboardPage() {
     
     const fetchStats = async () => {
       try {
-        const token = localStorage.getItem('token');
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-        
-        const headers = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        };
+        const headers = { 'Content-Type': 'application/json' };
 
         const [contractsRes, projectsRes, financeRes] = await Promise.all([
-          fetch(`${apiUrl}/sales/contracts/dashboard/`, { headers }),
-          fetch(`${apiUrl}/projects/projects/dashboard/`, { headers }),
-          fetch(`${apiUrl}/finance/invoices/dashboard/`, { headers }),
+          fetch(`${apiUrl}/sales/contracts/dashboard/`, { headers, credentials: 'include' }),
+          fetch(`${apiUrl}/projects/projects/dashboard/`, { headers, credentials: 'include' }),
+          fetch(`${apiUrl}/finance/invoices/dashboard/`, { headers, credentials: 'include' }),
         ]);
 
         const contractsData = await contractsRes.json();

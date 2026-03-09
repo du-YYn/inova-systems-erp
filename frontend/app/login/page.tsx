@@ -15,22 +15,42 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [isFocused, setIsFocused] = useState({ username: false, password: false });
 
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-      
+      if (requires2FA) {
+        const res = await fetch(`${apiUrl}/accounts/2fa/verify/`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ temp_token: tempToken, code: twoFactorCode }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || 'Código inválido');
+          setLoading(false);
+          return;
+        }
+        // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
+        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+        window.location.replace('/dashboard');
+        return;
+      }
+
       const res = await fetch(`${apiUrl}/accounts/login/`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      
+
       const data = await res.json();
-      
+
       if (!res.ok) {
         setError(data.error || 'Credenciais inválidas');
         setLoading(false);
@@ -43,15 +63,14 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      
-      localStorage.setItem('token', data.access);
-      localStorage.setItem('refresh', data.refresh);
-      localStorage.setItem('user', JSON.stringify(data.user));
+
+      // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
       window.location.replace('/dashboard');
-    } catch (err) {
+    } catch {
       setError('Erro de conexão. Tente novamente.');
     }
-    
+
     setLoading(false);
   };
 

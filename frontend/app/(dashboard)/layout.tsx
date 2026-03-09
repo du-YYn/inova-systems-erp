@@ -3,16 +3,17 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Users, 
-  FolderKanban, 
+import {
+  LayoutDashboard,
+  Users,
+  Building2,
+  FolderKanban,
   LogOut,
   DollarSign,
   FileText,
-  Menu,
+  ScrollText,
+  Settings,
   X,
-  Bell,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -24,8 +25,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<{ username: string; email: string } | null>(null);
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  
+
   useEffect(() => {
     const userData = localStorage.getItem('user');
     if (userData) {
@@ -33,23 +33,30 @@ export default function DashboardLayout({
     }
   }, []);
 
-  if (!token) {
-    redirect('/login');
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refresh');
+  const handleLogout = async () => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      await fetch(`${apiUrl}/accounts/logout/`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch {
+      // ignora erros de rede no logout
+    }
     localStorage.removeItem('user');
     window.location.href = '/login';
   };
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/clientes', label: 'Clientes', icon: Building2 },
     { href: '/crm', label: 'CRM', icon: Users },
     { href: '/sales', label: 'Vendas', icon: FileText },
+    { href: '/contratos', label: 'Contratos', icon: ScrollText },
     { href: '/projects', label: 'Projetos', icon: FolderKanban },
     { href: '/finance', label: 'Financeiro', icon: DollarSign },
+    { href: '/usuarios', label: 'Usuários', icon: Settings },
   ];
 
   return (
@@ -129,29 +136,6 @@ export default function DashboardLayout({
 
       {/* Main content */}
       <div className="lg:ml-72">
-        {/* Top header */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-slate-200">
-          <div className="flex items-center justify-between px-4 lg:px-8 py-4">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={() => setSidebarOpen(true)}
-                className="lg:hidden p-2 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <Menu className="w-6 h-6 text-slate-600" />
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <button className="relative p-2 hover:bg-slate-100 rounded-xl transition-colors">
-                <Bell className="w-5 h-5 text-slate-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-[#A6864A] rounded-full" />
-              </button>
-              <div className="w-10 h-10 bg-gradient-to-br from-[#A6864A] to-[#8B6F3D] rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-[#A6864A]/30">
-                {user?.username?.charAt(0).toUpperCase() || 'U'}
-              </div>
-            </div>
-          </div>
-        </header>
-
         {/* Page content */}
         <main className="p-4 lg:p-8 bg-gray-200 min-h-screen">
           {children}

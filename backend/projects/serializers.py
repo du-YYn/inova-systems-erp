@@ -51,9 +51,9 @@ class ProjectTaskSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProjectTask
-        fields = ['id', 'project', 'phase', 'task_type', 'title', 'description', 
+        fields = ['id', 'project', 'phase', 'task_type', 'title', 'description',
                   'assigned_to', 'assigned_to_name', 'status', 'priority',
-                  'estimated_hours', 'logged_hours', 'due_date', 'completed_at',
+                  'estimated_hours', 'logged_hours', 'total_hours', 'due_date', 'completed_at',
                   'external_id', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -95,7 +95,7 @@ class ProjectSerializer(serializers.ModelSerializer):
                   'github_repo', 'figma_url', 'docs_url', 'notes',
                   'phases', 'milestones', 'total_hours', 'total_logged',
                   'created_by', 'created_by_name', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
 
     def get_total_hours(self, obj):
         return float(obj.budget_hours or 0)
