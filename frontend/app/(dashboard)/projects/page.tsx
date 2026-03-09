@@ -97,10 +97,13 @@ export default function ProjectsPage() {
         fetch(`${apiUrl}/projects/projects/`, { headers: getHeaders(), credentials: 'include' }),
         fetch(`${apiUrl}/sales/customers/`, { headers: getHeaders(), credentials: 'include' }),
       ]);
+      if (!projectsRes.ok || !customersRes.ok) throw new Error('Unauthorized');
       const projectsData = await projectsRes.json();
       const customersData = await customersRes.json();
-      setProjects(projectsData.results || projectsData);
-      setCustomers(customersData.results || customersData);
+      const pList = projectsData.results || projectsData;
+      const cList = customersData.results || customersData;
+      setProjects(Array.isArray(pList) ? pList : []);
+      setCustomers(Array.isArray(cList) ? cList : []);
     } catch {
       toast.error('Erro ao carregar projetos.');
     } finally {

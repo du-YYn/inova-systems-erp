@@ -81,10 +81,13 @@ export default function SalesPage() {
         fetch(`${apiUrl}/sales/proposals/?${params}`, { headers: getHeaders(), credentials: 'include' }),
         fetch(`${apiUrl}/sales/customers/`, { headers: getHeaders(), credentials: 'include' }),
       ]);
+      if (!propRes.ok || !custRes.ok) throw new Error('Unauthorized');
       const [propData, custData] = await Promise.all([propRes.json(), custRes.json()]);
-      setProposals(propData.results || propData);
-      setTotal(propData.count ?? (propData.results || propData).length);
-      setCustomers(custData.results || custData);
+      const pList = propData.results || propData;
+      const cList = custData.results || custData;
+      setProposals(Array.isArray(pList) ? pList : []);
+      setTotal(propData.count ?? (Array.isArray(pList) ? pList.length : 0));
+      setCustomers(Array.isArray(cList) ? cList : []);
     } catch {
       toast.error('Erro ao carregar propostas');
     } finally {

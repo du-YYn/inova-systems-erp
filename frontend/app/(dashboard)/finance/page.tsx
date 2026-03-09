@@ -180,14 +180,17 @@ export default function FinancePage() {
         fetch(`${apiUrl}/finance/bank-accounts/`, { headers: getHeaders(), credentials: 'include' }),
       ]);
 
+      if (!statsRes.ok || !receivablesRes.ok || !payablesRes.ok || !bankRes.ok) throw new Error('Unauthorized');
       const [statsData, receivablesData, payablesData, bankData] = await Promise.all([
         statsRes.json(), receivablesRes.json(), payablesRes.json(), bankRes.json(),
       ]);
 
       setStats(statsData);
-      setReceivables((receivablesData.results || receivablesData).slice(0, 5));
-      setPayables((payablesData.results || payablesData).slice(0, 5));
-      const accounts: BankAccount[] = bankData.results || bankData;
+      const recList = receivablesData.results || receivablesData;
+      const payList = payablesData.results || payablesData;
+      setReceivables(Array.isArray(recList) ? recList.slice(0, 5) : []);
+      setPayables(Array.isArray(payList) ? payList.slice(0, 5) : []);
+      const accounts: BankAccount[] = Array.isArray(bankData.results || bankData) ? (bankData.results || bankData) : [];
       setBankAccounts(accounts);
       if (accounts.length > 0) {
         const defaultId = String(accounts[0].id);
@@ -209,8 +212,10 @@ export default function FinancePage() {
     setLoadingCategories(true);
     try {
       const res = await fetch(`${apiUrl}/finance/categories/`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error('Unauthorized');
       const data = await res.json();
-      setCategories(data.results || data);
+      const list = data.results || data;
+      setCategories(Array.isArray(list) ? list : []);
     } catch {
       toast.error('Erro ao carregar categorias.');
     } finally {
@@ -224,8 +229,10 @@ export default function FinancePage() {
     setLoadingBudgets(true);
     try {
       const res = await fetch(`${apiUrl}/finance/budgets/`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error('Unauthorized');
       const data = await res.json();
-      setBudgets(data.results || data);
+      const list = data.results || data;
+      setBudgets(Array.isArray(list) ? list : []);
     } catch {
       toast.error('Erro ao carregar orçamentos.');
     } finally {
@@ -239,8 +246,10 @@ export default function FinancePage() {
     setLoadingCostCenters(true);
     try {
       const res = await fetch(`${apiUrl}/finance/cost-centers/`, { headers: getHeaders(), credentials: 'include' });
+      if (!res.ok) throw new Error('Unauthorized');
       const data = await res.json();
-      setCostCenters(data.results || data);
+      const list = data.results || data;
+      setCostCenters(Array.isArray(list) ? list : []);
     } catch {
       toast.error('Erro ao carregar centros de custo.');
     } finally {

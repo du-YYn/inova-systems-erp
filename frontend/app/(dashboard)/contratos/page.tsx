@@ -100,13 +100,16 @@ export default function ContratosPage() {
         fetch(`${apiUrl}/sales/customers/?page_size=200`, { headers: h(), credentials: 'include' }),
         fetch(`${apiUrl}/sales/contracts/dashboard/`, { headers: h(), credentials: 'include' }),
       ]);
+      if (!contractsRes.ok || !customersRes.ok) throw new Error('Unauthorized');
       const [contractsData, customersData, statsData] = await Promise.all([
-        contractsRes.json(), customersRes.json(), statsRes.json(),
+        contractsRes.json(), customersRes.json(), statsRes.ok ? statsRes.json() : Promise.resolve({}),
       ]);
-      setContracts(contractsData.results || contractsData);
-      setTotal(contractsData.count ?? (contractsData.results || contractsData).length);
-      setCustomers(customersData.results || customersData);
-      setStats(statsData);
+      const cList = contractsData.results || contractsData;
+      const kList = customersData.results || customersData;
+      setContracts(Array.isArray(cList) ? cList : []);
+      setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
+      setCustomers(Array.isArray(kList) ? kList : []);
+      if (statsData && !statsData.detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
     } finally {
