@@ -191,7 +191,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#F1F3F6]">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -261,7 +261,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-8">
+        <main className="flex-1 p-4 lg:p-8 bg-[#F1F3F6]">
           {children}
         </main>
       </div>
