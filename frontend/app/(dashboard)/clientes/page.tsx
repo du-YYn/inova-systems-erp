@@ -133,7 +133,12 @@ export default function ClientesPage() {
         credentials: 'include',
         body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = Object.values(err).flat().join(' ') || 'Erro ao salvar cliente.';
+        toast.error(msg as string);
+        return;
+      }
       toast.success(editTarget ? 'Cliente atualizado!' : 'Cliente criado com sucesso!');
       setShowModal(false);
       fetchCustomers();
@@ -168,8 +173,8 @@ export default function ClientesPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Clientes</h1>
-          <p className="text-text-secondary mt-1">Cadastro e gestão de clientes</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Clientes</h1>
+          <p className="text-gray-500 mt-1">Cadastro e gestão de clientes</p>
         </div>
         <button
           onClick={openCreate}
@@ -185,26 +190,26 @@ export default function ClientesPage() {
         {loading ? Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-text-secondary text-sm">Total</p>
-              <p className="text-2xl font-semibold text-text-primary mt-1">{total}</p>
+              <p className="text-gray-500 text-sm">Total</p>
+              <p className="text-2xl font-semibold text-gray-900 mt-1">{total}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-text-secondary text-sm">Ativos</p>
+              <p className="text-gray-500 text-sm">Ativos</p>
               <p className="text-2xl font-semibold text-green-600 mt-1">{totalActive}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-1">
                 <Building2 className="w-4 h-4 text-blue-500" />
-                <p className="text-text-secondary text-sm">Pessoas Jurídicas</p>
+                <p className="text-gray-500 text-sm">Pessoas Jurídicas</p>
               </div>
-              <p className="text-2xl font-semibold text-text-primary">{totalPJ}</p>
+              <p className="text-2xl font-semibold text-gray-900">{totalPJ}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-4 h-4 text-purple-500" />
-                <p className="text-text-secondary text-sm">Pessoas Físicas</p>
+                <p className="text-gray-500 text-sm">Pessoas Físicas</p>
               </div>
-              <p className="text-2xl font-semibold text-text-primary">{totalPF}</p>
+              <p className="text-2xl font-semibold text-gray-900">{totalPF}</p>
             </div>
           </>
         )}
@@ -240,11 +245,11 @@ export default function ClientesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+      <div className="card overflow-hidden">
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={5} /></div>
         ) : customers.length === 0 ? (
-          <div className="text-center py-16 text-text-secondary">
+          <div className="text-center py-16 text-gray-500">
             <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Nenhum cliente encontrado</p>
           </div>
@@ -252,11 +257,11 @@ export default function ClientesPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Tipo</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Contato</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Localização</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Cliente</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Tipo</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Contato</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Localização</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
@@ -274,9 +279,9 @@ export default function ClientesPage() {
                         }
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-text-primary">{displayName(c)}</p>
-                        {c.trading_name && <p className="text-xs text-text-secondary">{c.trading_name}</p>}
-                        {c.document && <p className="text-xs text-text-secondary">{c.document}</p>}
+                        <p className="text-sm font-medium text-gray-900">{displayName(c)}</p>
+                        {c.trading_name && <p className="text-xs text-gray-500">{c.trading_name}</p>}
+                        {c.document && <p className="text-xs text-gray-500">{c.document}</p>}
                       </div>
                     </div>
                   </td>
@@ -287,24 +292,24 @@ export default function ClientesPage() {
                       {c.customer_type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
                     </span>
                     {c.segment && (
-                      <p className="text-xs text-text-secondary mt-1">{segmentLabels[c.segment] || c.segment}</p>
+                      <p className="text-xs text-gray-500 mt-1">{segmentLabels[c.segment] || c.segment}</p>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     {c.email && (
-                      <div className="flex items-center gap-1 text-xs text-text-secondary mb-1">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
                         <Mail className="w-3 h-3" />{c.email}
                       </div>
                     )}
                     {c.phone && (
-                      <div className="flex items-center gap-1 text-xs text-text-secondary">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
                         <Phone className="w-3 h-3" />{c.phone}
                       </div>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     {(c.city || c.state) && (
-                      <div className="flex items-center gap-1 text-xs text-text-secondary">
+                      <div className="flex items-center gap-1 text-xs text-gray-500">
                         <MapPin className="w-3 h-3" />
                         {[c.city, c.state].filter(Boolean).join(' — ')}
                       </div>
@@ -350,10 +355,10 @@ export default function ClientesPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">
+              <h2 className="text-xl font-semibold text-gray-900">
                 {editTarget ? 'Editar Cliente' : 'Novo Cliente'}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -362,7 +367,7 @@ export default function ClientesPage() {
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Tipo *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Tipo *</label>
                 <div className="flex gap-3">
                   {[['PJ', 'Pessoa Jurídica'], ['PF', 'Pessoa Física']].map(([val, label]) => (
                     <label key={val} className="flex items-center gap-2 cursor-pointer">
@@ -383,54 +388,54 @@ export default function ClientesPage() {
               {formData.customer_type === 'PJ' ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Razão Social *</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Razão Social *</label>
                     <input
                       type="text" required
                       value={formData.company_name}
                       onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                      className="w-full input-field"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Nome Fantasia</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Nome Fantasia</label>
                     <input
                       type="text"
                       value={formData.trading_name}
                       onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                      className="w-full input-field"
                     />
                   </div>
                 </>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Nome Completo *</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome Completo *</label>
                   <input
                     type="text" required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">
+                  <label className="block text-sm font-medium text-gray-500 mb-1">
                     {formData.customer_type === 'PJ' ? 'CNPJ' : 'CPF'}
                   </label>
                   <input
                     type="text"
                     value={formData.document}
                     onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Segmento</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Segmento</label>
                   <select
                     value={formData.segment}
                     onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                    className="w-full input-field bg-white"
                   >
                     <option value="">Selecione</option>
                     {Object.entries(segmentLabels).map(([k, v]) => (
@@ -442,44 +447,44 @@ export default function ClientesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Telefone</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Telefone</label>
                   <input
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Cidade</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Cidade</label>
                   <input
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Estado</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
                   <input
                     type="text"
                     maxLength={2}
                     placeholder="SP"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
               </div>

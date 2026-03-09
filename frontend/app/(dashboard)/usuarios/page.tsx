@@ -210,8 +210,8 @@ export default function UsuariosPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Gestão de Usuários</h1>
-          <p className="text-text-secondary mt-1">Gerencie acessos e permissões do sistema</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Gestão de Usuários</h1>
+          <p className="text-gray-500 mt-1">Gerencie acessos e permissões do sistema</p>
         </div>
         <button onClick={openNew}
           className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
@@ -231,8 +231,8 @@ export default function UsuariosPage() {
             <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${color}`}>
               <Icon className="w-5 h-5" />
             </div>
-            <p className="text-text-secondary text-sm">{label}</p>
-            <p className="text-2xl font-semibold text-text-primary mt-0.5">{loading ? '—' : value}</p>
+            <p className="text-gray-500 text-sm">{label}</p>
+            <p className="text-2xl font-semibold text-gray-900 mt-0.5">{loading ? '—' : value}</p>
           </div>
         ))}
       </div>
@@ -240,7 +240,7 @@ export default function UsuariosPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por nome, email ou username..."
@@ -260,13 +260,13 @@ export default function UsuariosPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+      <div className="card overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-text-secondary">
+          <div className="flex flex-col items-center justify-center py-20 text-gray-500">
             <Users className="w-12 h-12 mb-3 opacity-30" />
             <p className="font-medium">{search || roleFilter !== 'all' ? 'Nenhum usuário encontrado' : 'Nenhum usuário cadastrado'}</p>
           </div>
@@ -274,12 +274,12 @@ export default function UsuariosPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider">Usuário</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider">Perfil</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider hidden md:table-cell">Email</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider hidden lg:table-cell">Cadastro</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider">Status</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-text-secondary uppercase tracking-wider">Ações</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Perfil</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Email</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Cadastro</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -297,8 +297,8 @@ export default function UsuariosPage() {
                           <span className="text-sm font-semibold text-[#A6864A]">{initials}</span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-text-primary">{user.full_name || user.username}</p>
-                          <p className="text-xs text-text-secondary">@{user.username}</p>
+                          <p className="text-sm font-medium text-gray-900">{user.full_name || user.username}</p>
+                          <p className="text-xs text-gray-500">@{user.username}</p>
                         </div>
                       </div>
                     </td>
@@ -309,10 +309,10 @@ export default function UsuariosPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-sm text-text-secondary">{user.email || '—'}</span>
+                      <span className="text-sm text-gray-500">{user.email || '—'}</span>
                     </td>
                     <td className="py-3 px-4 hidden lg:table-cell">
-                      <span className="text-sm text-text-secondary">{formatDate(user.created_at)}</span>
+                      <span className="text-sm text-gray-500">{formatDate(user.created_at)}</span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
@@ -333,11 +333,11 @@ export default function UsuariosPage() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEdit(user)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-text-secondary hover:text-text-primary">
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDelete(user)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-text-secondary hover:text-red-600">
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -352,10 +352,10 @@ export default function UsuariosPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">
+              <h2 className="text-xl font-semibold text-gray-900">
                 {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -365,39 +365,39 @@ export default function UsuariosPage() {
             <form onSubmit={handleSave} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Nome</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome</label>
                   <input type="text" value={form.first_name}
                     onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                    className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Sobrenome</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Sobrenome</label>
                   <input type="text" value={form.last_name}
                     onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                    className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Username *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Username *</label>
                 <input type="text" required value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Email *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Email *</label>
                 <input type="email" required value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Telefone</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Telefone</label>
                 <input type="tel" value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   placeholder="+55 (11) 99999-9999"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                  className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Perfil *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Perfil *</label>
                 <select value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] bg-white text-sm">
@@ -410,26 +410,26 @@ export default function UsuariosPage() {
                     <input type="checkbox" checked={form.is_active}
                       onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
                       className="w-4 h-4 rounded border-gray-300 text-[#A6864A] focus:ring-[#A6864A]" />
-                    <span className="text-sm font-medium text-text-secondary">Usuário ativo</span>
+                    <span className="text-sm font-medium text-gray-500">Usuário ativo</span>
                   </label>
                 </div>
               )}
               {!editingUser && (
                 <>
                   <div className="border-t border-gray-100 pt-4">
-                    <p className="text-xs font-medium text-text-secondary uppercase tracking-wider mb-3">Senha de acesso</p>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Senha de acesso</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Senha *</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Senha *</label>
                     <input type="password" required minLength={8} value={form.password}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                      className="input-field" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1">Confirmar Senha *</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Confirmar Senha *</label>
                     <input type="password" required minLength={8} value={form.password_confirm}
                       onChange={(e) => setForm({ ...form, password_confirm: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] text-sm" />
+                      className="input-field" />
                   </div>
                 </>
               )}

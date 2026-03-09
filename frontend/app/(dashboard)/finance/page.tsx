@@ -1499,7 +1499,7 @@ export default function FinancePage() {
       {/* Transaction Modal */}
       {showTransactionModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Nova Transação</h2>
               <button onClick={() => setShowTransactionModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1650,7 +1650,7 @@ export default function FinancePage() {
       {/* Revenue Modal */}
       {showRevenueModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Nova Receita</h2>
               <button onClick={() => setShowRevenueModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1705,7 +1705,7 @@ export default function FinancePage() {
       {/* Expense Modal */}
       {showExpenseModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Nova Despesa</h2>
               <button onClick={() => setShowExpenseModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1760,7 +1760,7 @@ export default function FinancePage() {
       {/* Category Modal */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</h2>
               <button onClick={() => setShowCategoryModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1809,7 +1809,7 @@ export default function FinancePage() {
       {/* Budget Modal */}
       {showBudgetModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">Novo Orçamento</h2>
               <button onClick={() => setShowBudgetModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1880,7 +1880,7 @@ export default function FinancePage() {
       {/* Cost Center Modal */}
       {showCostCenterModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900">{editingCostCenter ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}</h2>
               <button onClick={() => setShowCostCenterModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">

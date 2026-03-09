@@ -148,7 +148,12 @@ export default function ContratosPage() {
       const res = await fetch(`${apiUrl}/sales/contracts/`, {
         method: 'POST', headers: h(), credentials: 'include', body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = Object.values(err).flat().join(' ') || 'Erro ao criar contrato.';
+        toast.error(msg as string);
+        return;
+      }
       toast.success('Contrato criado com sucesso!');
       setShowModal(false);
       setFormData({ ...EMPTY_FORM });
@@ -202,8 +207,8 @@ export default function ContratosPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">Contratos</h1>
-          <p className="text-text-secondary mt-1">Gestão de contratos com clientes</p>
+          <h1 className="text-2xl font-semibold text-gray-900">Contratos</h1>
+          <p className="text-gray-500 mt-1">Gestão de contratos com clientes</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -221,30 +226,30 @@ export default function ContratosPage() {
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <ScrollText className="w-4 h-4 text-gray-400" />
-                <p className="text-text-secondary text-sm">Total</p>
+                <p className="text-gray-500 text-sm">Total</p>
               </div>
-              <p className="text-2xl font-semibold text-text-primary">{stats.total_contracts}</p>
+              <p className="text-2xl font-semibold text-gray-900">{stats.total_contracts}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
-                <p className="text-text-secondary text-sm">Ativos</p>
+                <p className="text-gray-500 text-sm">Ativos</p>
               </div>
               <p className="text-2xl font-semibold text-green-600">{stats.active_contracts}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-accent-gold" />
-                <p className="text-text-secondary text-sm">MRR</p>
+                <p className="text-gray-500 text-sm">MRR</p>
               </div>
-              <p className="text-2xl font-semibold text-text-primary">{formatCurrency(stats.mrr)}</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(stats.mrr)}</p>
             </div>
             <div className="bg-white p-5 rounded-lg border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-4 h-4 text-orange-400" />
-                <p className="text-text-secondary text-sm">Vencendo (30d)</p>
+                <p className="text-gray-500 text-sm">Vencendo (30d)</p>
               </div>
-              <p className={`text-2xl font-semibold ${stats.expiring_contracts > 0 ? 'text-orange-500' : 'text-text-primary'}`}>
+              <p className={`text-2xl font-semibold ${stats.expiring_contracts > 0 ? 'text-orange-500' : 'text-gray-900'}`}>
                 {stats.expiring_contracts}
               </p>
             </div>
@@ -282,11 +287,11 @@ export default function ContratosPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+      <div className="card overflow-hidden">
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={6} /></div>
         ) : contracts.length === 0 ? (
-          <div className="text-center py-16 text-text-secondary">
+          <div className="text-center py-16 text-gray-500">
             <ScrollText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Nenhum contrato encontrado</p>
           </div>
@@ -294,12 +299,12 @@ export default function ContratosPage() {
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Contrato</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Tipo / Cobrança</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Valor</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Vigência</th>
-                <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Contrato</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Cliente</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Tipo / Cobrança</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Valor</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Vigência</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
@@ -307,25 +312,25 @@ export default function ContratosPage() {
               {contracts.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-text-primary">{c.title}</p>
-                    <p className="text-xs text-text-secondary font-mono">{c.number}</p>
-                    {c.proposal_title && <p className="text-xs text-text-secondary">Prop: {c.proposal_title}</p>}
+                    <p className="text-sm font-medium text-gray-900">{c.title}</p>
+                    <p className="text-xs text-gray-500 font-mono">{c.number}</p>
+                    {c.proposal_title && <p className="text-xs text-gray-500">Prop: {c.proposal_title}</p>}
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-text-primary">{c.customer_name || '—'}</p>
+                    <p className="text-sm text-gray-900">{c.customer_name || '—'}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-text-primary">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
-                    <p className="text-xs text-text-secondary">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
+                    <p className="text-sm text-gray-900">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
+                    <p className="text-xs text-gray-500">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
                   </td>
                   <td className="px-6 py-4">
-                    {c.monthly_value && <p className="text-sm font-medium text-text-primary">{formatCurrency(c.monthly_value)}/mês</p>}
-                    {c.hourly_rate && <p className="text-xs text-text-secondary">{formatCurrency(c.hourly_rate)}/h</p>}
-                    {!c.monthly_value && !c.hourly_rate && <p className="text-sm text-text-secondary">—</p>}
+                    {c.monthly_value && <p className="text-sm font-medium text-gray-900">{formatCurrency(c.monthly_value)}/mês</p>}
+                    {c.hourly_rate && <p className="text-xs text-gray-500">{formatCurrency(c.hourly_rate)}/h</p>}
+                    {!c.monthly_value && !c.hourly_rate && <p className="text-sm text-gray-500">—</p>}
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-xs text-text-secondary">{formatDate(c.start_date)} →</p>
-                    <p className="text-xs text-text-secondary">{formatDate(c.end_date)}</p>
+                    <p className="text-xs text-gray-500">{formatDate(c.start_date)} →</p>
+                    <p className="text-xs text-gray-500">{formatDate(c.end_date)}</p>
                     {c.auto_renew && <span className="text-xs text-green-600">↻ Renovação auto.</span>}
                   </td>
                   <td className="px-6 py-4">
@@ -374,30 +379,30 @@ export default function ContratosPage() {
 
       {/* Create Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-text-primary">Novo Contrato</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Novo Contrato</h2>
               <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Título *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Título *</label>
                 <input
                   type="text" required value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                  className="w-full input-field"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Cliente</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Cliente</label>
                 <select
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                  className="w-full input-field bg-white"
                 >
                   <option value="">Selecione um cliente</option>
                   {customers.map((c) => (
@@ -408,21 +413,21 @@ export default function ContratosPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo</label>
                   <select
                     value={formData.contract_type}
                     onChange={(e) => setFormData({ ...formData, contract_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                    className="w-full input-field bg-white"
                   >
                     {Object.entries(contractTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Cobrança</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Cobrança</label>
                   <select
                     value={formData.billing_type}
                     onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white"
+                    className="w-full input-field bg-white"
                   >
                     {Object.entries(billingTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
@@ -431,38 +436,38 @@ export default function ContratosPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Início</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Início</label>
                   <input
                     type="date" value={formData.start_date}
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Término</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Término</label>
                   <input
                     type="date" value={formData.end_date}
                     onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor Mensal (R$)</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Valor Mensal (R$)</label>
                   <input
                     type="number" step="0.01" value={formData.monthly_value}
                     onChange={(e) => setFormData({ ...formData, monthly_value: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Valor/Hora (R$)</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Valor/Hora (R$)</label>
                   <input
                     type="number" step="0.01" value={formData.hourly_rate}
                     onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                    className="w-full input-field"
                   />
                 </div>
               </div>
@@ -474,7 +479,7 @@ export default function ContratosPage() {
                   onChange={(e) => setFormData({ ...formData, auto_renew: e.target.checked })}
                   className="w-4 h-4 rounded text-accent-gold"
                 />
-                <span className="text-sm text-text-secondary">Renovação automática</span>
+                <span className="text-sm text-gray-500">Renovação automática</span>
               </label>
 
               <div className="flex gap-3 pt-4">

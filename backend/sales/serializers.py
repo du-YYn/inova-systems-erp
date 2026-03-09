@@ -34,7 +34,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_by", "created_by_name", "created_at", "updated_at"]
 
 
 class ProspectSerializer(serializers.ModelSerializer):
@@ -122,7 +122,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "number", "created_at", "updated_at"]
+        read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
 
 
 class ContractSerializer(serializers.ModelSerializer):
@@ -161,4 +161,4 @@ class ContractSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "number", "created_at", "updated_at"]
+        read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]

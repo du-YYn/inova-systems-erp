@@ -260,13 +260,13 @@ export default function ProjectDetailPage() {
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold text-text-primary">{project.name}</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
             <span className="px-2 py-1 bg-accent-gold/10 text-accent-gold text-sm rounded-full font-medium">
               {project.progress}% concluído
             </span>
           </div>
           {project.customer_name && (
-            <p className="text-text-secondary mt-0.5">{project.customer_name}</p>
+            <p className="text-gray-500 mt-0.5">{project.customer_name}</p>
           )}
           <div className="w-full max-w-md bg-gray-200 rounded-full h-2 mt-3">
             <div className="bg-accent-gold h-2 rounded-full transition-all" style={{ width: `${project.progress}%` }} />
@@ -297,7 +297,7 @@ export default function ProjectDetailPage() {
             className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-accent-gold text-accent-gold'
-                : 'border-transparent text-text-secondary hover:text-text-primary'
+                : 'border-transparent text-gray-500 hover:text-gray-900'
             }`}
           >
             {tab.label}
@@ -310,16 +310,16 @@ export default function ProjectDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
             {project.description && (
-              <div className="bg-white rounded-lg border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Descrição</h3>
-                <p className="text-sm text-text-primary whitespace-pre-line">{project.description}</p>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Descrição</h3>
+                <p className="text-sm text-gray-900 whitespace-pre-line">{project.description}</p>
               </div>
             )}
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
-              <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-4">Orçamento de Horas</h3>
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Orçamento de Horas</h3>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-text-secondary">Horas lançadas: <strong>{totalHoursLogged.toFixed(1)}h</strong></span>
-                <span className="text-sm text-text-secondary">Orçado: <strong>{project.budget_hours || '—'}h</strong></span>
+                <span className="text-sm text-gray-500">Horas lançadas: <strong>{totalHoursLogged.toFixed(1)}h</strong></span>
+                <span className="text-sm text-gray-500">Orçado: <strong>{project.budget_hours || '—'}h</strong></span>
               </div>
               {project.budget_hours && (
                 <>
@@ -327,32 +327,32 @@ export default function ProjectDetailPage() {
                     <div className={`h-2 rounded-full transition-all ${budgetUsed > 90 ? 'bg-red-500' : budgetUsed > 70 ? 'bg-orange-400' : 'bg-accent-gold'}`}
                       style={{ width: `${Math.min(budgetUsed, 100)}%` }} />
                   </div>
-                  <p className="text-xs text-text-secondary mt-1">{budgetUsed.toFixed(0)}% do orçamento utilizado</p>
+                  <p className="text-xs text-gray-500 mt-1">{budgetUsed.toFixed(0)}% do orçamento utilizado</p>
                 </>
               )}
             </div>
             {project.notes && (
-              <div className="bg-white rounded-lg border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-2">Notas</h3>
-                <p className="text-sm text-text-primary whitespace-pre-line">{project.notes}</p>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Notas</h3>
+                <p className="text-sm text-gray-900 whitespace-pre-line">{project.notes}</p>
               </div>
             )}
           </div>
 
           <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-gray-100 p-5">
-              <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">Detalhes</h3>
+            <div className="card p-5">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Detalhes</h3>
               <dl className="space-y-2 text-sm">
-                {project.start_date && <div className="flex justify-between"><dt className="text-text-secondary">Início</dt><dd>{formatDate(project.start_date)}</dd></div>}
-                {project.end_date && <div className="flex justify-between"><dt className="text-text-secondary">Prazo</dt><dd>{formatDate(project.end_date)}</dd></div>}
-                {project.budget_value && <div className="flex justify-between"><dt className="text-text-secondary">Valor</dt><dd className="font-medium text-accent-gold">{formatCurrency(project.budget_value)}</dd></div>}
-                {project.hourly_rate && <div className="flex justify-between"><dt className="text-text-secondary">Valor/h</dt><dd>{formatCurrency(project.hourly_rate)}</dd></div>}
-                {project.manager_name && <div className="flex justify-between"><dt className="text-text-secondary">Gestor</dt><dd>{project.manager_name}</dd></div>}
+                {project.start_date && <div className="flex justify-between"><dt className="text-gray-500">Início</dt><dd>{formatDate(project.start_date)}</dd></div>}
+                {project.end_date && <div className="flex justify-between"><dt className="text-gray-500">Prazo</dt><dd>{formatDate(project.end_date)}</dd></div>}
+                {project.budget_value && <div className="flex justify-between"><dt className="text-gray-500">Valor</dt><dd className="font-medium text-accent-gold">{formatCurrency(project.budget_value)}</dd></div>}
+                {project.hourly_rate && <div className="flex justify-between"><dt className="text-gray-500">Valor/h</dt><dd>{formatCurrency(project.hourly_rate)}</dd></div>}
+                {project.manager_name && <div className="flex justify-between"><dt className="text-gray-500">Gestor</dt><dd>{project.manager_name}</dd></div>}
               </dl>
             </div>
             {project.team_names.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">Equipe</h3>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Equipe</h3>
                 <div className="space-y-2">
                   {project.team_names.map((name) => (
                     <div key={name} className="flex items-center gap-2">
@@ -366,8 +366,8 @@ export default function ProjectDetailPage() {
               </div>
             )}
             {project.milestones.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3">Marcos</h3>
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Marcos</h3>
                 <div className="space-y-2">
                   {project.milestones.map((m) => (
                     <div key={m.id} className="flex items-center gap-2 text-sm">
@@ -375,8 +375,8 @@ export default function ProjectDetailPage() {
                         ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
                         : <Target className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       }
-                      <span className={m.is_completed ? 'line-through text-text-secondary' : ''}>{m.name}</span>
-                      {m.due_date && <span className="text-xs text-text-secondary ml-auto">{formatDate(m.due_date)}</span>}
+                      <span className={m.is_completed ? 'line-through text-gray-500' : ''}>{m.name}</span>
+                      {m.due_date && <span className="text-xs text-gray-500 ml-auto">{formatDate(m.due_date)}</span>}
                     </div>
                   ))}
                 </div>
@@ -398,14 +398,14 @@ export default function ProjectDetailPage() {
             </button>
           </div>
           {project.phases.length === 0 ? (
-            <div className="text-center py-16 text-text-secondary">
+            <div className="text-center py-16 text-gray-500">
               <Layers className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p>Nenhuma fase criada</p>
             </div>
           ) : (
             <div className="space-y-3">
               {[...project.phases].sort((a, b) => a.order - b.order).map((phase) => (
-                <div key={phase.id} className={`bg-white rounded-lg border p-5 ${phase.is_completed ? 'border-green-200' : 'border-gray-100'}`}>
+                <div key={phase.id} className={`bg-white rounded-2xl shadow-card border p-5 ${phase.is_completed ? 'border-green-200' : 'border-gray-200'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <button onClick={() => handleTogglePhase(phase)} className="flex-shrink-0">
@@ -415,18 +415,18 @@ export default function ProjectDetailPage() {
                         }
                       </button>
                       <div>
-                        <p className={`font-medium ${phase.is_completed ? 'line-through text-text-secondary' : 'text-text-primary'}`}>
+                        <p className={`font-medium ${phase.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                           {phase.name}
                         </p>
-                        {phase.description && <p className="text-sm text-text-secondary">{phase.description}</p>}
+                        {phase.description && <p className="text-sm text-gray-500">{phase.description}</p>}
                       </div>
                     </div>
                     <div className="text-right ml-4">
-                      <p className="text-sm text-text-secondary">
+                      <p className="text-sm text-gray-500">
                         {phase.completed_tasks_count}/{phase.tasks_count} tarefas
                       </p>
                       {(phase.start_date || phase.end_date) && (
-                        <p className="text-xs text-text-secondary mt-0.5">
+                        <p className="text-xs text-gray-500 mt-0.5">
                           {formatDate(phase.start_date)} → {formatDate(phase.end_date)}
                         </p>
                       )}
@@ -464,25 +464,25 @@ export default function ProjectDetailPage() {
               return (
                 <div key={col.key} className={`${col.color} border rounded-lg p-3`}>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-medium text-text-primary">{col.label}</p>
+                    <p className="text-sm font-medium text-gray-900">{col.label}</p>
                     <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full">{colTasks.length}</span>
                   </div>
                   <div className="space-y-2">
                     {colTasks.length === 0 ? (
-                      <p className="text-xs text-text-secondary text-center py-3">—</p>
+                      <p className="text-xs text-gray-500 text-center py-3">—</p>
                     ) : colTasks.map((task) => (
                       <div key={task.id} className="bg-white p-3 rounded-lg border border-gray-100 text-sm">
-                        <p className="font-medium text-text-primary mb-1">{task.title}</p>
+                        <p className="font-medium text-gray-900 mb-1">{task.title}</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`px-1.5 py-0.5 rounded text-xs ${priorityColors[task.priority]}`}>
                             {priorityLabels[task.priority]}
                           </span>
                           {task.assigned_to_name && (
-                            <span className="text-xs text-text-secondary">{task.assigned_to_name}</span>
+                            <span className="text-xs text-gray-500">{task.assigned_to_name}</span>
                           )}
                         </div>
                         {task.estimated_hours && (
-                          <p className="text-xs text-text-secondary mt-1">
+                          <p className="text-xs text-gray-500 mt-1">
                             {task.total_hours.toFixed(1)}h / {task.estimated_hours}h est.
                           </p>
                         )}
@@ -508,8 +508,8 @@ export default function ProjectDetailPage() {
       {activeTab === 'hours' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4 text-sm text-text-secondary">
-              <span><strong className="text-text-primary">{totalHoursLogged.toFixed(1)}h</strong> lançadas</span>
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+              <span><strong className="text-gray-900">{totalHoursLogged.toFixed(1)}h</strong> lançadas</span>
               {project.budget_hours && <span>de <strong>{project.budget_hours}h</strong> orçadas</span>}
             </div>
             <button
@@ -520,29 +520,29 @@ export default function ProjectDetailPage() {
             </button>
           </div>
           {timeEntries.length === 0 ? (
-            <div className="text-center py-16 text-text-secondary">
+            <div className="text-center py-16 text-gray-500">
               <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
               <p>Nenhuma hora lançada</p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+            <div className="card overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-100">
                   <tr>
-                    <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Data</th>
-                    <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Usuário</th>
-                    <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Tarefa</th>
-                    <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Descrição</th>
-                    <th className="text-right text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Horas</th>
-                    <th className="text-left text-xs font-medium text-text-secondary uppercase tracking-wider px-5 py-3">Faturável</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Usuário</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Tarefa</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Descrição</th>
+                    <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Horas</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Faturável</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {timeEntries.map((e) => (
                     <tr key={e.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 text-sm text-text-secondary">{formatDate(e.date)}</td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{formatDate(e.date)}</td>
                       <td className="px-5 py-3 text-sm">{e.user_name}</td>
-                      <td className="px-5 py-3 text-sm text-text-secondary">{e.task_title || '—'}</td>
+                      <td className="px-5 py-3 text-sm text-gray-500">{e.task_title || '—'}</td>
                       <td className="px-5 py-3 text-sm">{e.description}</td>
                       <td className="px-5 py-3 text-sm font-medium text-right">{e.hours}h</td>
                       <td className="px-5 py-3">
@@ -581,21 +581,21 @@ export default function ProjectDetailPage() {
             </div>
           </form>
           {comments.length === 0 ? (
-            <p className="text-text-secondary text-sm text-center py-8">Nenhum comentário ainda.</p>
+            <p className="text-gray-500 text-sm text-center py-8">Nenhum comentário ainda.</p>
           ) : (
             <div className="space-y-4">
               {comments.map((c) => (
-                <div key={c.id} className="bg-white rounded-lg border border-gray-100 p-4">
+                <div key={c.id} className="card p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-7 h-7 bg-accent-gold/20 rounded-full flex items-center justify-center text-xs font-bold text-accent-gold">
                       {c.user_name.charAt(0).toUpperCase()}
                     </div>
                     <span className="text-sm font-medium">{c.user_name}</span>
-                    <span className="text-xs text-text-secondary ml-auto">
+                    <span className="text-xs text-gray-500 ml-auto">
                       {new Date(c.created_at).toLocaleString('pt-BR')}
                     </span>
                   </div>
-                  <p className="text-sm text-text-primary whitespace-pre-line">{c.content}</p>
+                  <p className="text-sm text-gray-900 whitespace-pre-line">{c.content}</p>
                 </div>
               ))}
             </div>
@@ -605,8 +605,8 @@ export default function ProjectDetailPage() {
 
       {/* ── Modal Nova Fase ── */}
       {showPhaseModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold">Nova Fase</h2>
               <button onClick={() => setShowPhaseModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -615,32 +615,32 @@ export default function ProjectDetailPage() {
             </div>
             <form onSubmit={handleCreatePhase} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Nome *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Nome *</label>
                 <input type="text" required value={phaseForm.name}
                   onChange={(e) => setPhaseForm({ ...phaseForm, name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição</label>
                 <input type="text" value={phaseForm.description}
                   onChange={(e) => setPhaseForm({ ...phaseForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Ordem</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Ordem</label>
                   <input type="number" min="1" value={phaseForm.order}
                     onChange={(e) => setPhaseForm({ ...phaseForm, order: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Início</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Início</label>
                   <input type="date" value={phaseForm.start_date}
                     onChange={(e) => setPhaseForm({ ...phaseForm, start_date: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Fim</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Fim</label>
                   <input type="date" value={phaseForm.end_date}
                     onChange={(e) => setPhaseForm({ ...phaseForm, end_date: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
@@ -661,8 +661,8 @@ export default function ProjectDetailPage() {
 
       {/* ── Modal Nova Tarefa ── */}
       {showTaskModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold">Nova Tarefa</h2>
               <button onClick={() => setShowTaskModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -671,20 +671,20 @@ export default function ProjectDetailPage() {
             </div>
             <form onSubmit={handleCreateTask} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Título *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Título *</label>
                 <input type="text" required value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição</label>
                 <textarea rows={2} value={taskForm.description}
                   onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Tipo</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo</label>
                   <select value={taskForm.task_type} onChange={(e) => setTaskForm({ ...taskForm, task_type: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
                     <option value="feature">Feature</option>
@@ -695,7 +695,7 @@ export default function ProjectDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Prioridade</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Prioridade</label>
                   <select value={taskForm.priority} onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
                     <option value="low">Baixa</option>
@@ -707,7 +707,7 @@ export default function ProjectDetailPage() {
               </div>
               {project.phases.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Fase</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Fase</label>
                   <select value={taskForm.phase} onChange={(e) => setTaskForm({ ...taskForm, phase: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
                     <option value="">Sem fase</option>
@@ -717,13 +717,13 @@ export default function ProjectDetailPage() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Horas Est.</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas Est.</label>
                   <input type="number" step="0.5" value={taskForm.estimated_hours}
                     onChange={(e) => setTaskForm({ ...taskForm, estimated_hours: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Prazo</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Prazo</label>
                   <input type="date" value={taskForm.due_date}
                     onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
@@ -744,8 +744,8 @@ export default function ProjectDetailPage() {
 
       {/* ── Modal Lançar Horas ── */}
       {showHoursModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-semibold">Lançar Horas</h2>
               <button onClick={() => setShowHoursModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -755,7 +755,7 @@ export default function ProjectDetailPage() {
             <form onSubmit={handleLogHours} className="space-y-3">
               {tasks.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Tarefa</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Tarefa</label>
                   <select value={hoursForm.task} onChange={(e) => setHoursForm({ ...hoursForm, task: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
                     <option value="">Sem tarefa específica</option>
@@ -765,20 +765,20 @@ export default function ProjectDetailPage() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Horas *</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas *</label>
                   <input type="number" step="0.25" min="0.25" required value={hoursForm.hours}
                     onChange={(e) => setHoursForm({ ...hoursForm, hours: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-1">Data *</label>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Data *</label>
                   <input type="date" required value={hoursForm.date}
                     onChange={(e) => setHoursForm({ ...hoursForm, date: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-1">Descrição *</label>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição *</label>
                 <input type="text" required value={hoursForm.description}
                   onChange={(e) => setHoursForm({ ...hoursForm, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
@@ -787,7 +787,7 @@ export default function ProjectDetailPage() {
                 <input type="checkbox" checked={hoursForm.is_billable}
                   onChange={(e) => setHoursForm({ ...hoursForm, is_billable: e.target.checked })}
                   className="w-4 h-4 rounded text-accent-gold" />
-                <span className="text-sm text-text-secondary">Horas faturáveis</span>
+                <span className="text-sm text-gray-500">Horas faturáveis</span>
               </label>
               <div className="flex gap-3 pt-3">
                 <button type="button" onClick={() => setShowHoursModal(false)}
