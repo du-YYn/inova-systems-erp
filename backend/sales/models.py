@@ -20,8 +20,8 @@ class Customer(models.Model):
     segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='mid_size')
     company_name = models.CharField(max_length=200, blank=True)
     trading_name = models.CharField(max_length=200, blank=True)
-    name = models.CharField(max_length=200)
-    document = models.CharField(max_length=18)  # CPF/CNPJ
+    name = models.CharField(max_length=200, blank=True)
+    document = models.CharField(max_length=18, blank=True)  # CPF/CNPJ
     state_registration = models.CharField(max_length=30, blank=True)
     municipal_registration = models.CharField(max_length=30, blank=True)
     email = models.EmailField(blank=True)

@@ -40,9 +40,11 @@ const EMPTY_FORM = {
 };
 
 const segmentLabels: Record<string, string> = {
-  tech: 'Tecnologia', industry: 'Indústria', commerce: 'Comércio',
-  services: 'Serviços', health: 'Saúde', education: 'Educação',
-  finance: 'Financeiro', government: 'Governo', other: 'Outro',
+  startup: 'Startup',
+  mid_size: 'Média Empresa',
+  enterprise: 'Enterprise',
+  government: 'Governo',
+  other: 'Outro',
 };
 
 export default function ClientesPage() {
@@ -127,11 +129,15 @@ export default function ClientesPage() {
       const url = editTarget
         ? `${apiUrl}/sales/customers/${editTarget.id}/`
         : `${apiUrl}/sales/customers/`;
+      // Remove empty strings to avoid invalid-choice / blank validation errors
+      const body = Object.fromEntries(
+        Object.entries(formData).filter(([, v]) => v !== '')
+      );
       const res = await fetch(url, {
         method: editTarget ? 'PATCH' : 'POST',
         headers: h(),
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
