@@ -37,7 +37,10 @@ export default function LoginPage() {
           return;
         }
         // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
-        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+        if (data.user && typeof data.user.username === 'string') {
+          const { id, username, email, first_name, last_name, role } = data.user;
+          localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
+        }
         window.location.replace('/dashboard');
         return;
       }
@@ -65,7 +68,10 @@ export default function LoginPage() {
       }
 
       // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
-      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.user && typeof data.user.username === 'string') {
+        const { id, username, email, first_name, last_name, role } = data.user;
+        localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
+      }
       window.location.replace('/dashboard');
     } catch {
       setError('Erro de conexão. Tente novamente.');

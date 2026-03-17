@@ -56,6 +56,8 @@ class IsOwnerOrAdmin(BasePermission):
     message = 'Você não tem permissão para modificar este objeto.'
 
     def has_object_permission(self, request, view, obj):
+        if not request.user or not request.user.is_authenticated:
+            return False
         if request.method in SAFE_METHODS:
             return True
         if request.user.role == 'admin':

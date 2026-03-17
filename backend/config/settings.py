@@ -4,11 +4,25 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-change-this-in-production')
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-key-do-not-use-in-production'
+    else:
+        raise ValueError('DJANGO_SECRET_KEY must be set in production')
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + ['backend', 'host.docker.internal']
+# Validate required secrets in production
+if not DEBUG:
+    _db_password = os.environ.get('DB_PASSWORD', '')
+    if not _db_password:
+        raise ValueError('DB_PASSWORD must be set in production')
+
+_allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
+if DEBUG:
+    _allowed += ['backend', 'host.docker.internal']
+ALLOWED_HOSTS = _allowed
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -67,7 +81,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'inova_erp'),
         'USER': os.environ.get('DB_USER', 'inova_user'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'change_me_in_production'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', ''),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),
     }
@@ -84,6 +98,19 @@ LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
 USE_I18N = True
 USE_TZ = True
+
+# ─── SECURITY HEADERS (produção) ───────────────────────────────────────────────
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000          # 1 ano
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -118,6 +145,7 @@ REST_FRAMEWORK = {
         'user': '1000/hour',
         'login': '5/minute',
         'password_reset': '3/hour',
+        'two_factor': '10/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -134,12 +162,17 @@ SIMPLE_JWT = {
 
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
-JWT_COOKIE_SECURE = os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
+# Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)
+JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
 JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
 
 # ─── CORS ──────────────────────────────────────────────────────────────────────
 
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+    if o.strip()
+]
 CORS_ALLOW_CREDENTIALS = True
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
@@ -220,10 +253,10 @@ LOGGING = {
             'level': 'ERROR',
             'propagate': False,
         },
-        'accounts': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'sales': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'finance': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
-        'projects': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'accounts':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'sales':     {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'finance':   {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'projects':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
 

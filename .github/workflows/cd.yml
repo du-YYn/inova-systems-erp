@@ -21,11 +21,50 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # SEGURANÇA: adicionar o fingerprint do host em DEPLOY_HOST_FINGERPRINT
+          # para evitar MITM. Obtido com: ssh-keyscan -H <host> | ssh-keygen -lf -
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
           script: |
+            set -e
             cd /opt/inova-systems-erp
+
+            # Salvar commit anterior para rollback
+            PREV_COMMIT=$(git rev-parse HEAD)
+
+            # Backup do banco antes de migrar
+            echo "Realizando backup do banco de dados..."
+            mkdir -p /opt/backups
+            BACKUP_FILE="/opt/backups/backup_$(date +%Y%m%d_%H%M%S).sql"
+            docker compose exec -T postgres pg_dump \
+              -U ${DB_USER:-inova_user} ${DB_NAME:-inova_erp} > "$BACKUP_FILE"
+            echo "Backup salvo em $BACKUP_FILE"
+
             git pull origin main
-            docker compose pull
+            docker compose pull || { echo "Falha ao baixar imagens"; exit 1; }
             docker compose up -d --build --remove-orphans
+
+            # Migrations
             docker compose exec -T backend python manage.py migrate --no-input
             docker compose exec -T backend python manage.py collectstatic --no-input
-            echo "Deploy concluído: $(date)"
+
+            # Smoke test com retry
+            echo "Executando smoke test..."
+            SUCCESS=false
+            for i in {1..12}; do
+              HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ || echo "000")
+              if [ "$HTTP_STATUS" = "200" ]; then
+                SUCCESS=true
+                break
+              fi
+              echo "Tentativa $i — HTTP $HTTP_STATUS — aguardando..."
+              sleep 5
+            done
+
+            if [ "$SUCCESS" != "true" ]; then
+              echo "Smoke test falhou! Iniciando rollback para $PREV_COMMIT..."
+              git reset --hard "$PREV_COMMIT"
+              docker compose up -d --build --remove-orphans
+              exit 1
+            fi
+
+            echo "Deploy concluído com sucesso: $(date)"

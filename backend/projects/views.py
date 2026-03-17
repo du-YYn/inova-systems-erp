@@ -1,11 +1,14 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema
 from django.db import models
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from .models import ProjectTemplate, Project, ProjectPhase, Milestone, ProjectTask, TimeEntry, ProjectComment
 from .serializers import (
@@ -13,6 +16,8 @@ from .serializers import (
     MilestoneSerializer, ProjectTaskSerializer, TimeEntrySerializer, ProjectCommentSerializer
 )
 from accounts.permissions import IsAdminOrManagerOrOperator
+
+logger = logging.getLogger('projects')
 
 
 @extend_schema(tags=['projects'])
@@ -24,7 +29,7 @@ class ProjectTemplateViewSet(viewsets.ModelViewSet):
 
 @extend_schema(tags=['projects'])
 class ProjectViewSet(viewsets.ModelViewSet):
-    queryset = Project.objects.all()
+    queryset = Project.objects.select_related('customer', 'manager', 'created_by')
     serializer_class = ProjectSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
@@ -32,7 +37,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         project_status = self.request.query_params.get('status', None)
         customer_id = self.request.query_params.get('customer', None)
-        
+
         if project_status:
             queryset = queryset.filter(status=project_status)
         if customer_id:
@@ -41,7 +46,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         project = serializer.save(created_by=self.request.user)
-        
+
         if project.template:
             for phase_data in project.template.phases:
                 ProjectPhase.objects.create(
@@ -54,26 +59,28 @@ class ProjectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def update_progress(self, request, pk=None):
         project = self.get_object()
-        total_tasks = ProjectTask.objects.filter(project=project).count()
-        completed_tasks = ProjectTask.objects.filter(project=project, status='done').count()
-        
-        if total_tasks > 0:
-            project.progress = int((completed_tasks / total_tasks) * 100)
+        stats = ProjectTask.objects.filter(project=project).aggregate(
+            total=Count('id'),
+            completed=Count('id', filter=Q(status='done'))
+        )
+        if stats['total'] > 0:
+            project.progress = int((stats['completed'] / stats['total']) * 100)
             if project.progress == 100:
                 project.status = 'completed'
             project.save()
-        
+
         return Response(ProjectSerializer(project).data)
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
-        total_projects = self.queryset.count()
-        active_projects = self.queryset.exclude(status__in=['completed', 'cancelled']).count()
-        completed_projects = self.queryset.filter(status='completed').count()
-        
-        total_budget = self.queryset.aggregate(total=Sum('budget_value'))['total'] or 0
-        
-        by_status = self.queryset.values('status').annotate(count=Count('id'))
+        qs = self.get_queryset()
+        total_projects = qs.count()
+        active_projects = qs.exclude(status__in=['completed', 'cancelled']).count()
+        completed_projects = qs.filter(status='completed').count()
+
+        total_budget = qs.aggregate(total=Sum('budget_value'))['total'] or 0
+
+        by_status = qs.values('status').annotate(count=Count('id'))
 
         return Response({
             'total_projects': total_projects,
@@ -86,7 +93,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
 @extend_schema(tags=['projects'])
 class ProjectPhaseViewSet(viewsets.ModelViewSet):
-    queryset = ProjectPhase.objects.all()
+    queryset = ProjectPhase.objects.select_related('project')
     serializer_class = ProjectPhaseSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
@@ -95,36 +102,42 @@ class ProjectPhaseViewSet(viewsets.ModelViewSet):
         phase = self.get_object()
         phase.is_completed = not phase.is_completed
         phase.save()
-        
+
         project = phase.project
         total_phases = project.phases.count()
         completed_phases = project.phases.filter(is_completed=True).count()
-        
+
         if total_phases > 0:
             project.progress = int((completed_phases / total_phases) * 100)
             project.save()
-        
+
         return Response(ProjectPhaseSerializer(phase).data)
 
 
 @extend_schema(tags=['projects'])
 class MilestoneViewSet(viewsets.ModelViewSet):
-    queryset = Milestone.objects.all()
+    queryset = Milestone.objects.select_related('project')
     serializer_class = MilestoneSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         milestone = self.get_object()
+        if milestone.is_completed:
+            return Response(
+                {'error': 'Este marco já foi concluído'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         milestone.is_completed = True
         milestone.completed_at = timezone.now()
         milestone.save()
+        logger.info(f"Milestone {milestone.id} concluído por {request.user.username}")
         return Response(MilestoneSerializer(milestone).data)
 
 
 @extend_schema(tags=['projects'])
 class ProjectTaskViewSet(viewsets.ModelViewSet):
-    queryset = ProjectTask.objects.all()
+    queryset = ProjectTask.objects.select_related('project', 'phase', 'assigned_to', 'created_by')
     serializer_class = ProjectTaskSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
@@ -132,7 +145,7 @@ class ProjectTaskViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         project_id = self.request.query_params.get('project', None)
         task_status = self.request.query_params.get('status', None)
-        
+
         if project_id:
             queryset = queryset.filter(project_id=project_id)
         if task_status:
@@ -142,74 +155,114 @@ class ProjectTaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         task = self.get_object()
+        if task.status == 'done':
+            return Response(
+                {'error': 'Tarefa já foi marcada como concluída'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         task.status = 'done'
         task.completed_at = timezone.now()
         task.save()
-        
+
         project = task.project
         total_tasks = ProjectTask.objects.filter(project=project).count()
         completed_tasks = ProjectTask.objects.filter(project=project, status='done').count()
-        
+
         if total_tasks > 0:
             project.progress = int((completed_tasks / total_tasks) * 100)
             project.save()
-        
+
+        logger.info(f"Tarefa {task.id} concluída por {request.user.username}")
         return Response(ProjectTaskSerializer(task).data)
 
     @action(detail=False, methods=['get'])
     def my_tasks(self, request):
-        tasks = self.queryset.filter(assigned_to=request.user)
+        tasks = self.get_queryset().filter(assigned_to=request.user)
+        page = self.paginate_queryset(tasks)
+        if page is not None:
+            return self.get_paginated_response(ProjectTaskSerializer(page, many=True).data)
         return Response(ProjectTaskSerializer(tasks, many=True).data)
 
 
 @extend_schema(tags=['projects'])
 class TimeEntryViewSet(viewsets.ModelViewSet):
-    queryset = TimeEntry.objects.all()
+    queryset = TimeEntry.objects.select_related('project', 'task', 'user')
     serializer_class = TimeEntrySerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
+    def _recalculate_task_hours(self, task):
+        if task:
+            logged = task.time_entries.aggregate(total=Sum('hours'))['total'] or 0
+            task.logged_hours = logged
+            task.save(update_fields=['logged_hours'])
+
     def perform_create(self, serializer):
         entry = serializer.save(user=self.request.user)
-        if entry.task:
-            logged = entry.task.time_entries.aggregate(total=Sum('hours'))['total'] or 0
-            entry.task.logged_hours = logged
-            entry.task.save()
+        self._recalculate_task_hours(entry.task)
+
+    def perform_update(self, serializer):
+        old_task = serializer.instance.task
+        entry = serializer.save()
+        self._recalculate_task_hours(entry.task)
+        # If task changed, also recalculate the old task
+        if old_task and old_task != entry.task:
+            self._recalculate_task_hours(old_task)
+
+    def perform_destroy(self, instance):
+        task = instance.task
+        instance.delete()
+        self._recalculate_task_hours(task)
 
     @action(detail=False, methods=['get'])
     def my_entries(self, request):
-        entries = self.queryset.filter(user=request.user)
+        entries = self.get_queryset().filter(user=request.user)
+        page = self.paginate_queryset(entries)
+        if page is not None:
+            return self.get_paginated_response(TimeEntrySerializer(page, many=True).data)
         return Response(TimeEntrySerializer(entries, many=True).data)
 
     @action(detail=False, methods=['get'])
     def report(self, request):
         from_date = request.query_params.get('from')
         to_date = request.query_params.get('to')
-        
-        queryset = self.queryset.all()
-        
+
+        queryset = self.get_queryset()
+
         if from_date:
-            queryset = queryset.filter(date__gte=from_date)
+            parsed = parse_date(from_date)
+            if not parsed:
+                return Response({'error': 'Formato de data inválido (from). Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(date__gte=parsed)
         if to_date:
-            queryset = queryset.filter(date__lte=to_date)
-            
+            parsed = parse_date(to_date)
+            if not parsed:
+                return Response({'error': 'Formato de data inválido (to). Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(date__lte=parsed)
+
         total_hours = queryset.aggregate(total=Sum('hours'))['total'] or 0
         billable_hours = queryset.filter(is_billable=True).aggregate(total=Sum('hours'))['total'] or 0
-        
+
         by_user = queryset.values('user__username').annotate(total=Sum('hours')).order_by('-total')
         by_project = queryset.values('project__name').annotate(total=Sum('hours')).order_by('-total')
-        
+
+        # Paginação para o detalhe das entradas
+        paginator = PageNumberPagination()
+        paginator.page_size = 100
+        page = paginator.paginate_queryset(queryset, request)
+
         return Response({
             'total_hours': float(total_hours),
             'billable_hours': float(billable_hours),
             'by_user': list(by_user),
             'by_project': list(by_project),
-            'entries': TimeEntrySerializer(queryset, many=True).data
+            'entries': TimeEntrySerializer(page, many=True).data,
+            'entries_count': queryset.count(),
         })
 
 
 @extend_schema(tags=['projects'])
 class ProjectCommentViewSet(viewsets.ModelViewSet):
-    queryset = ProjectComment.objects.all()
+    queryset = ProjectComment.objects.select_related('project', 'user')
     serializer_class = ProjectCommentSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 

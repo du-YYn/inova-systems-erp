@@ -7,7 +7,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+
 from django.utils import timezone
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema, OpenApiResponse
@@ -23,7 +25,7 @@ from .serializers import (
     PasswordResetConfirmSerializer, ChangePasswordSerializer
 )
 from .permissions import IsAdmin
-from .throttles import LoginRateThrottle, PasswordResetThrottle
+from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle
 from .tasks import send_password_reset_email
 
 logger = logging.getLogger('accounts')
@@ -93,7 +95,7 @@ class LoginView(APIView):
         )
 
         if not user:
-            logger.warning(f"Login falhou para: {serializer.validated_data['username']}")
+            logger.warning("Login falhou: credenciais inválidas")
             return Response(
                 {'error': 'Credenciais inválidas'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -108,7 +110,8 @@ class LoginView(APIView):
         if user.is_2fa_enabled:
             temp_token = secrets.token_urlsafe(32)
             user.temp_2fa_token = temp_token
-            user.save(update_fields=['temp_2fa_token'])
+            user.temp_2fa_expires = timezone.now() + timedelta(minutes=10)
+            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
             return Response({
                 'requires_2fa': True,
                 'temp_token': temp_token,
@@ -125,6 +128,7 @@ class LoginView(APIView):
 @extend_schema(tags=['auth'], summary='Verificar código TOTP (2FA)')
 class TwoFactorVerifyView(APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [TwoFactorRateThrottle]
 
     def post(self, request):
         serializer = TwoFactorVerifySerializer(data=request.data)
@@ -138,13 +142,20 @@ class TwoFactorVerifyView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Token inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        if user.temp_2fa_expires and user.temp_2fa_expires < timezone.now():
+            user.temp_2fa_token = None
+            user.temp_2fa_expires = None
+            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
+            return Response({'error': 'Token expirado, faça login novamente'}, status=status.HTTP_401_UNAUTHORIZED)
+
         totp = pyotp.TOTP(user.totp_secret)
         if not totp.verify(code):
-            logger.warning(f"Código 2FA inválido: {user.username}")
+            logger.warning("Código 2FA inválido")
             return Response({'error': 'Código 2FA inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
         user.temp_2fa_token = None
-        user.save(update_fields=['temp_2fa_token'])
+        user.temp_2fa_expires = None
+        user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
 
         logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
@@ -212,8 +223,13 @@ class ChangePasswordView(APIView):
         if not user.check_password(serializer.validated_data['old_password']):
             return Response({'error': 'Senha atual incorreta'}, status=status.HTTP_400_BAD_REQUEST)
 
-        user.password = make_password(serializer.validated_data['new_password'])
-        user.save()
+        try:
+            validate_password(serializer.validated_data['new_password'], user=user)
+        except DjangoValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(serializer.validated_data['new_password'])
+        user.save(update_fields=['password'])
         logger.info(f"Senha alterada: {user.username}")
         return Response({'message': 'Senha alterada com sucesso'})
 
@@ -228,7 +244,7 @@ class LogoutView(APIView):
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
-        except Exception:
+        except (KeyError, ValueError, TypeError):
             pass
         logger.info(f"Logout: {request.user.username}")
         response = Response({'message': 'Logout realizado'})
@@ -284,13 +300,15 @@ class PasswordResetConfirmView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if user.password_reset_expires < timezone.now():
+        if not user.password_reset_expires or user.password_reset_expires < timezone.now():
             return Response({'error': 'Token expirado'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if len(new_password) < 8:
-            return Response({'error': 'A senha deve ter no mínimo 8 caracteres'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
 
-        user.password = make_password(new_password)
+        user.set_password(new_password)
         user.password_reset_token = None
         user.password_reset_expires = None
         user.save(update_fields=['password', 'password_reset_token', 'password_reset_expires'])
@@ -343,7 +361,7 @@ class CookieTokenRefreshView(APIView):
         serializer = TokenRefreshSerializer(data={'refresh': refresh_token})
         try:
             serializer.is_valid(raise_exception=True)
-        except Exception:
+        except (ValueError, TypeError, Exception):  # TokenError subclasses Exception
             response = Response(
                 {'error': 'Token inválido ou expirado'},
                 status=status.HTTP_401_UNAUTHORIZED,

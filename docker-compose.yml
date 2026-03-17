@@ -1,19 +1,20 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15
     container_name: inova_postgres
+    restart: unless-stopped
     env_file:
       - .env
     environment:
       POSTGRES_DB: ${DB_NAME:-inova_erp}
       POSTGRES_USER: ${DB_USER:-inova_user}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # SEGURANÇA: portas do banco não expostas externamente em produção.
+    # Para acesso local em desenvolvimento, descomente a linha abaixo:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-inova_user}"]
       interval: 10s
@@ -23,10 +24,27 @@ services:
   redis:
     image: redis:7-alpine
     container_name: inova_redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    # Autenticação Redis via REDIS_PASSWORD (obrigatório em produção)
+    command: >
+      sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+               redis-server --requirepass $$REDIS_PASSWORD;
+             else
+               redis-server;
+             fi"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    # SEGURANÇA: porta Redis não exposta externamente em produção.
+    # Para acesso local em desenvolvimento, descomente a linha abaixo:
+    # ports:
+    #   - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: >
+        sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
+                 redis-cli -a $$REDIS_PASSWORD ping;
+               else
+                 redis-cli ping;
+               fi"
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,6 +54,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: inova_backend
+    restart: unless-stopped
     env_file:
       - .env
     ports:
@@ -44,11 +63,11 @@ services:
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-inova_erp}
       - DB_USER=${DB_USER:-inova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=5432
-      - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${DJANGO_SECRET_KEY:-change_me_in_production}
-      - DEBUG=${DEBUG:-true}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
     depends_on:
@@ -60,27 +79,33 @@ services:
       - ./backend:/app
     command: >
       sh -c "
-        python manage.py makemigrations accounts sales finance projects &&
-        python manage.py migrate &&
-        python manage.py runserver 0.0.0.0:8000
+        python manage.py migrate --no-input &&
+        gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 60
       "
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/core/health/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   celery_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: inova_celery_worker
+    restart: unless-stopped
     env_file:
       - .env
     environment:
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-inova_erp}
       - DB_USER=${DB_USER:-inova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=5432
-      - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${DJANGO_SECRET_KEY:-change_me_in_production}
-      - DEBUG=${DEBUG:-true}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,17 +120,18 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: inova_celery_beat
+    restart: unless-stopped
     env_file:
       - .env
     environment:
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-inova_erp}
       - DB_USER=${DB_USER:-inova_user}
-      - DB_PASSWORD=${DB_PASSWORD:-change_me_in_production}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=5432
-      - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${DJANGO_SECRET_KEY:-change_me_in_production}
-      - DEBUG=${DEBUG:-true}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,10 +146,11 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: inova_frontend
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     depends_on:
       - backend
 

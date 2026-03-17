@@ -25,7 +25,10 @@ export function middleware(request: NextRequest) {
 
   if (!session?.value) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    // Only pass safe, relative paths to avoid open redirect
+    if (pathname.startsWith('/') && !pathname.startsWith('//')) {
+      loginUrl.searchParams.set('redirect', pathname);
+    }
     return NextResponse.redirect(loginUrl);
   }
 

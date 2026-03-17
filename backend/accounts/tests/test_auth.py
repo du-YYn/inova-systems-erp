@@ -83,9 +83,10 @@ class TestLogin:
             'password': 'operator_pass_123',
         })
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
-        assert 'refresh' in response.data
         assert 'user' in response.data
+        # Tokens são enviados via cookies httpOnly
+        assert 'access_token' in response.cookies
+        assert 'refresh_token' in response.cookies
 
     def test_login_wrong_password(self, api_client, regular_user):
         response = api_client.post(self.url, {
@@ -140,7 +141,8 @@ class TestTwoFactor:
             'code': code,
         })
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
+        assert 'user' in response.data
+        assert 'access_token' in response.cookies
 
     def test_2fa_verify_invalid_code(self, api_client, regular_user):
         secret = pyotp.random_base32()

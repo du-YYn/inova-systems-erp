@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from projects.models import Project, ProjectPhase, ProjectTask, Milestone
+from projects.models import Project, ProjectPhase, ProjectTask, Milestone, TimeEntry
 
 User = get_user_model()
 
@@ -259,3 +259,106 @@ class TestProjectProgress:
         assert response.status_code == status.HTTP_200_OK
         project.refresh_from_db()
         assert project.progress == 100
+
+
+# ─── TIME ENTRY ──────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestTimeEntry:
+    url = '/api/v1/projects/time-entries/'
+
+    def test_create_time_entry_updates_logged_hours(self, admin_client, admin_user, project):
+        task = ProjectTask.objects.create(
+            project=project,
+            title='Task com horas',
+            status='in_progress',
+        )
+        payload = {
+            'project': project.id,
+            'task': task.id,
+            'date': '2024-01-15',
+            'hours': '3.5',
+            'description': 'Desenvolvimento de feature',
+        }
+        response = admin_client.post(self.url, payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        task.refresh_from_db()
+        assert task.logged_hours == Decimal('3.5')
+
+    def test_multiple_entries_accumulate_hours(self, admin_client, admin_user, project):
+        task = ProjectTask.objects.create(
+            project=project,
+            title='Task acumulada',
+            status='in_progress',
+        )
+        for hours in ['2.0', '1.5', '3.0']:
+            admin_client.post(self.url, {
+                'project': project.id,
+                'task': task.id,
+                'date': '2024-01-15',
+                'hours': hours,
+                'description': f'Trabalho {hours}h',
+            })
+        task.refresh_from_db()
+        assert task.logged_hours == Decimal('6.5')
+
+    def test_delete_time_entry_recalculates_logged_hours(self, admin_client, admin_user, project):
+        task = ProjectTask.objects.create(
+            project=project,
+            title='Task delete',
+            status='in_progress',
+        )
+        # Criar duas entradas
+        r1 = admin_client.post(self.url, {
+            'project': project.id, 'task': task.id,
+            'date': '2024-01-15', 'hours': '4.0', 'description': 'Entry 1',
+        })
+        r2 = admin_client.post(self.url, {
+            'project': project.id, 'task': task.id,
+            'date': '2024-01-16', 'hours': '2.0', 'description': 'Entry 2',
+        })
+        task.refresh_from_db()
+        assert task.logged_hours == Decimal('6.0')
+
+        # Deletar primeira entrada
+        admin_client.delete(f"{self.url}{r1.data['id']}/")
+        task.refresh_from_db()
+        assert task.logged_hours == Decimal('2.0')
+
+    def test_my_entries_returns_only_own_entries(self, admin_client, manager_client, admin_user, manager_user, project):
+        TimeEntry.objects.create(
+            project=project, user=admin_user,
+            date='2024-01-15', hours=2.0, description='Admin entry',
+        )
+        TimeEntry.objects.create(
+            project=project, user=manager_user,
+            date='2024-01-15', hours=3.0, description='Manager entry',
+        )
+        response = admin_client.get(f'{self.url}my_entries/')
+        assert response.status_code == status.HTTP_200_OK
+        entries = response.data.get('results', response.data)
+        usernames = [e['user_name'] for e in entries]
+        assert all(u == admin_user.username for u in usernames)
+
+    def test_report_with_date_filter(self, admin_client, admin_user, project):
+        TimeEntry.objects.create(
+            project=project, user=admin_user,
+            date='2024-01-10', hours=2.0, description='Janeiro',
+        )
+        TimeEntry.objects.create(
+            project=project, user=admin_user,
+            date='2024-03-10', hours=5.0, description='Março',
+        )
+        response = admin_client.get(f'{self.url}report/', {
+            'from': '2024-01-01', 'to': '2024-01-31',
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['total_hours'] == 2.0
+
+    def test_report_invalid_date_returns_400(self, admin_client):
+        response = admin_client.get(f'{self.url}report/', {'from': 'not-a-date'})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unauthenticated_cannot_list(self, api_client):
+        response = api_client.get(self.url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED

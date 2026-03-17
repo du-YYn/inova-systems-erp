@@ -12,7 +12,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
                   'role', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        # role e is_2fa_enabled não podem ser alterados diretamente via PATCH /profile/
+        # use endpoints dedicados: /2fa/setup/ e admin /users/{id}/
+        read_only_fields = ['id', 'created_at', 'role', 'is_2fa_enabled']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -21,7 +23,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'role']
+        # role excluído: novos usuários sempre começam como 'operator'
+        fields = ['username', 'email', 'password', 'password_confirm', 'first_name', 'last_name']
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
@@ -30,6 +33,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        validated_data['role'] = 'operator'
         user = User.objects.create_user(**validated_data)
         return user
 

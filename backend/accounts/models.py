@@ -14,6 +14,7 @@ class User(AbstractUser):
     is_2fa_enabled = models.BooleanField(default=False)
     totp_secret = models.CharField(max_length=32, blank=True, null=True)
     temp_2fa_token = models.CharField(max_length=64, blank=True, null=True)
+    temp_2fa_expires = models.DateTimeField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     password_reset_token = models.CharField(max_length=64, blank=True, null=True)

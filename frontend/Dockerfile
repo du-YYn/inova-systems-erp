@@ -3,8 +3,8 @@ FROM node:18-alpine AS base
 FROM base AS deps
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json* ./
+RUN npm ci --frozen-lockfile
 
 FROM base AS builder
 WORKDIR /app
@@ -31,6 +31,7 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
-ENV NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+# NEXT_PUBLIC_API_URL deve ser passado via docker-compose ou docker run -e
+# Não definir valor padrão aqui para forçar configuração explícita por ambiente
 
 CMD ["node", "server.js"]

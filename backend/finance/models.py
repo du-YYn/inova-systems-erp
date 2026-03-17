@@ -38,7 +38,7 @@ class Category(models.Model):
     
     name = models.CharField(max_length=100)
     category_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='children')
+    parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
     color = models.CharField(max_length=7, default='#A6864A')
     icon = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)

@@ -1,23 +1,48 @@
-Django==4.2.9
-djangorestframework==3.14.0
+# ─── Core Framework ─────────────────────────────────────────────────────────
+# Django 4.2.x LTS — 4.2.21 corrige múltiplas DoS (CVE via strip_tags, urlize, text.wrap)
+Django==4.2.21
+djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.3.1
+
+# ─── Database ────────────────────────────────────────────────────────────────
 psycopg2-binary==2.9.9
-python-dotenv==1.0.0
-gunicorn==21.2.0
-Pillow==10.2.0
-openpyxl==3.1.2
-reportlab==4.0.9
+
+# ─── Environment ─────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ─── WSGI Server ─────────────────────────────────────────────────────────────
+# gunicorn 22.0.0 corrige CVE-2024-1135 e CVE-2024-6827 (HTTP request smuggling)
+gunicorn==22.0.0
+
+# ─── Media / Reports ─────────────────────────────────────────────────────────
+Pillow==10.4.0
+openpyxl==3.1.5
+reportlab==4.2.5
+
+# ─── Authentication / 2FA ────────────────────────────────────────────────────
 pyotp==2.9.0
 qrcode==7.4.2
-redis==5.0.1
+
+# ─── Cache / Queue ───────────────────────────────────────────────────────────
+redis==5.2.1
 django-redis==5.4.0
-pytz==2024.1
-sentry-sdk[django]==1.40.0
-celery==5.3.6
-django-celery-beat==2.6.0
+
+# ─── Utilities ───────────────────────────────────────────────────────────────
+pytz==2024.2
+
+# ─── Monitoring ──────────────────────────────────────────────────────────────
+sentry-sdk[django]==2.20.0
+
+# ─── Celery ──────────────────────────────────────────────────────────────────
+celery==5.4.0
+django-celery-beat==2.7.0
 django-celery-results==2.5.1
-kombu==5.3.4
-pytest-django==4.8.0
-pytest-cov==4.1.0
+kombu==5.4.2
+
+# ─── API Documentation ───────────────────────────────────────────────────────
 drf-spectacular==0.27.2
+
+# ─── Testing ─────────────────────────────────────────────────────────────────
+pytest-django==4.8.0
+pytest-cov==5.0.0

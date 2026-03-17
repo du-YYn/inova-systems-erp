@@ -9,3 +9,8 @@ class LoginRateThrottle(AnonRateThrottle):
 class PasswordResetThrottle(AnonRateThrottle):
     """Máximo 3 pedidos de reset de senha por hora por IP."""
     scope = 'password_reset'
+
+
+class TwoFactorRateThrottle(AnonRateThrottle):
+    """Máximo 10 tentativas de código 2FA por hora por IP."""
+    scope = 'two_factor'

@@ -83,6 +83,6 @@ class BudgetSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_by', 'created_at']
 
     def get_progress(self, obj):
-        if obj.planned > 0:
+        if obj.planned and obj.planned > 0:
             return float((obj.actual / obj.planned) * 100)
         return 0

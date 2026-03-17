@@ -74,8 +74,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<{ username: string; email: string } | null>(null);
 
   useEffect(() => {
-    const userData = localStorage.getItem('user');
-    if (userData) setUser(JSON.parse(userData));
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const parsed = JSON.parse(userData);
+        if (parsed && typeof parsed.username === 'string') {
+          setUser(parsed);
+        }
+      }
+    } catch {
+      localStorage.removeItem('user');
+    }
   }, []);
 
   const handleLogout = async () => {

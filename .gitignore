@@ -66,11 +66,10 @@ next-env.d.ts
 .DS_Store
 Thumbs.db
 
-# Environment files
+# Environment files — .env.example deve ser commitado (sem credenciais reais)
 .env
 .env.local
 .env.*.local
-.env.example
 
 # Docker
 .docker/

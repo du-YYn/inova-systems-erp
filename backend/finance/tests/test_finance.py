@@ -296,3 +296,108 @@ class TestBudget:
         response = admin_client.get(f'{self.url}{budget.id}/')
         assert response.status_code == status.HTTP_200_OK
         assert response.data['progress'] == 0
+
+    def test_budget_report_endpoint(self, admin_client, admin_user, category):
+        Budget.objects.create(
+            name='Budget Report',
+            period='monthly',
+            start_date='2024-01-01',
+            end_date='2024-01-31',
+            category=category,
+            planned=Decimal('5000.00'),
+            actual=Decimal('1000.00'),
+            is_active=True,
+            created_by=admin_user,
+        )
+        response = admin_client.get(f'{self.url}report/')
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) >= 1
+        item = response.data[0]
+        assert 'planned' in item
+        assert 'actual' in item
+        assert 'remaining' in item
+        assert 'progress' in item
+
+
+# ─── INVOICE MARK PAID ────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestInvoiceMarkPaid:
+    url = '/api/v1/finance/invoices/'
+
+    def test_mark_paid_creates_transaction(self, admin_client, admin_user, invoice, bank_account, category):
+        url = f'{self.url}{invoice.id}/mark_paid/'
+        response = admin_client.post(url)
+        assert response.status_code == status.HTTP_200_OK
+        invoice.refresh_from_db()
+        assert invoice.status == 'paid'
+        assert invoice.paid_date is not None
+        # Deve ter criado uma transação correspondente
+        from finance.models import Transaction
+        assert Transaction.objects.filter(invoice=invoice).exists()
+
+    def test_mark_paid_idempotent(self, admin_client, invoice):
+        url = f'{self.url}{invoice.id}/mark_paid/'
+        admin_client.post(url)
+        response = admin_client.post(url)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'já está marcada como paga' in response.data['error']
+
+    def test_mark_paid_transaction_type_income_for_receivable(self, admin_client, invoice):
+        assert invoice.invoice_type == 'receivable'
+        url = f'{self.url}{invoice.id}/mark_paid/'
+        admin_client.post(url)
+        from finance.models import Transaction
+        tx = Transaction.objects.get(invoice=invoice)
+        assert tx.transaction_type == 'income'
+
+    def test_mark_paid_transaction_type_expense_for_payable(self, admin_client, admin_user, bank_account, category):
+        from finance.models import Invoice
+        payable = Invoice.objects.create(
+            invoice_type='payable',
+            number='PAG-00001',
+            issue_date='2024-01-01',
+            due_date='2024-01-31',
+            value=Decimal('500.00'),
+            total=Decimal('500.00'),
+            status='pending',
+            category=category,
+            bank_account=bank_account,
+            created_by=admin_user,
+        )
+        url = f'{self.url}{payable.id}/mark_paid/'
+        admin_client.post(url)
+        from finance.models import Transaction
+        tx = Transaction.objects.get(invoice=payable)
+        assert tx.transaction_type == 'expense'
+
+
+# ─── DASHBOARD ────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestFinanceDashboard:
+
+    def test_invoice_dashboard(self, admin_client, invoice):
+        response = admin_client.get('/api/v1/finance/invoices/dashboard/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'pending_receivables' in response.data
+        assert 'pending_payables' in response.data
+        assert 'balance' in response.data
+
+    def test_cash_flow(self, admin_client, admin_user, bank_account, category):
+        from finance.models import Transaction
+        Transaction.objects.create(
+            transaction_type='income',
+            bank_account=bank_account,
+            category=category,
+            date='2024-01-15',
+            amount=Decimal('2000.00'),
+            description='Receita Jan',
+            created_by=admin_user,
+        )
+        response = admin_client.get('/api/v1/finance/transactions/cash_flow/', {
+            'from': '2024-01-01', 'to': '2024-01-31',
+        })
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['total_income'] == 2000.0
+        assert 'balance' in response.data
