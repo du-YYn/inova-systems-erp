@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Garantir que o usuário django seja dono dos arquivos
-RUN chown -R django:django /app
+# Criar diretórios para volumes compartilhados e garantir permissões
+RUN mkdir -p /app/staticfiles /app/media && chown -R django:django /app
 
 USER django
 

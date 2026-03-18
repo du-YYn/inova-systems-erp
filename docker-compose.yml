@@ -16,7 +16,7 @@ services:
     # ports:
     #   - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-inova_user}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-inova_user} -d ${DB_NAME:-inova_erp}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,6 +84,9 @@ services:
       # Volume compartilhado com Nginx para servir arquivos estáticos
       - static_files:/app/staticfiles
       - media_files:/app/media
+    networks:
+      - default
+      - easypanel
     command: >
       sh -c "
         python manage.py migrate --no-input &&
@@ -161,56 +164,22 @@ services:
     # DESENVOLVIMENTO: descomente para acesso direto
     # ports:
     #   - "127.0.0.1:3000:3000"
+    networks:
+      - default
+      - easypanel
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     depends_on:
       backend:
         condition: service_healthy
 
-  nginx:
-    image: nginx:1.25-alpine
-    container_name: inova_nginx
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    # envsubst substitui ${DOMAIN} no template antes de iniciar o nginx
-    command: >
-      /bin/sh -c "envsubst '$$DOMAIN' < /etc/nginx/conf.d/default.conf.template
-                  > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
-    environment:
-      - DOMAIN=${DOMAIN:-localhost}
-    volumes:
-      - ./nginx/nginx.conf.template:/etc/nginx/conf.d/default.conf.template:ro
-      - static_files:/app/staticfiles:ro
-      - media_files:/app/media:ro
-      - certbot_conf:/etc/letsencrypt:ro
-      - certbot_www:/var/www/certbot:ro
-    depends_on:
-      - backend
-      - frontend
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/api/v1/core/health/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # nginx e certbot desativados — usando Traefik do EasyPanel como reverse proxy
+  # O Traefik gerencia SSL (Let's Encrypt) e roteamento automaticamente
 
-  # ── Renovação automática de certificados SSL (Let's Encrypt) ─────────────────
-  certbot:
-    image: certbot/certbot
-    container_name: inova_certbot
-    restart: unless-stopped
-    volumes:
-      - certbot_conf:/etc/letsencrypt
-      - certbot_www:/var/www/certbot
-    # Renova automaticamente quando próximo do vencimento (verificação 12h/12h)
-    entrypoint: >
-      sh -c "trap exit TERM; while :; do
-        certbot renew --quiet;
-        sleep 12h & wait $${!};
-      done"
-    profiles:
-      - production   # só sobe com: docker compose --profile production up
+networks:
+  default:
+  easypanel:
+    external: true
 
 volumes:
   postgres_data:
