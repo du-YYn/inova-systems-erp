@@ -68,11 +68,92 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
+        STATUS_ORDER = [
+            'lead_received', 'qualifying', 'qualified', 'not_qualified',
+            'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
+            'proposal_sent', 'closed', 'not_closed', 'follow_up',
+        ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),
             total_value=Sum('estimated_value')
-        ).order_by('status')
-        return Response(list(pipeline))
+        )
+        pipeline_dict = {row['status']: row for row in pipeline}
+        ordered = [
+            pipeline_dict.get(s, {'status': s, 'count': 0, 'total_value': 0})
+            for s in STATUS_ORDER
+        ]
+        return Response(ordered)
+
+    @action(detail=True, methods=['post'])
+    def qualify(self, request, pk=None):
+        """Registra os critérios de qualificação e avança o status."""
+        prospect = self.get_object()
+        data = request.data
+        has_operation   = data.get('has_operation')
+        has_budget      = data.get('has_budget')
+        is_decision_maker = data.get('is_decision_maker')
+        has_urgency     = data.get('has_urgency')
+        score = sum([
+            bool(has_operation), bool(has_budget),
+            bool(is_decision_maker), bool(has_urgency),
+        ])
+        prospect.has_operation    = has_operation
+        prospect.has_budget       = has_budget
+        prospect.is_decision_maker = is_decision_maker
+        prospect.has_urgency      = has_urgency
+        prospect.qualification_score = score
+        prospect.status = 'qualified' if score >= 3 else 'not_qualified'
+        prospect.save()
+        logger.info(f"Prospect {prospect.id} qualificado (score {score}/4) por {request.user.username}")
+        return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['post'])
+    def schedule_meeting(self, request, pk=None):
+        """Registra o agendamento da reunião via Calendly."""
+        prospect = self.get_object()
+        closer_name = request.data.get('closer_name', '')
+        meeting_scheduled_at = request.data.get('meeting_scheduled_at')
+        meeting_link = request.data.get('meeting_link', '')
+        if not meeting_scheduled_at:
+            return Response({'error': 'meeting_scheduled_at é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        prospect.closer_name = closer_name
+        prospect.meeting_scheduled_at = meeting_scheduled_at
+        prospect.meeting_link = meeting_link
+        prospect.status = 'scheduled'
+        prospect.save()
+        logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
+        return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['post'])
+    def mark_no_show(self, request, pk=None):
+        """Lead não compareceu à reunião."""
+        prospect = self.get_object()
+        prospect.meeting_attended = False
+        prospect.status = 'no_show'
+        prospect.save()
+        logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
+        return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['post'])
+    def mark_attended(self, request, pk=None):
+        """Lead compareceu à reunião."""
+        prospect = self.get_object()
+        prospect.meeting_attended = True
+        prospect.status = 'meeting_done'
+        prospect.save()
+        logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
+        return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['post'])
+    def mark_ebook_sent(self, request, pk=None):
+        """Registra que o e-book personalizado foi enviado ao lead."""
+        prospect = self.get_object()
+        prospect.ebook_sent_at = timezone.now()
+        if prospect.status == 'scheduled':
+            prospect.status = 'pre_meeting'
+        prospect.save()
+        logger.info(f"E-book enviado para prospect {prospect.id} por {request.user.username}")
+        return Response(ProspectSerializer(prospect).data)
 
 
 @extend_schema(tags=['sales'])

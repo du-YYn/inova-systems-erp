@@ -47,6 +47,16 @@ class ProspectSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+    meets_qualification = serializers.SerializerMethodField()
+    days_since_created = serializers.SerializerMethodField()
+
+    def get_meets_qualification(self, obj):
+        return obj.qualification_score >= 3
+
+    def get_days_since_created(self, obj):
+        from django.utils import timezone
+        delta = timezone.now() - obj.created_at
+        return delta.days
 
     class Meta:
         model = Prospect
@@ -66,12 +76,36 @@ class ProspectSerializer(serializers.ModelSerializer):
             "next_action_date",
             "assigned_to",
             "assigned_to_name",
+            # qualificação
+            "qualification_level",
+            "usage_type",
+            "quiz_data",
+            "company_size",
+            "has_operation",
+            "has_budget",
+            "is_decision_maker",
+            "has_urgency",
+            "qualification_score",
+            "meets_qualification",
+            # agendamento
+            "closer_name",
+            "meeting_scheduled_at",
+            "meeting_link",
+            "meeting_attended",
+            # pós-agendamento
+            "ebook_sent_at",
+            "meeting_transcript",
+            # meta
             "created_by",
             "created_by_name",
+            "days_since_created",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "created_by", "created_at", "updated_at",
+            "meets_qualification", "days_since_created",
+        ]
 
 
 class ProposalSerializer(serializers.ModelSerializer):

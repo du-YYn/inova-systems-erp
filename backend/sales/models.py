@@ -54,39 +54,90 @@ class Prospect(models.Model):
         ('linkedin', 'LinkedIn'),
         ('event', 'Evento'),
         ('cold_outreach', 'Cold Outreach'),
+        ('quiz', 'Quiz / Formulário'),
         ('other', 'Outro'),
     ]
-    
+
     STATUS_CHOICES = [
-        ('new', 'Novo'),
-        ('contacted', 'Contatado'),
-        ('qualified', 'Qualificado'),
-        ('meeting', 'Reunião Agendada'),
-        ('proposal', 'Proposta Enviada'),
-        ('negotiation', 'Negociação'),
-        ('won', 'Fechado - Ganho'),
-        ('lost', 'Fechado - Perdido'),
-        ('inactive', 'Inativo'),
+        ('lead_received',  'Lead Recebido'),      # quiz preenchido, aguardando SDR
+        ('qualifying',     'Em Qualificação'),     # SDR iniciou conversa
+        ('qualified',      'Qualificado'),         # passou ≥3/4 critérios
+        ('not_qualified',  'Não Qualificado'),     # não atende critérios
+        ('scheduled',      'Agendado'),            # reunião marcada via Calendly
+        ('pre_meeting',    'Pré-Reunião'),          # sequência de comprometimento
+        ('no_show',        'Não Compareceu'),      # faltou à reunião
+        ('meeting_done',   'Reunião Realizada'),   # reunião aconteceu com o Closer
+        ('proposal_sent',  'Proposta Enviada'),    # proposta enviada após reunião
+        ('closed',         'Fechado'),             # projeto contratado
+        ('not_closed',     'Não Fechou'),          # reunião ok mas sem fechamento
+        ('follow_up',      'Em Follow-up'),        # sequência de reativação
     ]
-    
+
+    QUALIFICATION_LEVEL_CHOICES = [
+        ('2', 'Nível 2 — Consciente do Problema'),
+        ('3', 'Nível 3 — Consciente da Solução'),
+        ('4', 'Nível 4 — Consciente do Produto'),
+    ]
+
+    USAGE_TYPE_CHOICES = [
+        ('internal',   'Uso Interno'),
+        ('commercial', 'Uso Comercial'),
+    ]
+
+    COMPANY_SIZE_CHOICES = [
+        ('small',  'Pequena'),
+        ('medium', 'Média'),
+        ('large',  'Grande'),
+    ]
+
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='prospects', null=True, blank=True)
     company_name = models.CharField(max_length=200)
     contact_name = models.CharField(max_length=200)
     contact_email = models.EmailField()
     contact_phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='website')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='lead_received')
     estimated_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     description = models.TextField(blank=True)
     next_action = models.TextField(blank=True)
     next_action_date = models.DateField(null=True, blank=True)
     assigned_to = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='assigned_prospects'
     )
+
+    # ── Qualificação ──────────────────────────────────────────────────────────
+    qualification_level = models.CharField(
+        max_length=1, choices=QUALIFICATION_LEVEL_CHOICES, blank=True,
+        help_text='Nível do lead conforme resposta do Step 1 do quiz'
+    )
+    usage_type = models.CharField(
+        max_length=20, choices=USAGE_TYPE_CHOICES, blank=True,
+        help_text='Cenário A (uso interno) ou Cenário B (produto comercial)'
+    )
+    quiz_data = models.JSONField(default=dict, blank=True, help_text='Dados brutos do quiz')
+    company_size = models.CharField(max_length=10, choices=COMPANY_SIZE_CHOICES, blank=True)
+
+    # Critérios de qualificação mínima (doc Bloco 7 — Regras Gerais)
+    has_operation   = models.BooleanField(null=True, blank=True, help_text='Tem operação rodando')
+    has_budget      = models.BooleanField(null=True, blank=True, help_text='Budget compatível com o ticket da Inova')
+    is_decision_maker = models.BooleanField(null=True, blank=True, help_text='É tomador de decisão ou tem acesso a ele')
+    has_urgency     = models.BooleanField(null=True, blank=True, help_text='Tem urgência real — problema gera custo ou trava crescimento')
+    qualification_score = models.IntegerField(default=0, help_text='Soma dos critérios atendidos (0–4). Score ≥3 = qualificado')
+
+    # ── Agendamento ───────────────────────────────────────────────────────────
+    closer_name = models.CharField(max_length=100, blank=True, help_text='Nome do Closer responsável pela reunião')
+    meeting_scheduled_at = models.DateTimeField(null=True, blank=True)
+    meeting_link = models.URLField(blank=True, help_text='Link do Calendly / Google Meet / Zoom')
+    meeting_attended = models.BooleanField(null=True, blank=True, help_text='Lead compareceu à reunião?')
+
+    # ── Pós-agendamento ───────────────────────────────────────────────────────
+    ebook_sent_at = models.DateTimeField(null=True, blank=True)
+    meeting_transcript = models.TextField(blank=True, help_text='Transcrição processada da reunião comercial')
+
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_prospects')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

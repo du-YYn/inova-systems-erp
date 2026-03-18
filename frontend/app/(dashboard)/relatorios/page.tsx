@@ -92,9 +92,12 @@ const today = new Date().toISOString().split('T')[0];
 const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
 const PIPELINE_STATUS_LABELS: Record<string, string> = {
-  new: 'Novo', contacted: 'Contatado', qualified: 'Qualificado',
-  meeting: 'Reunião', proposal: 'Proposta', negotiation: 'Negociação',
-  won: 'Fechado', lost: 'Perdido',
+  lead_received: 'Lead Recebido',   qualifying:    'Em Qualificação',
+  qualified:     'Qualificado',     not_qualified: 'Não Qualificado',
+  scheduled:     'Agendado',        pre_meeting:   'Pré-Reunião',
+  no_show:       'Não Compareceu',  meeting_done:  'Reunião Realizada',
+  proposal_sent: 'Proposta Enviada', closed:       'Fechado',
+  not_closed:    'Não Fechou',      follow_up:     'Em Follow-up',
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
