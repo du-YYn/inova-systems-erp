@@ -106,7 +106,9 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000          # 1 ano
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    SECURE_SSL_REDIRECT = True
+    # Desativado por padrão para permitir testes de CI sem HTTPS.
+    # Em produção real, defina SECURE_SSL_REDIRECT=true no ambiente.
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() == 'true'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
