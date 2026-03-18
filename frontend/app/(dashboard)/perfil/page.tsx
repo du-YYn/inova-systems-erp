@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCircle, Lock, Shield, Save, Eye, EyeOff } from 'lucide-react';
+import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 
 interface UserProfile {
@@ -22,7 +22,21 @@ const roleLabels: Record<string, string> = {
   viewer: 'Visualizador',
 };
 
-type Tab = 'profile' | 'password' | 'security';
+type Tab = 'profile' | 'password' | 'security' | 'employee';
+
+interface EmployeeProfile {
+  id?: number;
+  position: string;
+  contract_type: string;
+  hourly_cost: string;
+  availability_hours_week: number;
+  technologies: string[];
+  bio: string;
+  linkedin_url: string;
+  github_url: string;
+  is_billable: boolean;
+  start_date: string;
+}
 
 export default function PerfilPage() {
   const toast = useToast();
@@ -40,6 +54,24 @@ export default function PerfilPage() {
   const [showOld, setShowOld] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  // Employee profile
+  const [employeeProfile, setEmployeeProfile] = useState<EmployeeProfile>({
+    position: '', contract_type: 'clt', hourly_cost: '0.00',
+    availability_hours_week: 40, technologies: [], bio: '',
+    linkedin_url: '', github_url: '', is_billable: true, start_date: '',
+  });
+  const [loadingEmployee, setLoadingEmployee] = useState(false);
+  const [savingEmployee, setSavingEmployee] = useState(false);
+  const [techInput, setTechInput] = useState('');
+
+  // 2FA state
+  const [twoFASetup, setTwoFASetup] = useState<{ qr_url?: string; secret?: string } | null>(null);
+  const [twoFACode, setTwoFACode] = useState('');
+  const [setting2FA, setSetting2FA] = useState(false);
+  const [disabling2FA, setDisabling2FA] = useState(false);
+  const [showDisable2FA, setShowDisable2FA] = useState(false);
+  const [disable2FAPassword, setDisable2FAPassword] = useState('');
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
   const headers = { 'Content-Type': 'application/json' };
@@ -60,6 +92,144 @@ export default function PerfilPage() {
     };
     fetchProfile();
   }, []);
+
+  // Fetch employee profile when tab is activated
+  useEffect(() => {
+    if (activeTab !== 'employee') return;
+    const fetchEmployee = async () => {
+      setLoadingEmployee(true);
+      try {
+        const res = await fetch(`${apiUrl}/accounts/employee-profiles/me/`, { headers, credentials: 'include' });
+        if (res.status === 404) return; // profile doesn't exist yet
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setEmployeeProfile({
+          id: data.id,
+          position: data.position || '',
+          contract_type: data.contract_type || 'clt',
+          hourly_cost: data.hourly_cost || '0.00',
+          availability_hours_week: data.availability_hours_week ?? 40,
+          technologies: Array.isArray(data.technologies) ? data.technologies : [],
+          bio: data.bio || '',
+          linkedin_url: data.linkedin_url || '',
+          github_url: data.github_url || '',
+          is_billable: data.is_billable ?? true,
+          start_date: data.start_date || '',
+        });
+      } catch {
+        toast.error('Erro ao carregar perfil profissional.');
+      } finally {
+        setLoadingEmployee(false);
+      }
+    };
+    fetchEmployee();
+  }, [activeTab]);
+
+  const handleSaveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingEmployee(true);
+    try {
+      const payload = {
+        position: employeeProfile.position,
+        contract_type: employeeProfile.contract_type,
+        hourly_cost: employeeProfile.hourly_cost,
+        availability_hours_week: employeeProfile.availability_hours_week,
+        technologies: employeeProfile.technologies,
+        bio: employeeProfile.bio,
+        linkedin_url: employeeProfile.linkedin_url,
+        github_url: employeeProfile.github_url,
+        is_billable: employeeProfile.is_billable,
+        start_date: employeeProfile.start_date || null,
+      };
+      let res: Response;
+      if (employeeProfile.id) {
+        res = await fetch(`${apiUrl}/accounts/employee-profiles/${employeeProfile.id}/`, {
+          method: 'PATCH', headers, credentials: 'include', body: JSON.stringify(payload),
+        });
+      } else {
+        res = await fetch(`${apiUrl}/accounts/employee-profiles/`, {
+          method: 'POST', headers, credentials: 'include', body: JSON.stringify(payload),
+        });
+      }
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setEmployeeProfile(prev => ({ ...prev, id: data.id }));
+      toast.success('Perfil profissional salvo com sucesso!');
+    } catch {
+      toast.error('Erro ao salvar perfil profissional.');
+    } finally {
+      setSavingEmployee(false);
+    }
+  };
+
+  const handleAddTech = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const val = techInput.trim();
+      if (val && !employeeProfile.technologies.includes(val)) {
+        setEmployeeProfile(prev => ({ ...prev, technologies: [...prev.technologies, val] }));
+      }
+      setTechInput('');
+    }
+  };
+
+  const handleRemoveTech = (tech: string) => {
+    setEmployeeProfile(prev => ({ ...prev, technologies: prev.technologies.filter(t => t !== tech) }));
+  };
+
+  // 2FA handlers
+  const handle2FASetup = async () => {
+    setSetting2FA(true);
+    try {
+      const res = await fetch(`${apiUrl}/accounts/2fa/setup/`, { headers, credentials: 'include' });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setTwoFASetup(data);
+    } catch {
+      toast.error('Erro ao iniciar configuração do 2FA.');
+    } finally {
+      setSetting2FA(false);
+    }
+  };
+
+  const handle2FAVerify = async () => {
+    if (!twoFACode.trim()) { toast.error('Digite o código de verificação.'); return; }
+    setSetting2FA(true);
+    try {
+      const res = await fetch(`${apiUrl}/accounts/2fa/verify/`, {
+        method: 'POST', headers, credentials: 'include', body: JSON.stringify({ token: twoFACode }),
+      });
+      if (!res.ok) throw new Error();
+      setProfile(prev => prev ? { ...prev, is_2fa_enabled: true } : prev);
+      setTwoFASetup(null);
+      setTwoFACode('');
+      toast.success('2FA ativado com sucesso!');
+    } catch {
+      toast.error('Código inválido. Tente novamente.');
+    } finally {
+      setSetting2FA(false);
+    }
+  };
+
+  const handle2FADisable = async () => {
+    if (!disable2FAPassword.trim()) { toast.error('Digite sua senha para confirmar.'); return; }
+    setDisabling2FA(true);
+    try {
+      const res = await fetch(`${apiUrl}/accounts/2fa/setup/`, {
+        method: 'POST', headers, credentials: 'include',
+        body: JSON.stringify({ disable: true, password: disable2FAPassword }),
+      });
+      if (!res.ok) throw new Error();
+      setProfile(prev => prev ? { ...prev, is_2fa_enabled: false } : prev);
+      setShowDisable2FA(false);
+      setDisable2FAPassword('');
+      toast.success('2FA desativado com sucesso!');
+    } catch {
+      toast.error('Erro ao desativar 2FA. Verifique sua senha ou contate o administrador.');
+    } finally {
+      setDisabling2FA(false);
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +282,7 @@ export default function PerfilPage() {
     { key: 'profile' as Tab, label: 'Dados Pessoais', icon: <UserCircle className="w-4 h-4" /> },
     { key: 'password' as Tab, label: 'Alterar Senha', icon: <Lock className="w-4 h-4" /> },
     { key: 'security' as Tab, label: 'Segurança', icon: <Shield className="w-4 h-4" /> },
+    { key: 'employee' as Tab, label: 'Perfil Profissional', icon: <Briefcase className="w-4 h-4" /> },
   ];
 
   return (
@@ -303,11 +474,113 @@ export default function PerfilPage() {
                 {profile?.is_2fa_enabled ? 'Ativo' : 'Inativo'}
               </span>
             </div>
+
+            {/* 2FA not enabled — setup flow */}
             {!profile?.is_2fa_enabled && (
-              <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-100">
-                <p className="text-xs text-amber-700">
-                  Para ativar o 2FA, acesse as configurações avançadas ou contate o administrador do sistema.
-                </p>
+              <div className="mt-4">
+                {!twoFASetup ? (
+                  <button
+                    onClick={handle2FASetup}
+                    disabled={setting2FA}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white text-sm rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60"
+                  >
+                    <Shield className="w-4 h-4" />
+                    {setting2FA ? 'Aguarde...' : 'Configurar 2FA'}
+                  </button>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                      <p className="text-xs text-blue-700 font-medium mb-2">
+                        Escaneie o QR code com seu app autenticador (Google Authenticator, Authy, etc.):
+                      </p>
+                      {twoFASetup.qr_url && (
+                        <img
+                          src={twoFASetup.qr_url}
+                          alt="QR Code 2FA"
+                          className="w-40 h-40 border border-blue-200 rounded-lg bg-white p-1"
+                        />
+                      )}
+                      {twoFASetup.secret && (
+                        <div className="mt-2">
+                          <p className="text-xs text-blue-600 mb-1">Ou insira a chave manualmente:</p>
+                          <code className="block text-xs font-mono bg-white border border-blue-200 rounded px-2 py-1 text-blue-900 break-all">
+                            {twoFASetup.secret}
+                          </code>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-500 mb-1">Código de verificação *</label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="000000"
+                        value={twoFACode}
+                        onChange={e => setTwoFACode(e.target.value.replace(/\D/g, ''))}
+                        className="input-field w-40"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handle2FAVerify}
+                        disabled={setting2FA}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60"
+                      >
+                        <Shield className="w-4 h-4" />
+                        {setting2FA ? 'Verificando...' : 'Verificar e Ativar'}
+                      </button>
+                      <button
+                        onClick={() => { setTwoFASetup(null); setTwoFACode(''); }}
+                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 2FA enabled — disable flow */}
+            {profile?.is_2fa_enabled && (
+              <div className="mt-4">
+                {!showDisable2FA ? (
+                  <button
+                    onClick={() => setShowDisable2FA(true)}
+                    className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-600 text-sm rounded-lg hover:bg-red-50 transition-colors"
+                  >
+                    Desativar 2FA
+                  </button>
+                ) : (
+                  <div className="p-3 bg-red-50 border border-red-100 rounded-lg space-y-3">
+                    <p className="text-xs text-red-700 font-medium">
+                      Confirme sua senha para desativar o 2FA:
+                    </p>
+                    <input
+                      type="password"
+                      placeholder="Sua senha atual"
+                      value={disable2FAPassword}
+                      onChange={e => setDisable2FAPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-red-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-300/30 focus:border-red-400"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handle2FADisable}
+                        disabled={disabling2FA}
+                        className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-60"
+                      >
+                        {disabling2FA ? 'Desativando...' : 'Confirmar desativação'}
+                      </button>
+                      <button
+                        onClick={() => { setShowDisable2FA(false); setDisable2FAPassword(''); }}
+                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -327,6 +600,179 @@ export default function PerfilPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ─── Employee Profile Tab ─────────────────────────────────────────── */}
+      {activeTab === 'employee' && (
+        <div className="card p-6 max-w-2xl">
+          {loadingEmployee ? (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <form onSubmit={handleSaveEmployee} className="space-y-5">
+              {/* Cargo + Contrato */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Cargo</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Desenvolvedor Full Stack"
+                    value={employeeProfile.position}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, position: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Contrato</label>
+                  <select
+                    value={employeeProfile.contract_type}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, contract_type: e.target.value }))}
+                    className="input-field"
+                  >
+                    <option value="clt">CLT</option>
+                    <option value="pj">PJ</option>
+                    <option value="freelancer">Freelancer</option>
+                    <option value="partner">Sócio</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Custo/hora + Horas/semana */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Custo por hora (R$)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={employeeProfile.hourly_cost}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, hourly_cost: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas disponíveis/semana</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="168"
+                    value={employeeProfile.availability_hours_week}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, availability_hours_week: Number(e.target.value) }))}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              {/* Faturável + Data de início */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Data de início</label>
+                  <input
+                    type="date"
+                    value={employeeProfile.start_date}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, start_date: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeProfile(prev => ({ ...prev, is_billable: !prev.is_billable }))}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                      employeeProfile.is_billable ? 'bg-[#A6864A]' : 'bg-gray-200'
+                    }`}
+                    role="switch"
+                    aria-checked={employeeProfile.is_billable}
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                      employeeProfile.is_billable ? 'translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </button>
+                  <span className="text-sm font-medium text-gray-700">Faturável</span>
+                </div>
+              </div>
+
+              {/* Tecnologias (tag input) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Tecnologias</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {employeeProfile.technologies.map(tech => (
+                    <span key={tech} className="flex items-center gap-1 px-2 py-0.5 bg-[#A6864A]/10 text-[#8a6e3c] border border-[#A6864A]/20 rounded-full text-xs font-medium">
+                      {tech}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTech(tech)}
+                        className="text-[#A6864A] hover:text-red-600 transition-colors leading-none"
+                        aria-label={`Remover ${tech}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Digite uma tecnologia e pressione Enter"
+                  value={techInput}
+                  onChange={e => setTechInput(e.target.value)}
+                  onKeyDown={handleAddTech}
+                  className="input-field"
+                />
+                <p className="text-xs text-gray-400 mt-1">Pressione Enter para adicionar cada tecnologia.</p>
+              </div>
+
+              {/* Bio */}
+              <div>
+                <label className="block text-sm font-medium text-gray-500 mb-1">Bio</label>
+                <textarea
+                  rows={3}
+                  placeholder="Breve descrição profissional..."
+                  value={employeeProfile.bio}
+                  onChange={e => setEmployeeProfile(prev => ({ ...prev, bio: e.target.value }))}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] resize-none"
+                />
+              </div>
+
+              {/* LinkedIn + GitHub */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">LinkedIn URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://linkedin.com/in/usuario"
+                    value={employeeProfile.linkedin_url}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, linkedin_url: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">GitHub URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://github.com/usuario"
+                    value={employeeProfile.github_url}
+                    onChange={e => setEmployeeProfile(prev => ({ ...prev, github_url: e.target.value }))}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={savingEmployee}
+                  className="flex items-center gap-2 px-6 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60"
+                >
+                  <Save className="w-4 h-4" />
+                  {savingEmployee ? 'Salvando...' : 'Salvar Perfil Profissional'}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
     </div>

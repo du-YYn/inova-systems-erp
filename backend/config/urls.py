@@ -10,6 +10,8 @@ urlpatterns = [
     path('api/v1/finance/', include('finance.urls')),
     path('api/v1/projects/', include('projects.urls')),
     path('api/v1/core/', include('core.urls')),
+    path('api/v1/support/', include('support.urls')),
+    path('api/v1/', include('notifications.urls')),
 ]
 
 # Swagger/ReDoc apenas em desenvolvimento — nunca expor em produção

@@ -3,804 +3,840 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, CheckCircle2, Circle, Clock, MessageSquare, Plus,
-  Target, AlertTriangle, Layers, X, ExternalLink, Github
+  ArrowLeft, BarChart2, Clock, CheckCircle2, AlertTriangle,
+  Plus, Edit2, Trash2, Timer, GitBranch, Layers, RefreshCw,
+  Circle, PlayCircle, Eye, ChevronRight, X, Users, Calendar,
+  DollarSign, TrendingUp, Server, Zap
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
-/* ─── Types ─────────────────────────────────────────────────────────────── */
+// Types
 interface Project {
-  id: number; name: string; description: string; status: string; progress: number;
-  customer_name: string | null; start_date: string | null; end_date: string | null;
-  budget_value: string | null; budget_hours: number | null; hourly_rate: string | null;
-  total_logged: number; github_repo: string | null; figma_url: string | null;
-  docs_url: string | null; notes: string; manager_name: string | null; team_names: string[];
-  phases: Phase[]; milestones: Milestone[];
+  id: number; name: string; description: string; customer_name: string | null;
+  status: string; progress: number; start_date: string; end_date: string | null;
+  deadline: string | null; budget_value: string; budget_hours: string;
+  hourly_rate: string; project_type: string; billing_type: string;
+  manager_name: string | null; team_names: string[]; github_repo: string;
+  figma_url: string; docs_url: string; notes: string; total_hours: string;
+  total_logged: string;
 }
+
+interface Task {
+  id: number; title: string; description: string; task_type: string;
+  status: string; priority: string; estimated_hours: string; logged_hours: string;
+  due_date: string | null; assigned_to_name: string | null; phase: number | null;
+  sprint: number | null;
+}
+
+interface TimeEntry {
+  id: number; user_name: string; hours: string; description: string;
+  date: string; is_billable: boolean; task_title: string | null; project_name: string;
+}
+
 interface Phase {
   id: number; name: string; description: string; order: number;
   is_completed: boolean; start_date: string | null; end_date: string | null;
   tasks_count: number; completed_tasks_count: number;
 }
+
 interface Milestone {
-  id: number; name: string; description: string; due_date: string | null;
+  id: number; name: string; description: string; due_date: string;
   is_completed: boolean; order: number;
 }
-interface Task {
-  id: number; title: string; description: string; task_type: string;
-  status: string; priority: string; phase: number | null;
-  assigned_to_name: string | null; estimated_hours: number | null;
-  logged_hours: number | null; total_hours: number; due_date: string | null;
-}
-interface TimeEntry {
-  id: number; task_title: string | null; user_name: string;
-  hours: number; description: string; date: string; is_billable: boolean;
-}
-interface Comment {
-  id: number; user_name: string; content: string; created_at: string;
+
+interface Sprint {
+  id: number; name: string; goal: string; start_date: string;
+  end_date: string; status: string; tasks_count: number; completed_tasks: number;
 }
 
-/* ─── Constants ─────────────────────────────────────────────────────────── */
-const taskStatusCols = [
-  { key: 'todo', label: 'A Fazer', color: 'bg-gray-50 border-gray-200' },
-  { key: 'in_progress', label: 'Em Andamento', color: 'bg-blue-50 border-blue-200' },
-  { key: 'review', label: 'Revisão', color: 'bg-yellow-50 border-yellow-200' },
-  { key: 'done', label: 'Concluído', color: 'bg-green-50 border-green-200' },
-];
+interface ChangeRequest {
+  id: number; title: string; description: string; impact_hours: string;
+  impact_value: string; status: string; created_by_name: string; created_at: string;
+}
+
+interface Environment {
+  id: number; name: string; url: string; current_version: string;
+  last_deploy_at: string | null; status: string; last_deploy_by_name: string | null;
+}
+
+interface Profitability {
+  revenue: number; labor_cost: number; direct_expenses: number;
+  total_cost: number; gross_margin: number; margin_pct: number;
+  total_hours: number; billable_hours: number; budget_value: number;
+  budget_hours: number; budget_variance: number;
+}
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+const statusColors: Record<string, string> = {
+  planning: 'bg-gray-100 text-gray-700',
+  kickoff: 'bg-blue-100 text-blue-700',
+  requirements: 'bg-purple-100 text-purple-700',
+  development: 'bg-indigo-100 text-indigo-700',
+  testing: 'bg-yellow-100 text-yellow-700',
+  deployment: 'bg-orange-100 text-orange-700',
+  completed: 'bg-green-100 text-green-700',
+  on_hold: 'bg-red-100 text-red-700',
+  cancelled: 'bg-gray-200 text-gray-500',
+};
+
 const priorityColors: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-600', medium: 'bg-blue-100 text-blue-700',
-  high: 'bg-orange-100 text-orange-700', urgent: 'bg-red-100 text-red-700',
+  low: 'bg-gray-100 text-gray-600',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
 };
-const priorityLabels: Record<string, string> = {
-  low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente',
-};
-const formatCurrency = (v: string | number | null) =>
-  v ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v)) : '—';
-const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
-/* ─── Component ─────────────────────────────────────────────────────────── */
+const taskTypeColors: Record<string, string> = {
+  task: 'bg-blue-50 text-blue-600',
+  bug: 'bg-red-50 text-red-600',
+  feature: 'bg-green-50 text-green-600',
+  research: 'bg-purple-50 text-purple-600',
+  meeting: 'bg-yellow-50 text-yellow-600',
+};
+
+const formatCurrency = (v: number | string) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
+
+const formatDate = (d: string | null) =>
+  d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
+
 export default function ProjectDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
   const router = useRouter();
   const toast = useToast();
+  const projectId = params.id as string;
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [sprints, setSprints] = useState<Sprint[]>([]);
+  const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [profitability, setProfitability] = useState<Profitability | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'phases' | 'tasks' | 'hours' | 'comments'>('overview');
 
-  // Modals
+  // Task modal state
   const [showTaskModal, setShowTaskModal] = useState(false);
-  const [showPhaseModal, setShowPhaseModal] = useState(false);
-  const [showHoursModal, setShowHoursModal] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [comment, setComment] = useState('');
-  const [savingComment, setSavingComment] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskForm, setTaskForm] = useState({
+    title: '', description: '', task_type: 'task', priority: 'medium',
+    estimated_hours: '', due_date: '', status: 'todo',
+  });
 
-  const today = new Date().toISOString().split('T')[0];
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', task_type: 'feature', priority: 'medium', phase: '', estimated_hours: '', due_date: '' });
-  const [phaseForm, setPhaseForm] = useState({ name: '', description: '', order: '1', start_date: '', end_date: '' });
-  const [hoursForm, setHoursForm] = useState({ task: '', hours: '', description: '', date: today, is_billable: true });
+  // Time entry modal
+  const [showTimeModal, setShowTimeModal] = useState(false);
+  const [timeForm, setTimeForm] = useState({
+    hours: '', description: '', date: new Date().toISOString().split('T')[0], is_billable: true, task: '',
+  });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const h = () => ({ 'Content-Type': 'application/json' });
+  // Change request modal
+  const [showCRModal, setShowCRModal] = useState(false);
+  const [crForm, setCrForm] = useState({ title: '', description: '', impact_hours: '', impact_value: '' });
 
-  const fetchProject = useCallback(async () => {
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; taskId: number | null }>({ open: false, taskId: null });
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/projects/projects/${id}/`, { headers: h(), credentials: 'include' });
-      if (!res.ok) { toast.error('Projeto não encontrado.'); router.push('/projects'); return; }
-      setProject(await res.json());
-    } catch { toast.error('Erro ao carregar projeto.'); }
-  }, [id]);
+      const [projRes, tasksRes, entriesRes, phasesRes, milestonesRes, sprintsRes, crRes, envRes] = await Promise.all([
+        fetch(`${API}/projects/projects/${projectId}/`, { credentials: 'include' }),
+        fetch(`${API}/projects/tasks/?project=${projectId}&page_size=200`, { credentials: 'include' }),
+        fetch(`${API}/projects/time-entries/?project=${projectId}&page_size=100`, { credentials: 'include' }),
+        fetch(`${API}/projects/phases/?project=${projectId}`, { credentials: 'include' }),
+        fetch(`${API}/projects/milestones/?project=${projectId}`, { credentials: 'include' }),
+        fetch(`${API}/projects/sprints/?project=${projectId}`, { credentials: 'include' }),
+        fetch(`${API}/projects/change-requests/?project=${projectId}`, { credentials: 'include' }),
+        fetch(`${API}/projects/environments/?project=${projectId}`, { credentials: 'include' }),
+      ]);
 
-  const fetchTasks = useCallback(async () => {
+      if (projRes.ok) setProject(await projRes.json());
+      if (tasksRes.ok) {
+        const d = await tasksRes.json();
+        setTasks(d.results || d);
+      }
+      if (entriesRes.ok) {
+        const d = await entriesRes.json();
+        setTimeEntries(d.results || d);
+      }
+      if (phasesRes.ok) {
+        const d = await phasesRes.json();
+        setPhases(d.results || d);
+      }
+      if (milestonesRes.ok) {
+        const d = await milestonesRes.json();
+        setMilestones(d.results || d);
+      }
+      if (sprintsRes.ok) {
+        const d = await sprintsRes.json();
+        setSprints(d.results || d);
+      }
+      if (crRes.ok) {
+        const d = await crRes.json();
+        setChangeRequests(d.results || d);
+      }
+      if (envRes.ok) {
+        const d = await envRes.json();
+        setEnvironments(d.results || d);
+      }
+    } catch {
+      toast.error('Erro ao carregar dados do projeto');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  const fetchProfitability = useCallback(async () => {
     try {
-      const res = await fetch(`${apiUrl}/projects/tasks/?project=${id}&page_size=100`, { headers: h(), credentials: 'include' });
-      if (res.ok) { const d = await res.json(); setTasks(d.results || d); }
+      const res = await fetch(`${API}/projects/projects/${projectId}/profitability/`, { credentials: 'include' });
+      if (res.ok) setProfitability(await res.json());
     } catch { /* silent */ }
-  }, [id]);
-
-  const fetchTimeEntries = useCallback(async () => {
-    try {
-      const res = await fetch(`${apiUrl}/projects/time-entries/?project=${id}&page_size=100`, { headers: h(), credentials: 'include' });
-      if (res.ok) { const d = await res.json(); setTimeEntries(d.results || d); }
-    } catch { /* silent */ }
-  }, [id]);
-
-  const fetchComments = useCallback(async () => {
-    try {
-      const res = await fetch(`${apiUrl}/projects/comments/?project=${id}&page_size=100`, { headers: h(), credentials: 'include' });
-      if (res.ok) { const d = await res.json(); setComments(d.results || d); }
-    } catch { /* silent */ }
-  }, [id]);
+  }, [projectId]);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      await Promise.all([fetchProject(), fetchTasks(), fetchTimeEntries(), fetchComments()]);
-      setLoading(false);
-    };
-    load();
-  }, [fetchProject, fetchTasks, fetchTimeEntries, fetchComments]);
+    fetchAll();
+    fetchProfitability();
+  }, [fetchAll, fetchProfitability]);
 
-  const handleTogglePhase = async (phase: Phase) => {
-    try {
-      const res = await fetch(`${apiUrl}/projects/phases/${phase.id}/toggle_complete/`, {
-        method: 'POST', headers: h(), credentials: 'include',
+  const openTaskModal = (task?: Task) => {
+    if (task) {
+      setEditingTask(task);
+      setTaskForm({
+        title: task.title, description: task.description, task_type: task.task_type,
+        priority: task.priority, estimated_hours: task.estimated_hours, due_date: task.due_date || '',
+        status: task.status,
       });
-      if (!res.ok) throw new Error();
-      toast.success(phase.is_completed ? 'Fase reaberta.' : 'Fase concluída!');
-      fetchProject();
-    } catch { toast.error('Erro ao atualizar fase.'); }
+    } else {
+      setEditingTask(null);
+      setTaskForm({ title: '', description: '', task_type: 'task', priority: 'medium', estimated_hours: '', due_date: '', status: 'todo' });
+    }
+    setShowTaskModal(true);
   };
 
-  const handleCreatePhase = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
-    try {
-      const body: Record<string, unknown> = { project: Number(id), name: phaseForm.name, order: Number(phaseForm.order) };
-      if (phaseForm.description) body.description = phaseForm.description;
-      if (phaseForm.start_date) body.start_date = phaseForm.start_date;
-      if (phaseForm.end_date) body.end_date = phaseForm.end_date;
-      const res = await fetch(`${apiUrl}/projects/phases/`, {
-        method: 'POST', headers: h(), credentials: 'include', body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Fase criada!');
-      setShowPhaseModal(false);
-      setPhaseForm({ name: '', description: '', order: '1', start_date: '', end_date: '' });
-      fetchProject();
-    } catch { toast.error('Erro ao criar fase.'); }
-    finally { setSaving(false); }
-  };
-
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        project: Number(id), title: taskForm.title,
-        task_type: taskForm.task_type, priority: taskForm.priority,
-      };
-      if (taskForm.description) body.description = taskForm.description;
-      if (taskForm.phase) body.phase = Number(taskForm.phase);
-      if (taskForm.estimated_hours) body.estimated_hours = taskForm.estimated_hours;
-      if (taskForm.due_date) body.due_date = taskForm.due_date;
-      const res = await fetch(`${apiUrl}/projects/tasks/`, {
-        method: 'POST', headers: h(), credentials: 'include', body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Tarefa criada!');
+  const saveTask = async () => {
+    if (!taskForm.title.trim()) { toast.error('Título obrigatório'); return; }
+    const body = { ...taskForm, project: Number(projectId), estimated_hours: taskForm.estimated_hours || '0' };
+    const url = editingTask ? `${API}/projects/tasks/${editingTask.id}/` : `${API}/projects/tasks/`;
+    const method = editingTask ? 'PATCH' : 'POST';
+    const res = await fetch(url, { method, credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) {
+      toast.success(editingTask ? 'Tarefa atualizada' : 'Tarefa criada');
       setShowTaskModal(false);
-      setTaskForm({ title: '', description: '', task_type: 'feature', priority: 'medium', phase: '', estimated_hours: '', due_date: '' });
-      fetchTasks();
-    } catch { toast.error('Erro ao criar tarefa.'); }
-    finally { setSaving(false); }
+      fetchAll();
+    } else {
+      toast.error('Erro ao salvar tarefa');
+    }
   };
 
-  const handleCompleteTask = async (task: Task) => {
-    try {
-      const res = await fetch(`${apiUrl}/projects/tasks/${task.id}/complete/`, {
-        method: 'POST', headers: h(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Tarefa concluída!');
-      fetchTasks(); fetchProject();
-    } catch { toast.error('Erro ao concluir tarefa.'); }
+  const deleteTask = async (id: number) => {
+    const res = await fetch(`${API}/projects/tasks/${id}/`, { method: 'DELETE', credentials: 'include' });
+    if (res.ok) { toast.success('Tarefa removida'); fetchAll(); }
+    else toast.error('Erro ao remover');
+    setConfirmDelete({ open: false, taskId: null });
   };
 
-  const handleLogHours = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        project: Number(id), hours: hoursForm.hours,
-        description: hoursForm.description, date: hoursForm.date,
-        is_billable: hoursForm.is_billable,
-      };
-      if (hoursForm.task) body.task = Number(hoursForm.task);
-      const res = await fetch(`${apiUrl}/projects/time-entries/`, {
-        method: 'POST', headers: h(), credentials: 'include', body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error();
-      toast.success('Horas lançadas!');
-      setShowHoursModal(false);
-      setHoursForm({ task: '', hours: '', description: '', date: today, is_billable: true });
-      fetchTimeEntries(); fetchProject();
-    } catch { toast.error('Erro ao lançar horas.'); }
-    finally { setSaving(false); }
+  const completeTask = async (id: number) => {
+    await fetch(`${API}/projects/tasks/${id}/complete/`, { method: 'POST', credentials: 'include' });
+    fetchAll();
   };
 
-  const handleAddComment = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!comment.trim()) return;
-    setSavingComment(true);
-    try {
-      const res = await fetch(`${apiUrl}/projects/comments/`, {
-        method: 'POST', headers: h(), credentials: 'include',
-        body: JSON.stringify({ project: Number(id), content: comment }),
-      });
-      if (!res.ok) throw new Error();
-      setComment('');
-      fetchComments();
-    } catch { toast.error('Erro ao adicionar comentário.'); }
-    finally { setSavingComment(false); }
+  const saveTimeEntry = async () => {
+    if (!timeForm.hours || Number(timeForm.hours) <= 0) { toast.error('Informe as horas'); return; }
+    const body = { ...timeForm, project: Number(projectId), task: timeForm.task ? Number(timeForm.task) : null };
+    const res = await fetch(`${API}/projects/time-entries/`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) { toast.success('Horas apontadas!'); setShowTimeModal(false); fetchAll(); }
+    else toast.error('Erro ao apontar horas');
   };
 
-  const totalHoursLogged = timeEntries.reduce((s, e) => s + e.hours, 0);
-  const budgetUsed = project?.budget_hours ? (totalHoursLogged / project.budget_hours) * 100 : 0;
+  const saveChangeRequest = async () => {
+    if (!crForm.title.trim()) { toast.error('Título obrigatório'); return; }
+    const body = { ...crForm, project: Number(projectId) };
+    const res = await fetch(`${API}/projects/change-requests/`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) { toast.success('Change request criado'); setShowCRModal(false); fetchAll(); }
+    else toast.error('Erro ao criar change request');
+  };
+
+  const updateTaskStatus = async (taskId: number, newStatus: string) => {
+    await fetch(`${API}/projects/tasks/${taskId}/`, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    fetchAll();
+  };
+
+  if (loading) return (
+    <div className="space-y-4">
+      <div className="h-8 bg-gray-200 rounded w-64 animate-pulse" />
+      <div className="h-48 bg-white rounded-xl animate-pulse" />
+    </div>
+  );
+
+  if (!project) return (
+    <div className="text-center py-20 text-gray-500">Projeto não encontrado.</div>
+  );
+
+  const totalLoggedHours = timeEntries.reduce((s, e) => s + Number(e.hours), 0);
+  const tasksByStatus = {
+    todo: tasks.filter(t => t.status === 'todo'),
+    in_progress: tasks.filter(t => t.status === 'in_progress'),
+    review: tasks.filter(t => t.status === 'review'),
+    done: tasks.filter(t => t.status === 'done'),
+  };
 
   const tabs = [
-    { key: 'overview', label: 'Visão Geral' },
-    { key: 'phases', label: `Fases (${project?.phases.length ?? 0})` },
-    { key: 'tasks', label: `Tarefas (${tasks.length})` },
-    { key: 'hours', label: `Horas (${totalHoursLogged.toFixed(1)}h)` },
-    { key: 'comments', label: `Comentários (${comments.length})` },
-  ] as const;
+    { key: 'overview', label: 'Visão Geral', icon: BarChart2 },
+    { key: 'tasks', label: `Tarefas (${tasks.length})`, icon: CheckCircle2 },
+    { key: 'phases', label: `Fases & Marcos`, icon: Layers },
+    { key: 'hours', label: `Horas (${totalLoggedHours.toFixed(1)}h)`, icon: Clock },
+    { key: 'sprints', label: `Sprints (${sprints.length})`, icon: Zap },
+    { key: 'changes', label: `Mudanças (${changeRequests.length})`, icon: GitBranch },
+    { key: 'environments', label: `Ambientes (${environments.length})`, icon: Server },
+  ];
 
-  if (loading) {
-    return (
-      <div className="p-8">
-        <div className="h-8 bg-gray-200 rounded w-64 mb-6 animate-pulse" />
-        <div className="grid grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-24 bg-gray-100 rounded-lg animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (!project) return null;
+  const kanbanCols = [
+    { key: 'todo', label: 'A Fazer', color: 'border-t-gray-400', bgHeader: 'bg-gray-50' },
+    { key: 'in_progress', label: 'Em Andamento', color: 'border-t-blue-500', bgHeader: 'bg-blue-50' },
+    { key: 'review', label: 'Em Revisão', color: 'border-t-yellow-500', bgHeader: 'bg-yellow-50' },
+    { key: 'done', label: 'Concluído', color: 'border-t-green-500', bgHeader: 'bg-green-50' },
+  ];
 
   return (
-    <div className="p-8">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4 mb-6">
-        <button onClick={() => router.push('/projects')} className="mt-1 p-1 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5 text-gray-500" />
+      <div className="flex items-start gap-4">
+        <button onClick={() => router.push('/projects')} className="p-2 rounded-lg hover:bg-white transition-colors mt-0.5">
+          <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold text-gray-900">{project.name}</h1>
-            <span className="px-2 py-1 bg-accent-gold/10 text-accent-gold text-sm rounded-full font-medium">
-              {project.progress}% concluído
+            <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+            <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status] || 'bg-gray-100 text-gray-700'}`}>
+              {project.status}
             </span>
           </div>
-          {project.customer_name && (
-            <p className="text-gray-500 mt-0.5">{project.customer_name}</p>
-          )}
-          <div className="w-full max-w-md bg-gray-200 rounded-full h-2 mt-3">
-            <div className="bg-accent-gold h-2 rounded-full transition-all" style={{ width: `${project.progress}%` }} />
-          </div>
+          {project.customer_name && <p className="text-sm text-gray-500 mt-0.5">{project.customer_name}</p>}
         </div>
-        <div className="flex gap-2">
-          {project.github_repo && (
-            <a href={project.github_repo} target="_blank" rel="noopener noreferrer"
-              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-              <Github className="w-4 h-4" />
-            </a>
-          )}
-          {project.figma_url && (
-            <a href={project.figma_url} target="_blank" rel="noopener noreferrer"
-              className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
-              <ExternalLink className="w-4 h-4" />
-            </a>
-          )}
+      </div>
+
+      {/* Progress bar */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">Progresso geral</span>
+          <span className="text-sm font-bold text-[#A6864A]">{project.progress}%</span>
+        </div>
+        <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-[#A6864A] to-[#C4A67C] rounded-full transition-all"
+            style={{ width: `${project.progress}%` }} />
+        </div>
+        <div className="flex gap-6 mt-3 text-xs text-gray-500">
+          <span>Início: {formatDate(project.start_date)}</span>
+          {project.deadline && <span className="text-orange-600">Prazo: {formatDate(project.deadline)}</span>}
+          <span>Time: {project.team_names?.join(', ') || '-'}</span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 mb-6 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? 'border-accent-gold text-accent-gold'
-                : 'border-transparent text-gray-500 hover:text-gray-900'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex gap-1 overflow-x-auto bg-white rounded-xl p-1 shadow-sm border border-gray-200">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          return (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                activeTab === tab.key ? 'bg-[#A6864A] text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}>
+              <Icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Visão Geral ── */}
+      {/* Tab: Overview */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Detalhes */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-4">
+            <h2 className="font-semibold text-gray-800">Detalhes do Projeto</h2>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div><span className="text-gray-500">Tipo</span><p className="font-medium">{project.project_type}</p></div>
+              <div><span className="text-gray-500">Faturamento</span><p className="font-medium">{project.billing_type}</p></div>
+              <div><span className="text-gray-500">Orçamento</span><p className="font-medium">{formatCurrency(project.budget_value)}</p></div>
+              <div><span className="text-gray-500">Horas Budget</span><p className="font-medium">{project.budget_hours}h</p></div>
+              <div><span className="text-gray-500">Horas Logadas</span><p className="font-medium">{totalLoggedHours.toFixed(1)}h</p></div>
+              <div><span className="text-gray-500">Gerente</span><p className="font-medium">{project.manager_name || '-'}</p></div>
+            </div>
             {project.description && (
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Descrição</h3>
-                <p className="text-sm text-gray-900 whitespace-pre-line">{project.description}</p>
-              </div>
+              <div><p className="text-xs text-gray-500 mb-1">Descrição</p><p className="text-sm text-gray-700">{project.description}</p></div>
             )}
-            <div className="card p-5">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Orçamento de Horas</h3>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-500">Horas lançadas: <strong>{totalHoursLogged.toFixed(1)}h</strong></span>
-                <span className="text-sm text-gray-500">Orçado: <strong>{project.budget_hours || '—'}h</strong></span>
-              </div>
-              {project.budget_hours && (
-                <>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className={`h-2 rounded-full transition-all ${budgetUsed > 90 ? 'bg-red-500' : budgetUsed > 70 ? 'bg-orange-400' : 'bg-accent-gold'}`}
-                      style={{ width: `${Math.min(budgetUsed, 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{budgetUsed.toFixed(0)}% do orçamento utilizado</p>
-                </>
-              )}
+            <div className="flex gap-3 pt-2">
+              {project.github_repo && <a href={project.github_repo} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">GitHub</a>}
+              {project.figma_url && <a href={project.figma_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Figma</a>}
+              {project.docs_url && <a href={project.docs_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Docs</a>}
             </div>
-            {project.notes && (
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Notas</h3>
-                <p className="text-sm text-gray-900 whitespace-pre-line">{project.notes}</p>
-              </div>
-            )}
           </div>
 
-          <div className="space-y-4">
-            <div className="card p-5">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Detalhes</h3>
-              <dl className="space-y-2 text-sm">
-                {project.start_date && <div className="flex justify-between"><dt className="text-gray-500">Início</dt><dd>{formatDate(project.start_date)}</dd></div>}
-                {project.end_date && <div className="flex justify-between"><dt className="text-gray-500">Prazo</dt><dd>{formatDate(project.end_date)}</dd></div>}
-                {project.budget_value && <div className="flex justify-between"><dt className="text-gray-500">Valor</dt><dd className="font-medium text-accent-gold">{formatCurrency(project.budget_value)}</dd></div>}
-                {project.hourly_rate && <div className="flex justify-between"><dt className="text-gray-500">Valor/h</dt><dd>{formatCurrency(project.hourly_rate)}</dd></div>}
-                {project.manager_name && <div className="flex justify-between"><dt className="text-gray-500">Gestor</dt><dd>{project.manager_name}</dd></div>}
-              </dl>
+          {/* Rentabilidade */}
+          {profitability && (
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 space-y-4">
+              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#A6864A]" /> Rentabilidade
+              </h2>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Receita</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(profitability.revenue)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Custo de mão de obra</span>
+                  <span className="font-medium text-red-500">- {formatCurrency(profitability.labor_cost)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500">Despesas diretas</span>
+                  <span className="font-medium text-red-500">- {formatCurrency(profitability.direct_expenses)}</span>
+                </div>
+                <div className="border-t pt-2 flex justify-between">
+                  <span className="font-semibold">Margem Bruta</span>
+                  <span className={`font-bold ${profitability.gross_margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatCurrency(profitability.gross_margin)} ({profitability.margin_pct}%)
+                  </span>
+                </div>
+              </div>
+              <div className={`p-3 rounded-lg text-sm ${profitability.margin_pct >= 30 ? 'bg-green-50 text-green-700' : profitability.margin_pct >= 10 ? 'bg-yellow-50 text-yellow-700' : 'bg-red-50 text-red-700'}`}>
+                {profitability.margin_pct >= 30 ? '✓ Margem saudável' : profitability.margin_pct >= 10 ? '⚠ Margem baixa — atenção' : '✗ Projeto no vermelho'}
+              </div>
             </div>
-            {project.team_names.length > 0 && (
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Equipe</h3>
-                <div className="space-y-2">
-                  {project.team_names.map((name) => (
-                    <div key={name} className="flex items-center gap-2">
-                      <div className="w-7 h-7 bg-accent-gold/20 rounded-full flex items-center justify-center text-xs font-bold text-accent-gold">
-                        {name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="text-sm">{name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {project.milestones.length > 0 && (
-              <div className="card p-5">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Marcos</h3>
-                <div className="space-y-2">
-                  {project.milestones.map((m) => (
-                    <div key={m.id} className="flex items-center gap-2 text-sm">
-                      {m.is_completed
-                        ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                        : <Target className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      }
-                      <span className={m.is_completed ? 'line-through text-gray-500' : ''}>{m.name}</span>
-                      {m.due_date && <span className="text-xs text-gray-500 ml-auto">{formatDate(m.due_date)}</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Fases ── */}
-      {activeTab === 'phases' && (
-        <div>
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={() => setShowPhaseModal(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors"
-            >
-              <Plus className="w-4 h-4" /> Nova Fase
-            </button>
-          </div>
-          {project.phases.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
-              <Layers className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>Nenhuma fase criada</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {[...project.phases].sort((a, b) => a.order - b.order).map((phase) => (
-                <div key={phase.id} className={`bg-white rounded-2xl shadow-card border p-5 ${phase.is_completed ? 'border-green-200' : 'border-gray-200'}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => handleTogglePhase(phase)} className="flex-shrink-0">
-                        {phase.is_completed
-                          ? <CheckCircle2 className="w-5 h-5 text-green-500" />
-                          : <Circle className="w-5 h-5 text-gray-300 hover:text-green-400 transition-colors" />
-                        }
-                      </button>
-                      <div>
-                        <p className={`font-medium ${phase.is_completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                          {phase.name}
-                        </p>
-                        {phase.description && <p className="text-sm text-gray-500">{phase.description}</p>}
-                      </div>
-                    </div>
-                    <div className="text-right ml-4">
-                      <p className="text-sm text-gray-500">
-                        {phase.completed_tasks_count}/{phase.tasks_count} tarefas
-                      </p>
-                      {(phase.start_date || phase.end_date) && (
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {formatDate(phase.start_date)} → {formatDate(phase.end_date)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {phase.tasks_count > 0 && (
-                    <div className="mt-3 ml-8">
-                      <div className="w-full bg-gray-100 rounded-full h-1.5">
-                        <div className="bg-green-400 h-1.5 rounded-full transition-all"
-                          style={{ width: `${phase.tasks_count > 0 ? (phase.completed_tasks_count / phase.tasks_count) * 100 : 0}%` }} />
-                      </div>
-                    </div>
-                  )}
+          {/* Resumo tarefas */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+            <h2 className="font-semibold text-gray-800 mb-4">Resumo de Tarefas</h2>
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                { label: 'A Fazer', count: tasksByStatus.todo.length, color: 'text-gray-600 bg-gray-50' },
+                { label: 'Em Andamento', count: tasksByStatus.in_progress.length, color: 'text-blue-600 bg-blue-50' },
+                { label: 'Em Revisão', count: tasksByStatus.review.length, color: 'text-yellow-700 bg-yellow-50' },
+                { label: 'Concluído', count: tasksByStatus.done.length, color: 'text-green-600 bg-green-50' },
+              ].map(s => (
+                <div key={s.label} className={`rounded-lg p-3 ${s.color} text-center`}>
+                  <div className="text-2xl font-bold">{s.count}</div>
+                  <div className="text-xs mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ── Tarefas ── */}
+      {/* Tab: Tasks (Kanban) */}
       {activeTab === 'tasks' && (
-        <div>
-          <div className="flex justify-end mb-4">
-            <button
-              onClick={() => setShowTaskModal(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors"
-            >
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h2 className="font-semibold text-gray-800">Tarefas</h2>
+            <button onClick={() => openTaskModal()} className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg text-sm font-medium hover:bg-[#8B6F3D]">
               <Plus className="w-4 h-4" /> Nova Tarefa
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {taskStatusCols.map((col) => {
-              const colTasks = tasks.filter(t => t.status === col.key);
-              return (
-                <div key={col.key} className={`${col.color} border rounded-lg p-3`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-sm font-medium text-gray-900">{col.label}</p>
-                    <span className="px-1.5 py-0.5 bg-gray-200 text-gray-600 text-xs rounded-full">{colTasks.length}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {colTasks.length === 0 ? (
-                      <p className="text-xs text-gray-500 text-center py-3">—</p>
-                    ) : colTasks.map((task) => (
-                      <div key={task.id} className="bg-white p-3 rounded-lg border border-gray-100 text-sm">
-                        <p className="font-medium text-gray-900 mb-1">{task.title}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`px-1.5 py-0.5 rounded text-xs ${priorityColors[task.priority]}`}>
-                            {priorityLabels[task.priority]}
-                          </span>
-                          {task.assigned_to_name && (
-                            <span className="text-xs text-gray-500">{task.assigned_to_name}</span>
-                          )}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {kanbanCols.map(col => (
+              <div key={col.key} className={`bg-white rounded-xl border-t-4 ${col.color} shadow-sm`}>
+                <div className={`px-3 py-2.5 rounded-t-lg flex items-center justify-between`}>
+                  <span className="text-sm font-semibold text-gray-700">{col.label}</span>
+                  <span className="text-xs bg-white text-gray-600 px-2 py-0.5 rounded-full border">
+                    {tasksByStatus[col.key as keyof typeof tasksByStatus].length}
+                  </span>
+                </div>
+                <div className="p-2 space-y-2 min-h-[200px]">
+                  {tasksByStatus[col.key as keyof typeof tasksByStatus].map(task => (
+                    <div key={task.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 group">
+                      <div className="flex items-start justify-between gap-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex gap-1.5 flex-wrap mb-1">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${taskTypeColors[task.task_type]}`}>{task.task_type}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${priorityColors[task.priority]}`}>{task.priority}</span>
+                          </div>
+                          <p className="text-sm font-medium text-gray-800 leading-tight">{task.title}</p>
+                          {task.assigned_to_name && <p className="text-xs text-gray-400 mt-0.5">{task.assigned_to_name}</p>}
+                          {task.due_date && <p className="text-xs text-gray-400">{formatDate(task.due_date)}</p>}
                         </div>
-                        {task.estimated_hours && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            {task.total_hours.toFixed(1)}h / {task.estimated_hours}h est.
-                          </p>
-                        )}
+                      </div>
+                      <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openTaskModal(task)} className="p-1 rounded hover:bg-white text-gray-500 hover:text-blue-600">
+                          <Edit2 className="w-3 h-3" />
+                        </button>
                         {task.status !== 'done' && (
-                          <button
-                            onClick={() => handleCompleteTask(task)}
-                            className="mt-2 text-xs text-green-600 hover:text-green-700 font-medium"
-                          >
-                            ✓ Concluir
+                          <button onClick={() => completeTask(task.id)} className="p-1 rounded hover:bg-white text-gray-500 hover:text-green-600">
+                            <CheckCircle2 className="w-3 h-3" />
                           </button>
                         )}
+                        <button onClick={() => setConfirmDelete({ open: true, taskId: task.id })} className="p-1 rounded hover:bg-white text-gray-500 hover:text-red-600">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* ── Horas ── */}
+      {/* Tab: Fases & Marcos */}
+      {activeTab === 'phases' && (
+        <div className="space-y-4">
+          {phases.map(phase => {
+            const phaseMilestones = milestones.filter(() => true); // todos por ora
+            return (
+              <div key={phase.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${phase.is_completed ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    {phase.is_completed && <CheckCircle2 className="w-3 h-3 text-white" />}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-800">{phase.name}</h3>
+                    {phase.description && <p className="text-xs text-gray-500">{phase.description}</p>}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {phase.completed_tasks_count}/{phase.tasks_count} tarefas
+                  </div>
+                </div>
+                {/* mini progress */}
+                {phase.tasks_count > 0 && (
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+                    <div className="h-full bg-[#A6864A] rounded-full"
+                      style={{ width: `${(phase.completed_tasks_count / phase.tasks_count) * 100}%` }} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {phases.length === 0 && <div className="text-center py-12 text-gray-400 bg-white rounded-xl">Nenhuma fase cadastrada.</div>}
+
+          <h2 className="font-semibold text-gray-800 mt-6">Marcos</h2>
+          <div className="space-y-2">
+            {milestones.map(m => (
+              <div key={m.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200 flex items-center gap-3">
+                <div className={`w-5 h-5 rounded-full flex-shrink-0 ${m.is_completed ? 'bg-green-500' : 'bg-orange-400'}`} />
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">{m.name}</p>
+                  {m.description && <p className="text-xs text-gray-500">{m.description}</p>}
+                </div>
+                <div className="text-xs text-gray-500">{formatDate(m.due_date)}</div>
+                {m.is_completed && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Concluído</span>}
+              </div>
+            ))}
+            {milestones.length === 0 && <div className="text-center py-6 text-gray-400 bg-white rounded-xl">Nenhum marco cadastrado.</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Horas */}
       {activeTab === 'hours' && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <span><strong className="text-gray-900">{totalHoursLogged.toFixed(1)}h</strong> lançadas</span>
-              {project.budget_hours && <span>de <strong>{project.budget_hours}h</strong> orçadas</span>}
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="font-semibold text-gray-800">Apontamentos de Horas</h2>
+              <p className="text-xs text-gray-500">{totalLoggedHours.toFixed(1)}h logadas de {project.budget_hours}h orçadas</p>
             </div>
-            <button
-              onClick={() => setShowHoursModal(true)}
-              className="flex items-center gap-2 px-3 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors"
-            >
-              <Clock className="w-4 h-4" /> Lançar Horas
+            <button onClick={() => { setShowTimeModal(true); setTimeForm({ hours: '', description: '', date: new Date().toISOString().split('T')[0], is_billable: true, task: '' }); }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg text-sm font-medium hover:bg-[#8B6F3D]">
+              <Plus className="w-4 h-4" /> Apontar Horas
             </button>
           </div>
-          {timeEntries.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
-              <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p>Nenhuma hora lançada</p>
-            </div>
-          ) : (
-            <div className="card overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Data</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Usuário</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Tarefa</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Descrição</th>
-                    <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Horas</th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3">Faturável</th>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Colaborador</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Data</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Horas</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Descrição</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Faturável</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {timeEntries.map(entry => (
+                  <tr key={entry.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-800">{entry.user_name}</td>
+                    <td className="px-4 py-3 text-gray-500">{formatDate(entry.date)}</td>
+                    <td className="px-4 py-3 font-semibold text-[#A6864A]">{entry.hours}h</td>
+                    <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{entry.description || '-'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${entry.is_billable ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {entry.is_billable ? 'Sim' : 'Não'}
+                      </span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {timeEntries.map((e) => (
-                    <tr key={e.id} className="hover:bg-gray-50">
-                      <td className="px-5 py-3 text-sm text-gray-500">{formatDate(e.date)}</td>
-                      <td className="px-5 py-3 text-sm">{e.user_name}</td>
-                      <td className="px-5 py-3 text-sm text-gray-500">{e.task_title || '—'}</td>
-                      <td className="px-5 py-3 text-sm">{e.description}</td>
-                      <td className="px-5 py-3 text-sm font-medium text-right">{e.hours}h</td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${e.is_billable ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {e.is_billable ? 'Sim' : 'Não'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+                {timeEntries.length === 0 && (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Nenhum apontamento ainda</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* ── Comentários ── */}
-      {activeTab === 'comments' && (
-        <div className="max-w-2xl">
-          <form onSubmit={handleAddComment} className="mb-6">
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Adicione um comentário..."
-              rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none"
-            />
-            <div className="flex justify-end mt-2">
-              <button
-                type="submit" disabled={savingComment || !comment.trim()}
-                className="px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
-              >
-                <MessageSquare className="w-4 h-4 inline mr-1" />
-                {savingComment ? 'Enviando...' : 'Comentar'}
-              </button>
-            </div>
-          </form>
-          {comments.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-8">Nenhum comentário ainda.</p>
-          ) : (
-            <div className="space-y-4">
-              {comments.map((c) => (
-                <div key={c.id} className="card p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 bg-accent-gold/20 rounded-full flex items-center justify-center text-xs font-bold text-accent-gold">
-                      {c.user_name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm font-medium">{c.user_name}</span>
-                    <span className="text-xs text-gray-500 ml-auto">
-                      {new Date(c.created_at).toLocaleString('pt-BR')}
-                    </span>
+      {/* Tab: Sprints */}
+      {activeTab === 'sprints' && (
+        <div className="space-y-3">
+          {sprints.map(sprint => (
+            <div key={sprint.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-800">{sprint.name}</h3>
+                  {sprint.goal && <p className="text-sm text-gray-500 mt-0.5">{sprint.goal}</p>}
+                  <div className="flex gap-4 text-xs text-gray-400 mt-1.5">
+                    <span>{formatDate(sprint.start_date)} → {formatDate(sprint.end_date)}</span>
+                    <span>{sprint.completed_tasks}/{sprint.tasks_count} tarefas</span>
                   </div>
-                  <p className="text-sm text-gray-900 whitespace-pre-line">{c.content}</p>
                 </div>
-              ))}
+                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                  sprint.status === 'active' ? 'bg-blue-100 text-blue-700' :
+                  sprint.status === 'done' ? 'bg-green-100 text-green-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>{sprint.status}</span>
+              </div>
+              {sprint.tasks_count > 0 && (
+                <div className="mt-3">
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-[#A6864A] rounded-full" style={{ width: `${(sprint.completed_tasks / sprint.tasks_count) * 100}%` }} />
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ))}
+          {sprints.length === 0 && <div className="text-center py-12 text-gray-400 bg-white rounded-xl">Nenhum sprint criado.</div>}
         </div>
       )}
 
-      {/* ── Modal Nova Fase ── */}
-      {showPhaseModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold">Nova Fase</h2>
-              <button onClick={() => setShowPhaseModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={handleCreatePhase} className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Nome *</label>
-                <input type="text" required value={phaseForm.name}
-                  onChange={(e) => setPhaseForm({ ...phaseForm, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição</label>
-                <input type="text" value={phaseForm.description}
-                  onChange={(e) => setPhaseForm({ ...phaseForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Ordem</label>
-                  <input type="number" min="1" value={phaseForm.order}
-                    onChange={(e) => setPhaseForm({ ...phaseForm, order: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Início</label>
-                  <input type="date" value={phaseForm.start_date}
-                    onChange={(e) => setPhaseForm({ ...phaseForm, start_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Fim</label>
-                  <input type="date" value={phaseForm.end_date}
-                    onChange={(e) => setPhaseForm({ ...phaseForm, end_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-                </div>
-              </div>
-              <div className="flex gap-3 pt-3">
-                <button type="button" onClick={() => setShowPhaseModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60">
-                  {saving ? 'Criando...' : 'Criar Fase'}
-                </button>
-              </div>
-            </form>
+      {/* Tab: Change Requests */}
+      {activeTab === 'changes' && (
+        <div className="space-y-4">
+          <div className="flex justify-between">
+            <h2 className="font-semibold text-gray-800">Mudanças de Escopo</h2>
+            <button onClick={() => { setShowCRModal(true); setCrForm({ title: '', description: '', impact_hours: '', impact_value: '' }); }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg text-sm font-medium hover:bg-[#8B6F3D]">
+              <Plus className="w-4 h-4" /> Nova Mudança
+            </button>
           </div>
+          {changeRequests.map(cr => (
+            <div key={cr.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-medium text-gray-800">{cr.title}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{cr.description}</p>
+                  <div className="flex gap-4 text-xs text-gray-400 mt-1.5">
+                    <span>+{cr.impact_hours}h</span>
+                    <span>+{formatCurrency(cr.impact_value)}</span>
+                    <span>por {cr.created_by_name}</span>
+                  </div>
+                </div>
+                <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${
+                  cr.status === 'approved' ? 'bg-green-100 text-green-700' :
+                  cr.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                  'bg-yellow-100 text-yellow-700'
+                }`}>{cr.status}</span>
+              </div>
+            </div>
+          ))}
+          {changeRequests.length === 0 && <div className="text-center py-12 text-gray-400 bg-white rounded-xl">Nenhuma mudança de escopo registrada.</div>}
         </div>
       )}
 
-      {/* ── Modal Nova Tarefa ── */}
+      {/* Tab: Environments */}
+      {activeTab === 'environments' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {environments.map(env => (
+            <div key={env.id} className={`bg-white rounded-xl p-5 shadow-sm border-l-4 ${
+              env.status === 'operational' ? 'border-l-green-500' :
+              env.status === 'degraded' ? 'border-l-yellow-500' :
+              env.status === 'down' ? 'border-l-red-500' : 'border-l-gray-400'
+            } border border-gray-200`}>
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="font-semibold text-gray-800 capitalize">{env.name}</h3>
+                <span className={`px-2 py-0.5 text-xs rounded-full ${
+                  env.status === 'operational' ? 'bg-green-100 text-green-700' :
+                  env.status === 'degraded' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>{env.status}</span>
+              </div>
+              {env.current_version && <p className="text-xs text-gray-500 mb-1">Versão: <span className="font-mono font-medium">{env.current_version}</span></p>}
+              {env.url && <a href={env.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate block mb-1">{env.url}</a>}
+              {env.last_deploy_at && <p className="text-xs text-gray-400">Último deploy: {new Date(env.last_deploy_at).toLocaleString('pt-BR')}</p>}
+              {env.last_deploy_by_name && <p className="text-xs text-gray-400">por {env.last_deploy_by_name}</p>}
+            </div>
+          ))}
+          {environments.length === 0 && <div className="col-span-3 text-center py-12 text-gray-400 bg-white rounded-xl">Nenhum ambiente cadastrado.</div>}
+        </div>
+      )}
+
+      {/* Modal: Task */}
       {showTaskModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold">Nova Tarefa</h2>
-              <button onClick={() => setShowTaskModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-semibold text-gray-800">{editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}</h2>
+              <button onClick={() => setShowTaskModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
-            <form onSubmit={handleCreateTask} className="space-y-3">
+            <div className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Título *</label>
-                <input type="text" required value={taskForm.title}
-                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição</label>
-                <textarea rows={2} value={taskForm.description}
-                  onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none" />
+                <label className="text-xs font-medium text-gray-600">Título *</label>
+                <input className="input-field mt-1" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo</label>
-                  <select value={taskForm.task_type} onChange={(e) => setTaskForm({ ...taskForm, task_type: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
-                    <option value="feature">Feature</option>
-                    <option value="bug">Bug</option>
-                    <option value="task">Tarefa</option>
-                    <option value="improvement">Melhoria</option>
-                    <option value="documentation">Documentação</option>
+                  <label className="text-xs font-medium text-gray-600">Tipo</label>
+                  <select className="input-field mt-1" value={taskForm.task_type} onChange={e => setTaskForm(f => ({ ...f, task_type: e.target.value }))}>
+                    {['task', 'bug', 'feature', 'research', 'meeting'].map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Prioridade</label>
-                  <select value={taskForm.priority} onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
-                    <option value="low">Baixa</option>
-                    <option value="medium">Média</option>
-                    <option value="high">Alta</option>
-                    <option value="urgent">Urgente</option>
+                  <label className="text-xs font-medium text-gray-600">Prioridade</label>
+                  <select className="input-field mt-1" value={taskForm.priority} onChange={e => setTaskForm(f => ({ ...f, priority: e.target.value }))}>
+                    {['low', 'medium', 'high', 'urgent'].map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
               </div>
-              {project.phases.length > 0 && (
+              {editingTask && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Fase</label>
-                  <select value={taskForm.phase} onChange={(e) => setTaskForm({ ...taskForm, phase: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
-                    <option value="">Sem fase</option>
-                    {project.phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  <label className="text-xs font-medium text-gray-600">Status</label>
+                  <select className="input-field mt-1" value={taskForm.status} onChange={e => setTaskForm(f => ({ ...f, status: e.target.value }))}>
+                    {['todo', 'in_progress', 'review', 'done'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas Est.</label>
-                  <input type="number" step="0.5" value={taskForm.estimated_hours}
-                    onChange={(e) => setTaskForm({ ...taskForm, estimated_hours: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  <label className="text-xs font-medium text-gray-600">Horas Estimadas</label>
+                  <input type="number" step="0.5" className="input-field mt-1" value={taskForm.estimated_hours}
+                    onChange={e => setTaskForm(f => ({ ...f, estimated_hours: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Prazo</label>
-                  <input type="date" value={taskForm.due_date}
-                    onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  <label className="text-xs font-medium text-gray-600">Prazo</label>
+                  <input type="date" className="input-field mt-1" value={taskForm.due_date}
+                    onChange={e => setTaskForm(f => ({ ...f, due_date: e.target.value }))} />
                 </div>
               </div>
-              <div className="flex gap-3 pt-3">
-                <button type="button" onClick={() => setShowTaskModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60">
-                  {saving ? 'Criando...' : 'Criar Tarefa'}
-                </button>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Descrição</label>
+                <textarea rows={3} className="input-field mt-1" value={taskForm.description}
+                  onChange={e => setTaskForm(f => ({ ...f, description: e.target.value }))} />
               </div>
-            </form>
+            </div>
+            <div className="p-5 border-t flex gap-3 justify-end">
+              <button onClick={() => setShowTaskModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={saveTask} className="px-4 py-2 text-sm bg-[#A6864A] text-white rounded-lg hover:bg-[#8B6F3D]">
+                {editingTask ? 'Salvar' : 'Criar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── Modal Lançar Horas ── */}
-      {showHoursModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold">Lançar Horas</h2>
-              <button onClick={() => setShowHoursModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+      {/* Modal: Time Entry */}
+      {showTimeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-semibold text-gray-800">Apontar Horas</h2>
+              <button onClick={() => setShowTimeModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
-            <form onSubmit={handleLogHours} className="space-y-3">
-              {tasks.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Tarefa</label>
-                  <select value={hoursForm.task} onChange={(e) => setHoursForm({ ...hoursForm, task: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold bg-white">
-                    <option value="">Sem tarefa específica</option>
-                    {tasks.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-                  </select>
-                </div>
-              )}
+            <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas *</label>
-                  <input type="number" step="0.25" min="0.25" required value={hoursForm.hours}
-                    onChange={(e) => setHoursForm({ ...hoursForm, hours: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  <label className="text-xs font-medium text-gray-600">Horas *</label>
+                  <input type="number" step="0.5" min="0.5" className="input-field mt-1" value={timeForm.hours}
+                    onChange={e => setTimeForm(f => ({ ...f, hours: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Data *</label>
-                  <input type="date" required value={hoursForm.date}
-                    onChange={(e) => setHoursForm({ ...hoursForm, date: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                  <label className="text-xs font-medium text-gray-600">Data</label>
+                  <input type="date" className="input-field mt-1" value={timeForm.date}
+                    onChange={e => setTimeForm(f => ({ ...f, date: e.target.value }))} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Descrição *</label>
-                <input type="text" required value={hoursForm.description}
-                  onChange={(e) => setHoursForm({ ...hoursForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
+                <label className="text-xs font-medium text-gray-600">Tarefa (opcional)</label>
+                <select className="input-field mt-1" value={timeForm.task}
+                  onChange={e => setTimeForm(f => ({ ...f, task: e.target.value }))}>
+                  <option value="">Nenhuma</option>
+                  {tasks.filter(t => t.status !== 'done').map(t => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={hoursForm.is_billable}
-                  onChange={(e) => setHoursForm({ ...hoursForm, is_billable: e.target.checked })}
-                  className="w-4 h-4 rounded text-accent-gold" />
-                <span className="text-sm text-gray-500">Horas faturáveis</span>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Descrição</label>
+                <textarea rows={3} className="input-field mt-1" value={timeForm.description}
+                  onChange={e => setTimeForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={timeForm.is_billable}
+                  onChange={e => setTimeForm(f => ({ ...f, is_billable: e.target.checked }))} />
+                Horas faturáveis
               </label>
-              <div className="flex gap-3 pt-3">
-                <button type="button" onClick={() => setShowHoursModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50">Cancelar</button>
-                <button type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60">
-                  {saving ? 'Lançando...' : 'Lançar'}
-                </button>
-              </div>
-            </form>
+            </div>
+            <div className="p-5 border-t flex gap-3 justify-end">
+              <button onClick={() => setShowTimeModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={saveTimeEntry} className="px-4 py-2 text-sm bg-[#A6864A] text-white rounded-lg hover:bg-[#8B6F3D]">Apontar</button>
+            </div>
           </div>
         </div>
       )}
+
+      {/* Modal: Change Request */}
+      {showCRModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b">
+              <h2 className="font-semibold text-gray-800">Nova Mudança de Escopo</h2>
+              <button onClick={() => setShowCRModal(false)}><X className="w-5 h-5 text-gray-400" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Título *</label>
+                <input className="input-field mt-1" value={crForm.title} onChange={e => setCrForm(f => ({ ...f, title: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Descrição</label>
+                <textarea rows={3} className="input-field mt-1" value={crForm.description}
+                  onChange={e => setCrForm(f => ({ ...f, description: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Impacto em Horas</label>
+                  <input type="number" step="0.5" className="input-field mt-1" value={crForm.impact_hours}
+                    onChange={e => setCrForm(f => ({ ...f, impact_hours: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600">Impacto em Valor (R$)</label>
+                  <input type="number" step="0.01" className="input-field mt-1" value={crForm.impact_value}
+                    onChange={e => setCrForm(f => ({ ...f, impact_value: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+            <div className="p-5 border-t flex gap-3 justify-end">
+              <button onClick={() => setShowCRModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button onClick={saveChangeRequest} className="px-4 py-2 text-sm bg-[#A6864A] text-white rounded-lg hover:bg-[#8B6F3D]">Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete */}
+      <ConfirmDialog
+        open={confirmDelete.open}
+        title="Remover Tarefa"
+        description="Tem certeza que deseja remover esta tarefa?"
+        onConfirm={() => confirmDelete.taskId && deleteTask(confirmDelete.taskId)}
+        onCancel={() => setConfirmDelete({ open: false, taskId: null })}
+        danger
+      />
     </div>
   );
 }

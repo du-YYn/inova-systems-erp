@@ -90,6 +90,64 @@ class ProjectViewSet(viewsets.ModelViewSet):
             'by_status': list(by_status)
         })
 
+    @action(detail=True, methods=['get'], url_path='profitability')
+    def profitability(self, request, pk=None):
+        """Calcula rentabilidade do projeto: receita - custo de horas."""
+        project = self.get_object()
+
+        # Receita: invoices pagas ligadas ao contrato do projeto
+        from finance.models import Invoice
+        revenue = Invoice.objects.filter(
+            contract=project.contract,
+            invoice_type='receivable',
+            status='paid'
+        ).aggregate(total=Sum('total'))['total'] or 0
+
+        # Custo de horas: TimeEntry × custo/hora do colaborador
+        time_entries = project.time_entries.select_related('user__employee_profile')
+
+        labor_cost = 0
+        for entry in time_entries:
+            try:
+                hourly_cost = float(entry.user.employee_profile.hourly_cost)
+            except Exception:
+                hourly_cost = 0
+            labor_cost += float(entry.hours) * hourly_cost
+
+        total_hours = time_entries.aggregate(total=Sum('hours'))['total'] or 0
+        billable_hours = time_entries.filter(is_billable=True).aggregate(total=Sum('hours'))['total'] or 0
+
+        # Despesas diretas do projeto (se Transaction tiver FK para project)
+        direct_expenses = 0
+        try:
+            from finance.models import Transaction
+            direct_expenses = Transaction.objects.filter(
+                project=project,
+                transaction_type='expense'
+            ).aggregate(total=Sum('amount'))['total'] or 0
+        except Exception:
+            pass
+
+        total_cost = float(labor_cost) + float(direct_expenses)
+        gross_margin = float(revenue) - total_cost
+        margin_pct = (gross_margin / float(revenue) * 100) if float(revenue) > 0 else 0
+
+        return Response({
+            'project_id': project.id,
+            'project_name': project.name,
+            'revenue': float(revenue),
+            'labor_cost': float(labor_cost),
+            'direct_expenses': float(direct_expenses),
+            'total_cost': total_cost,
+            'gross_margin': gross_margin,
+            'margin_pct': round(margin_pct, 2),
+            'total_hours': float(total_hours),
+            'billable_hours': float(billable_hours),
+            'budget_value': float(project.budget_value),
+            'budget_hours': float(project.budget_hours),
+            'budget_variance': float(project.budget_value) - float(revenue),
+        })
+
 
 @extend_schema(tags=['projects'])
 class ProjectPhaseViewSet(viewsets.ModelViewSet):

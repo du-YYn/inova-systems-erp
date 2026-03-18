@@ -18,8 +18,18 @@ import {
   Menu,
   Bell,
   ChevronRight,
+  Headphones,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+
+interface Notif {
+  id: number;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  notification_type: string;
+}
 
 interface NavItem {
   href: string;
@@ -47,6 +57,7 @@ const navSections: NavSection[] = [
       { href: '/sales',     label: 'Vendas',     icon: FileText      },
       { href: '/contratos', label: 'Contratos',  icon: ScrollText    },
       { href: '/projects',  label: 'Projetos',   icon: FolderKanban  },
+      { href: '/suporte',   label: 'Suporte',    icon: Headphones    },
       { href: '/finance',   label: 'Financeiro', icon: DollarSign    },
     ],
   },
@@ -72,6 +83,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<{ username: string; email: string } | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notif[]>([]);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
   useEffect(() => {
     try {
@@ -87,9 +103,98 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, []);
 
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/notifications/notifications/unread_count/`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUnreadCount(data.unread_count ?? 0);
+      }
+    } catch {
+      // silently ignore
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/notifications/notifications/?page_size=10`, {
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.results ?? data);
+      }
+    } catch {
+      // silently ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!notifOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('#notif-dropdown') && !target.closest('#notif-bell')) {
+        setNotifOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [notifOpen]);
+
+  const handleBellClick = () => {
+    const opening = !notifOpen;
+    setNotifOpen(opening);
+    if (opening) fetchNotifications();
+  };
+
+  const handleMarkRead = async (id: number) => {
+    try {
+      await fetch(`${apiUrl}/notifications/notifications/${id}/mark_read/`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
+      );
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
+      // silently ignore
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch(`${apiUrl}/notifications/notifications/mark_all_read/`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch {
+      // silently ignore
+    }
+  };
+
+  const relativeTime = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'agora';
+    if (mins < 60) return `${mins}min atrás`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h atrás`;
+    return `${Math.floor(hrs / 24)}d atrás`;
+  };
+
   const handleLogout = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
       await fetch(`${apiUrl}/accounts/logout/`, {
         method: 'POST',
         credentials: 'include',
@@ -249,10 +354,87 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="flex-1" />
 
-            {/* Right actions */}
-            <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <Bell className="w-4.5 h-4.5 text-gray-500" />
-            </button>
+            {/* Right actions — notification bell */}
+            <div className="relative">
+              <button
+                id="notif-bell"
+                onClick={handleBellClick}
+                className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <Bell className="w-4.5 h-4.5 text-gray-500" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div
+                  id="notif-dropdown"
+                  className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-gray-800">Notificações</span>
+                    <button
+                      onClick={handleMarkAllRead}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                    >
+                      Marcar todas como lidas
+                    </button>
+                  </div>
+
+                  {/* List */}
+                  <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                    {notifications.length === 0 ? (
+                      <li className="px-4 py-6 text-center text-sm text-gray-400">
+                        Nenhuma notificação
+                      </li>
+                    ) : (
+                      notifications.map((notif) => (
+                        <li
+                          key={notif.id}
+                          onClick={() => !notif.is_read && handleMarkRead(notif.id)}
+                          className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                            !notif.is_read ? 'bg-blue-50/40' : ''
+                          }`}
+                        >
+                          {/* Blue dot for unread */}
+                          <span
+                            className={`mt-1.5 flex-shrink-0 w-2 h-2 rounded-full ${
+                              notif.is_read ? 'bg-transparent' : 'bg-blue-500'
+                            }`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-800 truncate">
+                              {notif.title}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                              {notif.message}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              {relativeTime(notif.created_at)}
+                            </p>
+                          </div>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+
+                  {/* Footer */}
+                  <div className="border-t border-gray-100 px-4 py-2.5">
+                    <Link
+                      href="/notificacoes"
+                      onClick={() => setNotifOpen(false)}
+                      className="block text-center text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                    >
+                      Ver todas
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Avatar */}
             <Link

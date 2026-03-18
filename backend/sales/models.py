@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class Customer(models.Model):
@@ -225,3 +226,69 @@ class Contract(models.Model):
 
     def __str__(self):
         return f"Contrato #{self.number} - {self.customer.company_name or self.customer.name}"
+
+
+class ProspectActivity(models.Model):
+    ACTIVITY_TYPE_CHOICES = [
+        ('call', 'Ligação'),
+        ('email', 'E-mail'),
+        ('meeting', 'Reunião'),
+        ('whatsapp', 'WhatsApp'),
+        ('demo', 'Demonstração'),
+        ('linkedin', 'LinkedIn'),
+        ('other', 'Outro'),
+    ]
+
+    prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='activities')
+    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='call')
+    subject = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    outcome = models.TextField(blank=True)
+    next_action = models.TextField(blank=True)
+    next_action_date = models.DateField(null=True, blank=True)
+    duration_minutes = models.IntegerField(default=0)
+    date = models.DateTimeField(default=timezone.now)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='prospect_activities',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'prospect_activities'
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.get_activity_type_display()} - {self.prospect.company_name} - {self.subject}"
+
+
+class WinLossReason(models.Model):
+    RESULT_CHOICES = [
+        ('won', 'Ganho'),
+        ('lost', 'Perdido'),
+    ]
+
+    REASON_CHOICES = [
+        ('price', 'Preço'),
+        ('timeline', 'Prazo'),
+        ('competitor', 'Concorrente'),
+        ('no_budget', 'Sem Orçamento'),
+        ('no_fit', 'Sem Fit'),
+        ('relationship', 'Relacionamento'),
+        ('other', 'Outro'),
+    ]
+
+    prospect = models.OneToOneField(Prospect, on_delete=models.CASCADE, related_name='win_loss')
+    result = models.CharField(max_length=10, choices=RESULT_CHOICES)
+    reason = models.CharField(max_length=50, choices=REASON_CHOICES)
+    competitor = models.CharField(max_length=100, blank=True)
+    actual_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'win_loss_reasons'
+
+    def __str__(self):
+        return f"{self.get_result_display()} - {self.prospect.company_name} ({self.get_reason_display()})"

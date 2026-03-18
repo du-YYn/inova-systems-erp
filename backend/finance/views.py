@@ -147,6 +147,120 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         logger.info(f"Fatura {invoice.number} marcada como paga por {request.user.username}")
         return Response(InvoiceSerializer(invoice).data)
 
+    @extend_schema(tags=['finance'])
+    @action(detail=False, methods=['get'], url_path='aging')
+    def aging(self, request):
+        """Relatório de inadimplência — receivables vencidas agrupadas por período."""
+        from datetime import date
+
+        today = date.today()
+
+        overdue_qs = Invoice.objects.filter(
+            invoice_type='receivable',
+            status__in=['overdue', 'pending'],
+            due_date__lt=today,
+        ).select_related('customer')
+
+        def get_age_bucket(due_date):
+            days = (today - due_date).days
+            if days <= 30:
+                return '0-30'
+            elif days <= 60:
+                return '31-60'
+            elif days <= 90:
+                return '61-90'
+            else:
+                return '90+'
+
+        buckets = {'0-30': [], '31-60': [], '61-90': [], '90+': []}
+        totals = {'0-30': 0, '31-60': 0, '61-90': 0, '90+': 0}
+
+        for inv in overdue_qs:
+            bucket = get_age_bucket(inv.due_date)
+            buckets[bucket].append({
+                'id': inv.id,
+                'number': inv.number,
+                'customer': inv.customer.company_name if inv.customer else '',
+                'due_date': inv.due_date.isoformat(),
+                'total': float(inv.total),
+                'days_overdue': (today - inv.due_date).days,
+            })
+            totals[bucket] += float(inv.total)
+
+        return Response({
+            'summary': [
+                {'bucket': k, 'count': len(v), 'total': totals[k]}
+                for k, v in buckets.items()
+            ],
+            'details': buckets,
+            'grand_total': sum(totals.values()),
+        })
+
+    @extend_schema(tags=['finance'])
+    @action(detail=False, methods=['get'], url_path='dre')
+    def dre(self, request):
+        """DRE - Demonstrativo de Resultado do Exercício."""
+        from datetime import date
+
+        year = int(request.query_params.get('year', date.today().year))
+        month = request.query_params.get('month')
+
+        base_filter = {}
+        if month:
+            base_filter['issue_date__year'] = year
+            base_filter['issue_date__month'] = int(month)
+        else:
+            base_filter['issue_date__year'] = year
+
+        # Receita Bruta (faturas recebidas)
+        receita_bruta = Invoice.objects.filter(
+            invoice_type='receivable', status='paid', **base_filter
+        ).aggregate(total=Sum('total'))['total'] or 0
+
+        # Impostos/deduções
+        deducoes = Invoice.objects.filter(
+            invoice_type='receivable', status='paid', **base_filter
+        ).aggregate(total=Sum('tax'))['total'] or 0
+
+        receita_liquida = float(receita_bruta) - float(deducoes)
+
+        # Despesas operacionais (faturas pagas a pagar)
+        despesas_operacionais = Invoice.objects.filter(
+            invoice_type='payable', status='paid', **base_filter
+        ).aggregate(total=Sum('total'))['total'] or 0
+
+        # Custo de pessoal (a partir de transações categorizadas como pessoal)
+        transaction_filter = {
+            k.replace('issue_date', 'date'): v for k, v in base_filter.items()
+        }
+        custo_pessoal = Transaction.objects.filter(
+            transaction_type='expense',
+            category__name__icontains='pessoal',
+            **transaction_filter
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        ebitda = receita_liquida - float(despesas_operacionais)
+        lucro_liquido = ebitda
+        margem_liquida = (
+            lucro_liquido / float(receita_bruta) * 100
+        ) if float(receita_bruta) > 0 else 0
+
+        period_label = (
+            f"{year}" if not month
+            else f"{int(month):02d}/{year}"
+        )
+
+        return Response({
+            'period': period_label,
+            'receita_bruta': float(receita_bruta),
+            'deducoes': float(deducoes),
+            'receita_liquida': receita_liquida,
+            'despesas_operacionais': float(despesas_operacionais),
+            'ebitda': ebitda,
+            'lucro_liquido': lucro_liquido,
+            'margem_liquida': round(margem_liquida, 2),
+        })
+
 
 @extend_schema(tags=['finance'])
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -220,6 +334,66 @@ class TransactionViewSet(viewsets.ModelViewSet):
             'balance': float(income) - float(expense),
             'by_category': list(by_category),
             'by_day': list(by_day)
+        })
+
+    @extend_schema(tags=['finance'])
+    @action(detail=False, methods=['get'], url_path='forecast')
+    def forecast(self, request):
+        """Previsão de receita MRR para os próximos 12 meses."""
+        from sales.models import Contract, Proposal
+        from datetime import date
+
+        try:
+            from dateutil.relativedelta import relativedelta
+            _has_dateutil = True
+        except ImportError:
+            _has_dateutil = False
+
+        today = date.today()
+
+        # Contratos ativos com valor mensal
+        active_contracts = Contract.objects.filter(
+            status='active',
+            monthly_value__gt=0,
+        )
+
+        mrr = sum(float(c.monthly_value) for c in active_contracts)
+
+        # Propostas aprovadas (futuro pipeline)
+        pipeline_value = Proposal.objects.filter(
+            status='approved',
+        ).aggregate(total=Sum('total_value'))['total'] or 0
+
+        months = []
+        base_month = today.replace(day=1)
+
+        for i in range(12):
+            if _has_dateutil:
+                target_month = base_month + relativedelta(months=i)
+            else:
+                import calendar
+                month_num = (today.month + i - 1) % 12 + 1
+                year_num = today.year + (today.month + i - 1) // 12
+                target_month = date(year_num, month_num, 1)
+
+            month_contracts = active_contracts.filter(
+                start_date__lte=target_month,
+            ).filter(
+                models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_month)
+            )
+            month_mrr = sum(float(c.monthly_value) for c in month_contracts)
+
+            months.append({
+                'month': target_month.strftime('%Y-%m'),
+                'mrr': month_mrr,
+                'active_contracts': month_contracts.count(),
+            })
+
+        return Response({
+            'current_mrr': mrr,
+            'active_contracts': active_contracts.count(),
+            'pipeline_value': float(pipeline_value),
+            'forecast': months,
         })
 
 

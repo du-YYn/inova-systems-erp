@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'finance.apps.FinanceConfig',
     'projects.apps.ProjectsConfig',
     'core.apps.CoreConfig',
+    'support.apps.SupportConfig',
+    'notifications.apps.NotificationsConfig',
     'drf_spectacular',
 ]
 
@@ -273,6 +275,29 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos por task
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Uma task por vez (bom para tasks longas)
+
+CELERY_BEAT_SCHEDULE = {
+    # Verifica contratos vencendo e auto-renova (diário às 08:00)
+    'check-contract-renewals': {
+        'task': 'sales.tasks.check_contract_renewals',
+        'schedule': 86400,  # 24 horas
+    },
+    # Alerta de tarefas com prazo próximo (diário às 07:00)
+    'check-task-deadlines': {
+        'task': 'notifications.tasks.check_task_deadlines',
+        'schedule': 86400,
+    },
+    # Marca invoices vencidas e envia alertas (diário às 09:00)
+    'check-invoice-overdue': {
+        'task': 'notifications.tasks.check_invoice_overdue',
+        'schedule': 86400,
+    },
+    # Alerta de SLA em risco (a cada hora)
+    'check-sla-warnings': {
+        'task': 'notifications.tasks.check_sla_warnings',
+        'schedule': 3600,
+    },
+}
 
 # ─── SWAGGER / OpenAPI ──────────────────────────────────────────────────────
 

@@ -163,6 +163,32 @@ class Milestone(models.Model):
         return f"{self.project.name} - {self.name}"
 
 
+class Sprint(models.Model):
+    STATUS_CHOICES = [
+        ('planning', 'Planejamento'),
+        ('active', 'Ativo'),
+        ('review', 'Em Revisão'),
+        ('done', 'Concluído'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='sprints')
+    name = models.CharField(max_length=100)
+    goal = models.TextField(blank=True)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
+    order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'sprints'
+        ordering = ['project', 'order']
+
+    def __str__(self):
+        return f"{self.project.name} - {self.name}"
+
+
 class ProjectTask(models.Model):
     STATUS_CHOICES = [
         ('todo', 'A Fazer'),
@@ -170,14 +196,14 @@ class ProjectTask(models.Model):
         ('review', 'Em Revisão'),
         ('done', 'Concluído'),
     ]
-    
+
     PRIORITY_CHOICES = [
         ('low', 'Baixa'),
         ('medium', 'Média'),
         ('high', 'Alta'),
         ('urgent', 'Urgente'),
     ]
-    
+
     TYPE_CHOICES = [
         ('task', 'Tarefa'),
         ('bug', 'Bug'),
@@ -185,14 +211,16 @@ class ProjectTask(models.Model):
         ('research', 'Pesquisa'),
         ('meeting', 'Reunião'),
     ]
-    
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='tasks')
     phase = models.ForeignKey(ProjectPhase, on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
-    
+    sprint = models.ForeignKey('Sprint', on_delete=models.SET_NULL, null=True, blank=True, related_name='tasks')
+    depends_on = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='dependent_tasks')
+
     task_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='task')
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    
+
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -200,18 +228,18 @@ class ProjectTask(models.Model):
         blank=True,
         related_name='assigned_tasks'
     )
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='todo')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
-    
+
     estimated_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     logged_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
-    
+
     due_date = models.DateField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    
+
     external_id = models.CharField(max_length=50, blank=True)  # ID do Jira/GitHub
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -251,3 +279,111 @@ class ProjectComment(models.Model):
     class Meta:
         db_table = 'project_comments'
         ordering = ['-created_at']
+
+
+class ChangeRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovado'),
+        ('rejected', 'Rejeitado'),
+        ('implemented', 'Implementado'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='change_requests')
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    impact_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    impact_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='change_requests_requested'
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='change_requests_approved'
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='created_change_requests'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'change_requests'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.project.name} - {self.title}"
+
+
+class ProjectEnvironment(models.Model):
+    STATUS_CHOICES = [
+        ('operational', 'Operacional'),
+        ('degraded', 'Degradado'),
+        ('down', 'Fora do Ar'),
+        ('maintenance', 'Manutenção'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='environments')
+    name = models.CharField(max_length=50)
+    url = models.URLField(blank=True)
+    current_version = models.CharField(max_length=50, blank=True)
+    last_deploy_at = models.DateTimeField(null=True, blank=True)
+    last_deploy_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deployments'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='operational')
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'project_environments'
+
+    def __str__(self):
+        return f"{self.project.name} - {self.name}"
+
+
+class DeliveryApproval(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovado'),
+        ('revision_requested', 'Revisão Solicitada'),
+    ]
+
+    milestone = models.ForeignKey(Milestone, on_delete=models.CASCADE, related_name='approvals')
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='delivery_approvals')
+    token = models.CharField(max_length=64, unique=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    client_name = models.CharField(max_length=200, blank=True)
+    client_email = models.EmailField(blank=True)
+    feedback = models.TextField(blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='delivery_approvals'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'delivery_approvals'
+
+    def __str__(self):
+        return f"{self.project.name} - {self.milestone.name} ({self.status})"

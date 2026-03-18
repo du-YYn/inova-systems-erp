@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Customer, Prospect, Proposal, Contract
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -133,6 +133,15 @@ class ContractSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+    sla_policy_name = serializers.SerializerMethodField()
+
+    def get_sla_policy_name(self, obj):
+        if obj.sla_policy_id:
+            try:
+                return str(obj.sla_policy)
+            except Exception:
+                return None
+        return None
 
     class Meta:
         model = Contract
@@ -156,9 +165,53 @@ class ContractSerializer(serializers.ModelSerializer):
             "status",
             "notes",
             "terms",
+            "sla_policy",
+            "sla_policy_name",
             "created_by",
             "created_by_name",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
+
+
+class ProspectActivitySerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.username if obj.created_by_id else None
+
+    class Meta:
+        model = ProspectActivity
+        fields = [
+            "id",
+            "prospect",
+            "activity_type",
+            "subject",
+            "description",
+            "outcome",
+            "next_action",
+            "next_action_date",
+            "duration_minutes",
+            "date",
+            "created_by",
+            "created_by_name",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_by", "created_by_name", "created_at"]
+
+
+class WinLossReasonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WinLossReason
+        fields = [
+            "id",
+            "prospect",
+            "result",
+            "reason",
+            "competitor",
+            "actual_value",
+            "notes",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]

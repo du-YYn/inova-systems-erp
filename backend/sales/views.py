@@ -1,17 +1,27 @@
 import logging
+import io
+import re
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from django.db import models, transaction
 from django.db.models import Sum, Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import Customer, Prospect, Proposal, Contract
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import cm
+
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
-    ProposalSerializer, ContractSerializer
+    ProposalSerializer, ContractSerializer,
+    ProspectActivitySerializer, WinLossReasonSerializer,
 )
 from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
 
@@ -131,6 +141,70 @@ class ProposalViewSet(viewsets.ModelViewSet):
         logger.info(f"Proposta {proposal.id} rejeitada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
+    @action(detail=True, methods=['get'], url_path='pdf')
+    def pdf(self, request, pk=None):
+        proposal = self.get_object()
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            rightMargin=2*cm, leftMargin=2*cm,
+            topMargin=2*cm, bottomMargin=2*cm,
+        )
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'title', parent=styles['Title'],
+            textColor=colors.HexColor('#A6864A'), fontSize=20,
+        )
+        story = []
+        story.append(Paragraph('INOVA SYSTEMS', title_style))
+        story.append(Paragraph(f'Proposta Comercial #{proposal.number}', styles['Title']))
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph(f'<b>Título:</b> {proposal.title}', styles['Normal']))
+        story.append(Paragraph(
+            f'<b>Cliente:</b> {proposal.customer.company_name or proposal.customer.name}',
+            styles['Normal'],
+        ))
+        story.append(Paragraph(f'<b>Tipo:</b> {proposal.get_proposal_type_display()}', styles['Normal']))
+        story.append(Paragraph(f'<b>Modalidade:</b> {proposal.get_billing_type_display()}', styles['Normal']))
+        story.append(Paragraph(
+            f'<b>Válida até:</b> {proposal.valid_until.strftime("%d/%m/%Y")}',
+            styles['Normal'],
+        ))
+        story.append(Spacer(1, 0.5*cm))
+        if proposal.description:
+            story.append(Paragraph('<b>Descrição:</b>', styles['Heading2']))
+            story.append(Paragraph(proposal.description, styles['Normal']))
+            story.append(Spacer(1, 0.3*cm))
+        data = [
+            ['Item', 'Valor'],
+            ['Horas Estimadas', f'{proposal.hours_estimated}h'],
+            ['Taxa Horária', f'R$ {proposal.hourly_rate}'],
+            ['Valor Total', f'R$ {proposal.total_value}'],
+        ]
+        table = Table(data, colWidths=[12*cm, 5*cm])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#A6864A')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F5F5F5')]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(table)
+        if proposal.notes:
+            story.append(Spacer(1, 0.5*cm))
+            story.append(Paragraph('<b>Observações:</b>', styles['Heading2']))
+            story.append(Paragraph(proposal.notes, styles['Normal']))
+        if proposal.terms:
+            story.append(Spacer(1, 0.5*cm))
+            story.append(Paragraph('<b>Termos e Condições:</b>', styles['Heading2']))
+            story.append(Paragraph(proposal.terms, styles['Normal']))
+        doc.build(story)
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="proposta-{proposal.number}.pdf"'
+        return response
+
     @action(detail=True, methods=['post'])
     def convert_to_contract(self, request, pk=None):
         proposal = self.get_object()
@@ -243,3 +317,28 @@ class ContractViewSet(viewsets.ModelViewSet):
             'mrr': float(stats['mrr'] or 0),
             'expiring_contracts': stats['expiring_count'],
         })
+
+
+@extend_schema(tags=['sales'])
+class ProspectActivityViewSet(viewsets.ModelViewSet):
+    queryset = ProspectActivity.objects.select_related('prospect', 'created_by')
+    serializer_class = ProspectActivitySerializer
+    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        prospect_id = self.request.query_params.get('prospect', None)
+        if prospect_id:
+            queryset = queryset.filter(prospect_id=prospect_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+@extend_schema(tags=['sales'])
+class WinLossReasonViewSet(viewsets.ModelViewSet):
+    queryset = WinLossReason.objects.select_related('prospect')
+    serializer_class = WinLossReasonSerializer
+    permission_classes = [IsAdminOrManagerOrOperator]
+    http_method_names = ['get', 'post', 'head', 'options']

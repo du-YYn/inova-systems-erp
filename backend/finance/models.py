@@ -105,10 +105,30 @@ class Invoice(models.Model):
     payment_method = models.CharField(max_length=50, blank=True)
     payment_details = models.JSONField(default=dict)
     
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='invoices',
+    )
+
     is_recurring = models.BooleanField(default=False)
     recurring_pattern = models.CharField(max_length=50, blank=True)  # monthly, weekly
     parent_invoice = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='recurring_invoices')
-    
+
+    NFSE_STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('issued', 'Emitida'),
+        ('cancelled', 'Cancelada'),
+        ('error', 'Erro'),
+    ]
+
+    nfse_number = models.CharField(max_length=50, blank=True)
+    nfse_status = models.CharField(max_length=20, blank=True, choices=NFSE_STATUS_CHOICES)
+    nfse_xml_url = models.URLField(blank=True)
+    nfse_pdf_url = models.URLField(blank=True)
+
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_invoices')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -146,15 +166,23 @@ class Transaction(models.Model):
     bank_account_to = models.ForeignKey(BankAccount, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions_to')
     
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
-    
+
+    project = models.ForeignKey(
+        'projects.Project',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='expenses',
+    )
+
     date = models.DateField()
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    
+
     description = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
-    
+
     tags = models.JSONField(default=list)
-    
+
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='transactions')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

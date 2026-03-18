@@ -1,4 +1,5 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
 from .views import (
     RegisterView, LoginView, TwoFactorVerifyView, TwoFactorSetupView,
@@ -6,6 +7,12 @@ from .views import (
     PasswordResetRequestView, PasswordResetConfirmView, UserListView, UserDetailView,
     CookieTokenRefreshView,
 )
+from .views_employee import EmployeeProfileViewSet, UserSkillViewSet, AbsenceViewSet
+
+router = DefaultRouter()
+router.register(r'employee-profiles', EmployeeProfileViewSet, basename='employee-profiles')
+router.register(r'skills', UserSkillViewSet, basename='skills')
+router.register(r'absences', AbsenceViewSet, basename='absences')
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='register'),
@@ -20,4 +27,5 @@ urlpatterns = [
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('users/', UserListView.as_view(), name='user_list'),
     path('users/<int:pk>/', UserDetailView.as_view(), name='user_detail'),
+    path('', include(router.urls)),
 ]
