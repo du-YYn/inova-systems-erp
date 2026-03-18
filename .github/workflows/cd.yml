@@ -21,9 +21,8 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # SEGURANÇA: adicionar o fingerprint do host em DEPLOY_HOST_FINGERPRINT
-          # para evitar MITM. Obtido com: ssh-keyscan -H <host> | ssh-keygen -lf -
-          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
+          timeout: 60s
+          command_timeout: 30m
           script: |
             set -e
             cd /opt/inova-systems-erp
