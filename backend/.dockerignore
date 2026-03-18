@@ -1,0 +1,50 @@
+# Controle de versão
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Ambientes virtuais
+venv/
+env/
+.venv/
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Ferramentas de desenvolvimento
+.mypy_cache/
+.ruff_cache/
+
+# Arquivos de ambiente (nunca incluir no build)
+.env
+.env.*
+
+# Arquivos estáticos gerados (coletados em runtime via collectstatic)
+staticfiles/
+media/
+
+# Logs
+*.log
+logs/
+
+# Banco de dados local
+*.sqlite3
+db.sqlite3
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
