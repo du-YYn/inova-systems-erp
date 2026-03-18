@@ -1,13 +1,12 @@
 import logging
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema
 from django.db import models, transaction
-from django.db.models import Sum, Count, Avg
-from django.db.models.functions import TruncMonth, TruncDay
+from django.db.models import Sum
+from django.db.models.functions import TruncDay
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from datetime import timedelta
@@ -233,7 +232,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         transaction_filter = {
             k.replace('issue_date', 'date'): v for k, v in base_filter.items()
         }
-        custo_pessoal = Transaction.objects.filter(
+        Transaction.objects.filter(
             transaction_type='expense',
             category__name__icontains='pessoal',
             **transaction_filter
@@ -371,7 +370,6 @@ class TransactionViewSet(viewsets.ModelViewSet):
             if _has_dateutil:
                 target_month = base_month + relativedelta(months=i)
             else:
-                import calendar
                 month_num = (today.month + i - 1) % 12 + 1
                 year_num = today.year + (today.month + i - 1) // 12
                 target_month = date(year_num, month_num, 1)

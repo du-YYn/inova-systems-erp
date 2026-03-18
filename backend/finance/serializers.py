@@ -5,7 +5,7 @@ from .models import BankAccount, Category, Invoice, Transaction, CostCenter, Bud
 class BankAccountSerializer(serializers.ModelSerializer):
     class Meta:
         model = BankAccount
-        fields = ['id', 'name', 'bank', 'account_type', 'agency', 'account_number', 
+        fields = ['id', 'name', 'bank', 'account_type', 'agency', 'account_number',
                   'pix_key', 'is_active', 'is_default', 'balance', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -13,17 +13,17 @@ class BankAccountSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Category
-        fields = ['id', 'name', 'category_type', 'parent', 'children', 'full_name', 
+        fields = ['id', 'name', 'category_type', 'parent', 'children', 'full_name',
                   'color', 'icon', 'is_active']
         read_only_fields = ['id']
-    
+
     def get_children(self, obj):
         children = obj.children.filter(is_active=True)
         return CategorySerializer(children, many=True).data
-    
+
     def get_full_name(self, obj):
         if obj.parent:
             return f"{obj.parent.name} > {obj.name}"
@@ -90,11 +90,11 @@ class BudgetSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     cost_center_name = serializers.CharField(source='cost_center.name', read_only=True)
     progress = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Budget
         fields = ['id', 'name', 'period', 'start_date', 'end_date', 'category', 'category_name',
-                  'cost_center', 'cost_center_name', 'planned', 'actual', 'progress', 
+                  'cost_center', 'cost_center_name', 'planned', 'actual', 'progress',
                   'is_active', 'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
 

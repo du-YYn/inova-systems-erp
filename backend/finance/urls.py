@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    BankAccountViewSet, CategoryViewSet, InvoiceViewSet, 
+    BankAccountViewSet, CategoryViewSet, InvoiceViewSet,
     TransactionViewSet, CostCenterViewSet, BudgetViewSet
 )
 

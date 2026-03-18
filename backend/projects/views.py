@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema
-from django.db import models
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -125,7 +124,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 project=project,
                 transaction_type='expense'
             ).aggregate(total=Sum('amount'))['total'] or 0
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
         total_cost = float(labor_cost) + float(direct_expenses)

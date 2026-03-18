@@ -10,7 +10,7 @@ class User(AbstractUser):
         ('operator', 'Operador'),
         ('viewer', 'Visualizador'),
     ]
-    
+
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
     is_2fa_enabled = models.BooleanField(default=False)
     totp_secret = models.CharField(max_length=32, blank=True, null=True)

@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from projects.models import Project, ProjectPhase, ProjectTask, Milestone, TimeEntry
+from projects.models import Project, ProjectPhase, ProjectTask, TimeEntry
 
 User = get_user_model()
 
@@ -313,7 +313,7 @@ class TestTimeEntry:
             'project': project.id, 'task': task.id,
             'date': '2024-01-15', 'hours': '4.0', 'description': 'Entry 1',
         })
-        r2 = admin_client.post(self.url, {
+        admin_client.post(self.url, {
             'project': project.id, 'task': task.id,
             'date': '2024-01-16', 'hours': '2.0', 'description': 'Entry 2',
         })

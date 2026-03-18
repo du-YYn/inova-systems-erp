@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, KnowledgeBaseArticle
+from .models import SLAPolicy, SupportCategory, SupportTicket, KnowledgeBaseArticle
 
 
 @admin.register(SLAPolicy)

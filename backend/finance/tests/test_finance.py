@@ -1,11 +1,10 @@
 import pytest
 from decimal import Decimal
-from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from finance.models import BankAccount, Category, Invoice, Transaction, Budget, CostCenter
+from finance.models import BankAccount, Category, Invoice, Transaction, Budget
 
 User = get_user_model()
 

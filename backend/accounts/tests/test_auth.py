@@ -1,5 +1,4 @@
 import pytest
-from django.urls import reverse
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -96,7 +95,7 @@ class TestLogin:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_login_inactive_user(self, api_client, db):
-        user = User.objects.create_user(
+        User.objects.create_user(
             username='inactive',
             password='pass123',
             is_active=False,

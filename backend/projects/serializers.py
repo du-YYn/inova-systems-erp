@@ -13,14 +13,14 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
 class MilestoneSerializer(serializers.ModelSerializer):
     class Meta:
         model = Milestone
-        fields = ['id', 'project', 'name', 'description', 'due_date', 'is_completed', 
+        fields = ['id', 'project', 'name', 'description', 'due_date', 'is_completed',
                   'completed_at', 'invoice', 'order', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
 class ProjectCommentSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True)
-    
+
     class Meta:
         model = ProjectComment
         fields = ['id', 'project', 'task', 'user', 'user_name', 'content', 'created_at']
@@ -34,7 +34,7 @@ class ProjectPhaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectPhase
         fields = ['id', 'project', 'name', 'description', 'order', 'is_completed',
-                  'start_date', 'end_date', 'tasks_count', 'completed_tasks_count', 
+                  'start_date', 'end_date', 'tasks_count', 'completed_tasks_count',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -99,7 +99,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     def get_total_hours(self, obj):
         return float(obj.budget_hours or 0)
-    
+
     def get_total_logged(self, obj):
         from django.db.models import Sum
         total = TimeEntry.objects.filter(project=obj).aggregate(total=Sum('hours'))['total']

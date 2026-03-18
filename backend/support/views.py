@@ -2,15 +2,14 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 
 from accounts.permissions import IsAdminOrManagerOrOperator
-from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, TicketAttachment, KnowledgeBaseArticle
+from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, KnowledgeBaseArticle
 from .serializers import (
     SLAPolicySerializer, SupportCategorySerializer, SupportTicketSerializer,
-    TicketCommentSerializer, TicketAttachmentSerializer, KnowledgeBaseArticleSerializer,
+    TicketCommentSerializer, KnowledgeBaseArticleSerializer,
 )
 
 logger = logging.getLogger('support')

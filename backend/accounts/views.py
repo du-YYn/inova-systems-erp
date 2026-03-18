@@ -13,7 +13,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 
 from django.utils import timezone
 from datetime import timedelta
-from drf_spectacular.utils import extend_schema, OpenApiResponse
+from drf_spectacular.utils import extend_schema
 import pyotp
 import qrcode
 import io
@@ -23,7 +23,7 @@ import secrets
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     TwoFactorVerifySerializer, PasswordResetRequestSerializer,
-    PasswordResetConfirmSerializer, ChangePasswordSerializer
+    ChangePasswordSerializer
 )
 from .permissions import IsAdmin
 from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle

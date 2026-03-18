@@ -2,7 +2,6 @@ from datetime import date, timedelta
 
 from django.db.models import Sum
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet

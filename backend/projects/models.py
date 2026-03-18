@@ -27,7 +27,7 @@ class Project(models.Model):
         ('consulting', 'Consultoria'),
         ('internal', 'Projeto Interno'),
     ]
-    
+
     STATUS_CHOICES = [
         ('planning', 'Planejamento'),
         ('kickoff', 'Kickoff'),
@@ -39,7 +39,7 @@ class Project(models.Model):
         ('on_hold', 'Em Espera'),
         ('cancelled', 'Cancelado'),
     ]
-    
+
     BILLING_TYPE_CHOICES = [
         ('hourly', 'Por Hora'),
         ('fixed', 'Preço Fixo'),
@@ -47,15 +47,15 @@ class Project(models.Model):
         ('milestone', 'Por Marco'),
         ('not_billed', 'Não Faturado'),
     ]
-    
+
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     project_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='custom_dev')
-    
+
     customer = models.ForeignKey(
-        'sales.Customer', 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        'sales.Customer',
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='projects'
     )
@@ -66,7 +66,7 @@ class Project(models.Model):
         blank=True,
         related_name='projects'
     )
-    
+
     template = models.ForeignKey(
         ProjectTemplate,
         on_delete=models.SET_NULL,
@@ -74,20 +74,20 @@ class Project(models.Model):
         blank=True,
         related_name='projects'
     )
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
     billing_type = models.CharField(max_length=20, choices=BILLING_TYPE_CHOICES, default='hourly')
-    
+
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     deadline = models.DateField(null=True, blank=True)
-    
+
     progress = models.IntegerField(default=0)
-    
+
     budget_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     budget_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    
+
     team = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         related_name='projects',
@@ -100,13 +100,13 @@ class Project(models.Model):
         blank=True,
         related_name='managed_projects'
     )
-    
+
     github_repo = models.URLField(blank=True)
     figma_url = models.URLField(blank=True)
     docs_url = models.URLField(blank=True)
-    
+
     notes = models.TextField(blank=True)
-    
+
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_projects')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

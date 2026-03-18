@@ -9,7 +9,7 @@ class BankAccount(models.Model):
         ('investment', 'Investimento'),
         ('wallet', 'Carteira'),
     ]
-    
+
     name = models.CharField(max_length=100)
     bank = models.CharField(max_length=100)
     account_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
@@ -35,7 +35,7 @@ class Category(models.Model):
         ('income', 'Receita'),
         ('expense', 'Despesa'),
     ]
-    
+
     name = models.CharField(max_length=100)
     category_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='children')
@@ -57,7 +57,7 @@ class Invoice(models.Model):
         ('receivable', 'Conta a Receber'),
         ('payable', 'Conta a Pagar'),
     ]
-    
+
     STATUS_CHOICES = [
         ('draft', 'Rascunho'),
         ('pending', 'Pendente'),
@@ -66,45 +66,45 @@ class Invoice(models.Model):
         ('overdue', 'Vencida'),
         ('cancelled', 'Cancelada'),
     ]
-    
+
     TYPE_DOC_CHOICES = [
         ('invoice', 'Nota Fiscal'),
         ('receipt', 'Recibo'),
         ('bill', 'Boleto'),
         ('other', 'Outro'),
     ]
-    
+
     invoice_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     document_type = models.CharField(max_length=20, choices=TYPE_DOC_CHOICES, default='invoice')
-    
+
     contract = models.ForeignKey('sales.Contract', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
     customer = models.ForeignKey('sales.Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
-    
+
     number = models.CharField(max_length=20)
     series = models.CharField(max_length=10, default='1')
-    
+
     issue_date = models.DateField()
     due_date = models.DateField()
     paid_date = models.DateField(null=True, blank=True)
-    
+
     value = models.DecimalField(max_digits=12, decimal_places=2)
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     interest = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=12, decimal_places=2)
-    
+
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
     bank_account = models.ForeignKey(BankAccount, on_delete=models.SET_NULL, null=True, blank=True)
-    
+
     description = models.TextField(blank=True)
     items = models.JSONField(default=list)
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
-    
+
     paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=50, blank=True)
     payment_details = models.JSONField(default=dict)
-    
+
     project = models.ForeignKey(
         'projects.Project',
         on_delete=models.SET_NULL,
@@ -148,23 +148,23 @@ class Transaction(models.Model):
         ('expense', 'Despesa'),
         ('transfer', 'Transferência'),
     ]
-    
+
     TYPE_DOC_CHOICES = [
         ('manual', 'Manual'),
         ('invoice', 'Fatura'),
         ('recurring', 'Recorrente'),
     ]
-    
+
     transaction_type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     doc_type = models.CharField(max_length=20, choices=TYPE_DOC_CHOICES, default='manual')
-    
+
     invoice = models.ForeignKey(Invoice, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
     customer = models.ForeignKey('sales.Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
     contract = models.ForeignKey('sales.Contract', on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions')
-    
+
     bank_account = models.ForeignKey(BankAccount, on_delete=models.CASCADE, related_name='transactions')
     bank_account_to = models.ForeignKey(BankAccount, on_delete=models.SET_NULL, null=True, blank=True, related_name='transactions_to')
-    
+
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
 
     project = models.ForeignKey(
@@ -216,17 +216,17 @@ class Budget(models.Model):
         ('quarterly', 'Trimestral'),
         ('yearly', 'Anual'),
     ]
-    
+
     name = models.CharField(max_length=100)
     period = models.CharField(max_length=20, choices=PERIOD_CHOICES, default='monthly')
     start_date = models.DateField()
     end_date = models.DateField()
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='budgets')
     cost_center = models.ForeignKey(CostCenter, on_delete=models.SET_NULL, null=True, blank=True, related_name='budgets')
-    
+
     planned = models.DecimalField(max_digits=12, decimal_places=2)
     actual = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    
+
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='budgets')
     created_at = models.DateTimeField(auto_now_add=True)

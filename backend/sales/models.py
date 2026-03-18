@@ -8,7 +8,7 @@ class Customer(models.Model):
         ('PF', 'Pessoa Física'),
         ('PJ', 'Pessoa Jurídica'),
     ]
-    
+
     SEGMENT_CHOICES = [
         ('startup', 'Startup'),
         ('mid_size', 'Média Empresa'),
@@ -16,7 +16,7 @@ class Customer(models.Model):
         ('government', 'Governo'),
         ('other', 'Outro'),
     ]
-    
+
     customer_type = models.CharField(max_length=2, choices=TYPE_CHOICES, default='PJ')
     segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='mid_size')
     company_name = models.CharField(max_length=200, blank=True)
@@ -158,14 +158,14 @@ class Proposal(models.Model):
         ('support', 'Suporte'),
         ('other', 'Outro'),
     ]
-    
+
     BILLING_TYPE_CHOICES = [
         ('hourly', 'Por Hora'),
         ('fixed', 'Preço Fixo'),
         ('monthly', 'Mensal'),
         ('milestone', 'Por Marco'),
     ]
-    
+
     STATUS_CHOICES = [
         ('draft', 'Rascunho'),
         ('sent', 'Enviado'),
@@ -175,7 +175,7 @@ class Proposal(models.Model):
         ('rejected', 'Rejeitado'),
         ('expired', 'Expirado'),
     ]
-    
+
     prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='proposals', null=True, blank=True)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='proposals')
     number = models.CharField(max_length=20, unique=True)
@@ -183,29 +183,29 @@ class Proposal(models.Model):
     proposal_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     billing_type = models.CharField(max_length=20, choices=BILLING_TYPE_CHOICES)
     version = models.IntegerField(default=1)
-    
+
     description = models.TextField(blank=True)
     scope = models.JSONField(default=list)  # Escopo inclusions/exclusions
     deliverables = models.JSONField(default=list)  # Entregáveis
     timeline = models.JSONField(default=dict)  # {"start": "", "end": "", "phases": []}
     requirements = models.JSONField(default=list)  # Requisitos técnicos
-    
+
     hours_estimated = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     valid_until = models.DateField()
     notes = models.TextField(blank=True)
     terms = models.TextField(blank=True)
-    
+
     sent_at = models.DateTimeField(null=True, blank=True)
     viewed_at = models.DateTimeField(null=True, blank=True)
-    
+
     assigned_to = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='assigned_proposals'
     )
@@ -230,14 +230,14 @@ class Contract(models.Model):
         ('saas', 'SaaS/Assinatura'),
         ('other', 'Outro'),
     ]
-    
+
     BILLING_TYPE_CHOICES = [
         ('hourly', 'Por Hora'),
         ('fixed', 'Preço Fixo'),
         ('monthly', 'Mensal'),
         ('milestone', 'Por Marco'),
     ]
-    
+
     STATUS_CHOICES = [
         ('draft', 'Rascunho'),
         ('pending_signature', 'Pendente Assinatura'),
@@ -246,27 +246,27 @@ class Contract(models.Model):
         ('cancelled', 'Cancelado'),
         ('renewed', 'Renovado'),
     ]
-    
+
     proposal = models.ForeignKey(Proposal, on_delete=models.SET_NULL, null=True, blank=True, related_name='contracts')
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='contracts')
     number = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=200)
     contract_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     billing_type = models.CharField(max_length=20, choices=BILLING_TYPE_CHOICES)
-    
+
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
     auto_renew = models.BooleanField(default=False)
     renewal_days = models.IntegerField(default=30)
-    
+
     monthly_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_hours_monthly = models.DecimalField(max_digits=8, decimal_places=2, default=0)
-    
+
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
     notes = models.TextField(blank=True)
     terms = models.TextField(blank=True)
-    
+
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='contracts')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
