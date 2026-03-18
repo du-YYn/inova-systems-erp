@@ -23,7 +23,7 @@ from .serializers import (
     ProposalSerializer, ContractSerializer,
     ProspectActivitySerializer, WinLossReasonSerializer,
 )
-from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
+from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
 
 logger = logging.getLogger('sales')
 
@@ -32,7 +32,7 @@ logger = logging.getLogger('sales')
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.select_related('created_by')
     serializer_class = CustomerSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [IsAdminOrManagerOrOperatorStrict]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -54,7 +54,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 class ProspectViewSet(viewsets.ModelViewSet):
     queryset = Prospect.objects.select_related('customer', 'assigned_to', 'created_by')
     serializer_class = ProspectSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [IsAdminOrManagerOrOperatorStrict]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -160,7 +160,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
 class ProposalViewSet(viewsets.ModelViewSet):
     queryset = Proposal.objects.select_related('customer', 'prospect', 'assigned_to', 'created_by')
     serializer_class = ProposalSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [IsAdminOrManagerOrOperatorStrict]
 
     def get_queryset(self):
         queryset = super().get_queryset()

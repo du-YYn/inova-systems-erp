@@ -39,6 +39,18 @@ class IsAdminOrManagerOrOperator(BasePermission):
         return request.user.role in ('admin', 'manager', 'operator')
 
 
+class IsAdminOrManagerOrOperatorStrict(BasePermission):
+    """Administradores, gerentes e operadores — viewers não têm nenhum acesso."""
+    message = 'Acesso negado.'
+
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in ('admin', 'manager', 'operator')
+        )
+
+
 class IsAdminOrReadOnly(BasePermission):
     """Leitura para todos autenticados; escrita apenas para admin."""
     message = 'Acesso restrito a administradores.'

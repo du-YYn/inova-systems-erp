@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.exceptions import TokenError
 from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -244,7 +245,7 @@ class LogoutView(APIView):
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist()
-        except (KeyError, ValueError, TypeError):
+        except (KeyError, ValueError, TypeError, TokenError):
             pass
         logger.info(f"Logout: {request.user.username}")
         response = Response({'message': 'Logout realizado'})

@@ -167,15 +167,6 @@ class ContractSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
-    sla_policy_name = serializers.SerializerMethodField()
-
-    def get_sla_policy_name(self, obj):
-        if obj.sla_policy_id:
-            try:
-                return str(obj.sla_policy)
-            except Exception:
-                return None
-        return None
 
     class Meta:
         model = Contract
@@ -199,8 +190,6 @@ class ContractSerializer(serializers.ModelSerializer):
             "status",
             "notes",
             "terms",
-            "sla_policy",
-            "sla_policy_name",
             "created_by",
             "created_by_name",
             "created_at",

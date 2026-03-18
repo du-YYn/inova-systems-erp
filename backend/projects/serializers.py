@@ -69,9 +69,9 @@ class TimeEntrySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TimeEntry
-        fields = ['id', 'task', 'task_title', 'project', 'project_name', 'user', 'user_name', 
+        fields = ['id', 'task', 'task_title', 'project', 'project_name', 'user', 'user_name',
                   'hours', 'description', 'date', 'is_billable', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        read_only_fields = ['id', 'user', 'created_at']
 
 
 class ProjectSerializer(serializers.ModelSerializer):

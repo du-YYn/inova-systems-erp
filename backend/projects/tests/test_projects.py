@@ -325,7 +325,7 @@ class TestTimeEntry:
         task.refresh_from_db()
         assert task.logged_hours == Decimal('2.0')
 
-    def test_my_entries_returns_only_own_entries(self, admin_client, manager_client, admin_user, manager_user, project):
+    def test_my_entries_returns_only_own_entries(self, admin_client, admin_user, manager_user, project):
         TimeEntry.objects.create(
             project=project, user=admin_user,
             date='2024-01-15', hours=2.0, description='Admin entry',

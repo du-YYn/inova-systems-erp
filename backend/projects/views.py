@@ -195,7 +195,7 @@ class MilestoneViewSet(viewsets.ModelViewSet):
 
 @extend_schema(tags=['projects'])
 class ProjectTaskViewSet(viewsets.ModelViewSet):
-    queryset = ProjectTask.objects.select_related('project', 'phase', 'assigned_to', 'created_by')
+    queryset = ProjectTask.objects.select_related('project', 'phase', 'assigned_to')
     serializer_class = ProjectTaskSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
 
