@@ -10,10 +10,10 @@ from django.conf import settings as django_settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-
 from django.utils import timezone
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema
+from core.audit import log_audit
 import pyotp
 import qrcode
 import io
@@ -30,7 +30,6 @@ from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateTh
 from .tasks import send_password_reset_email
 
 logger = logging.getLogger('accounts')
-from core.audit import log_audit
 User = get_user_model()
 
 _SECURE = getattr(django_settings, 'JWT_COOKIE_SECURE', False)

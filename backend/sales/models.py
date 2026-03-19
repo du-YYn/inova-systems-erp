@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from core.validators import validate_contact_list, validate_scope_list, validate_timeline_dict, validate_tags_list
+from core.validators import validate_contact_list, validate_scope_list, validate_timeline_dict
 
 
 class Customer(models.Model):
