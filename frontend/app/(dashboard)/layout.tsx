@@ -72,6 +72,11 @@ const navSections: NavSection[] = [
     title: 'FINANCEIRO',
     items: [
       { href: '/finance',    label: 'Financeiro',  icon: DollarSign  },
+    ],
+  },
+  {
+    title: 'ANÁLISE',
+    items: [
       { href: '/relatorios', label: 'Relatórios',  icon: BarChart2   },
     ],
   },

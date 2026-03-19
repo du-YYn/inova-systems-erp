@@ -38,7 +38,10 @@ jobs:
               -U ${DB_USER:-inova_user} ${DB_NAME:-inova_erp} > "$BACKUP_FILE"
             echo "Backup salvo em $BACKUP_FILE"
 
-            git pull origin main
+            # Forçar estado do servidor igual ao repositório (evita conflitos com alterações locais)
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
             docker compose pull || { echo "Falha ao baixar imagens"; exit 1; }
             docker compose up -d --build --remove-orphans
 
