@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     CustomerViewSet, ProspectViewSet, ProposalViewSet, ContractViewSet,
-    ProspectActivityViewSet, WinLossReasonViewSet,
+    ProspectActivityViewSet, WinLossReasonViewSet, WebsiteLeadCreateView,
 )
 
 router = DefaultRouter()
@@ -14,5 +14,6 @@ router.register(r'prospect-activities', ProspectActivityViewSet)
 router.register(r'win-loss', WinLossReasonViewSet)
 
 urlpatterns = [
+    path('website-lead/', WebsiteLeadCreateView.as_view(), name='website-lead'),
     path('', include(router.urls)),
 ]

@@ -224,6 +224,75 @@ class ProspectActivitySerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_by", "created_by_name", "created_at"]
 
 
+class WebsiteLeadSerializer(serializers.Serializer):
+    """Recebe dados do quiz do site e cria um Prospect."""
+    nome = serializers.CharField(max_length=200)
+    empresa = serializers.CharField(max_length=200)
+    email = serializers.EmailField()
+    whatsapp = serializers.CharField(max_length=20)
+    servico = serializers.CharField(max_length=500, required=False, default='')
+    tamanho = serializers.CharField(max_length=200, required=False, default='')
+    faturamento = serializers.CharField(max_length=200, required=False, default='')
+    budget = serializers.CharField(max_length=200, required=False, default='')
+    status = serializers.CharField(max_length=200, required=False, default='')
+    descricao = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
+
+    def create(self, validated_data):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        # Usuário de sistema para leads do site
+        website_user, _ = User.objects.get_or_create(
+            username='website-bot',
+            defaults={
+                'first_name': 'Website',
+                'last_name': 'Bot',
+                'email': 'website-bot@inovasystems.com.br',
+                'role': 'operator',
+                'is_active': False,
+            },
+        )
+
+        # Mapear tamanho do quiz para company_size do Prospect
+        tamanho = validated_data.get('tamanho', '')
+        if 'grande' in tamanho.lower() or '100' in tamanho:
+            company_size = 'large'
+        elif 'média' in tamanho.lower() or 'media' in tamanho.lower():
+            company_size = 'medium'
+        else:
+            company_size = 'small'
+
+        # Guardar todos os dados originais do quiz
+        quiz_data = {
+            'servico': validated_data.get('servico', ''),
+            'tamanho': validated_data.get('tamanho', ''),
+            'faturamento': validated_data.get('faturamento', ''),
+            'budget': validated_data.get('budget', ''),
+            'status_quiz': validated_data.get('status', ''),
+        }
+
+        # Determinar qualification_level baseado no status do quiz
+        status_quiz = validated_data.get('status', '')
+        qualification_level = '3' if 'qualificado' in status_quiz.lower() else '2'
+
+        description = validated_data.get('descricao', '') or validated_data.get('servico', '')
+
+        prospect = Prospect.objects.create(
+            contact_name=validated_data['nome'],
+            company_name=validated_data['empresa'],
+            contact_email=validated_data['email'],
+            contact_phone=validated_data['whatsapp'],
+            source='website',
+            status='lead_received',
+            description=description,
+            company_size=company_size,
+            qualification_level=qualification_level,
+            quiz_data=quiz_data,
+            created_by=website_user,
+        )
+        return prospect
+
+
 class WinLossReasonSerializer(serializers.ModelSerializer):
     class Meta:
         model = WinLossReason

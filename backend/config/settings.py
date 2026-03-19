@@ -170,6 +170,9 @@ SIMPLE_JWT = {
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
 JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
 
+# ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
+WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+
 # ─── CORS ──────────────────────────────────────────────────────────────────────
 
 CORS_ALLOWED_ORIGINS = [

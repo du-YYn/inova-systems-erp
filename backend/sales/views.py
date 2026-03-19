@@ -16,11 +16,17 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.units import cm
 
+from django.conf import settings as django_settings
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.throttling import AnonRateThrottle
+
 from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer,
     ProspectActivitySerializer, WinLossReasonSerializer,
+    WebsiteLeadSerializer,
 )
 from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
 
@@ -422,3 +428,35 @@ class WinLossReasonViewSet(viewsets.ModelViewSet):
     serializer_class = WinLossReasonSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
     http_method_names = ['get', 'post', 'head', 'options']
+
+
+class WebsiteLeadThrottle(AnonRateThrottle):
+    rate = '10/hour'
+
+
+@extend_schema(tags=['sales'])
+class WebsiteLeadCreateView(APIView):
+    """Endpoint público para receber leads do site. Protegido por API Key."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [WebsiteLeadThrottle]
+
+    def post(self, request):
+        api_key = request.headers.get('X-API-Key', '')
+        expected_key = getattr(django_settings, 'WEBSITE_API_KEY', '')
+        if not expected_key or api_key != expected_key:
+            return Response(
+                {'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        serializer = WebsiteLeadSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        prospect = serializer.save()
+        logger.info(
+            f"Lead recebido do site: {prospect.contact_name} ({prospect.contact_email})"
+        )
+        return Response(
+            {'success': True, 'id': prospect.id}, status=status.HTTP_201_CREATED
+        )
