@@ -2,7 +2,7 @@
 services:
   postgres:
     image: postgres:15
-    container_name: inova_postgres
+
     restart: unless-stopped
     env_file:
       - .env
@@ -24,7 +24,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: inova_redis
+
     restart: unless-stopped
     # Autenticação Redis via REDIS_PASSWORD (obrigatório em produção)
     command: >
@@ -53,7 +53,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: inova_backend
+
     restart: unless-stopped
     env_file:
       - .env
@@ -79,10 +79,6 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      # DESENVOLVIMENTO: monte o código local para hot-reload
-      # PRODUÇÃO: remova este volume (a imagem já contém o código)
-      - ./backend:/app
-      # Volume compartilhado com Nginx para servir arquivos estáticos
       - static_files:/app/staticfiles
       - media_files:/app/media
     networks:
@@ -105,7 +101,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: inova_celery_worker
+
     restart: unless-stopped
     user: "1000:1000"
     env_file:
@@ -124,15 +120,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
     command: celery -A config worker --loglevel=info --concurrency=2
 
   celery_beat:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: inova_celery_beat
+
     restart: unless-stopped
     user: "1000:1000"
     env_file:
@@ -151,8 +145,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
   frontend:
@@ -161,7 +153,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
-    container_name: inova_frontend
+
     restart: unless-stopped
     # PRODUÇÃO: porta não exposta diretamente — acesso via Nginx
     # DESENVOLVIMENTO: descomente para acesso direto
