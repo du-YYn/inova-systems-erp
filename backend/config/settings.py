@@ -18,6 +18,8 @@ if not DEBUG:
     _db_password = os.environ.get('DB_PASSWORD', '')
     if not _db_password:
         raise ValueError('DB_PASSWORD must be set in production')
+    if not os.environ.get('WEBSITE_API_KEY'):
+        raise ValueError('WEBSITE_API_KEY must be set in production')
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 if DEBUG:

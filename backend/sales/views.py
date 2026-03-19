@@ -1,3 +1,4 @@
+import hmac
 import logging
 import io
 from rest_framework import viewsets, status
@@ -441,21 +442,38 @@ class WebsiteLeadCreateView(APIView):
     authentication_classes = []
     throttle_classes = [WebsiteLeadThrottle]
 
+    MAX_BODY_SIZE = 16 * 1024  # 16 KB
+
     def post(self, request):
+        client_ip = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() \
+            or request.META.get('REMOTE_ADDR', 'unknown')
+
+        # Rejeitar payloads grandes (proteção DoS)
+        if len(request.body) > self.MAX_BODY_SIZE:
+            logger.warning(f"Payload too large from {client_ip} ({len(request.body)} bytes)")
+            return Response(
+                {'error': 'Payload too large'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
+
+        # Validação timing-safe da API Key
         api_key = request.headers.get('X-API-Key', '')
         expected_key = getattr(django_settings, 'WEBSITE_API_KEY', '')
-        if not expected_key or api_key != expected_key:
+        if not expected_key or not hmac.compare_digest(api_key, expected_key):
+            logger.warning(f"Unauthorized lead submission attempt from {client_ip}")
             return Response(
                 {'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED
             )
 
         serializer = WebsiteLeadSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            logger.warning(f"Invalid lead data from {client_ip}: {serializer.errors}")
+            return Response(
+                {'error': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         prospect = serializer.save()
         logger.info(
-            f"Lead recebido do site: {prospect.contact_name} ({prospect.contact_email})"
+            f"Lead recebido do site: {prospect.contact_name} ({prospect.contact_email}) from {client_ip}"
         )
         return Response(
             {'success': True, 'id': prospect.id}, status=status.HTTP_201_CREATED

@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
 
@@ -226,6 +227,21 @@ class ProspectActivitySerializer(serializers.ModelSerializer):
 
 class WebsiteLeadSerializer(serializers.Serializer):
     """Recebe dados do quiz do site e cria um Prospect."""
+    VALID_SERVICES = {
+        'Aplicação Web', 'Aplicativo Mobile', 'Inteligência Artificial',
+        'Automações', 'Ainda não sei',
+    }
+    VALID_SIZES = {'Solo / MEI', 'Pequena empresa', 'Média empresa', 'Grande empresa'}
+    VALID_REVENUE = {
+        'Até R$20 mil', 'R$20 mil a R$100 mil',
+        'R$100 mil a R$500 mil', 'Acima de R$500 mil',
+    }
+    VALID_BUDGETS = {
+        'Menos de R$3.000', 'R$3.000 a R$10.000',
+        'Menos de R$10.000', 'R$10.000 a R$30.000',
+        'R$30.000 a R$100.000', 'Acima de R$100.000',
+    }
+
     nome = serializers.CharField(max_length=200)
     empresa = serializers.CharField(max_length=200)
     email = serializers.EmailField()
@@ -237,21 +253,59 @@ class WebsiteLeadSerializer(serializers.Serializer):
     status = serializers.CharField(max_length=200, required=False, default='')
     descricao = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
 
-    def create(self, validated_data):
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
+    def validate_whatsapp(self, value):
+        import re
+        if not re.match(r'^[\d\s()+\-]{8,20}$', value):
+            raise serializers.ValidationError('Formato de telefone inválido.')
+        return value
 
-        # Usuário de sistema para leads do site
-        website_user, _ = User.objects.get_or_create(
-            username='website-bot',
-            defaults={
-                'first_name': 'Website',
-                'last_name': 'Bot',
-                'email': 'website-bot@inovasystems.com.br',
-                'role': 'operator',
-                'is_active': False,
-            },
-        )
+    def validate_servico(self, value):
+        if value:
+            services = [s.strip() for s in value.split(',')]
+            for s in services:
+                if s and s not in self.VALID_SERVICES:
+                    raise serializers.ValidationError(f'Serviço inválido: {s}')
+        return value
+
+    def validate_tamanho(self, value):
+        if value and value not in self.VALID_SIZES:
+            raise serializers.ValidationError('Tamanho de empresa inválido.')
+        return value
+
+    def validate_faturamento(self, value):
+        if value and value not in self.VALID_REVENUE:
+            raise serializers.ValidationError('Faixa de faturamento inválida.')
+        return value
+
+    def validate_budget(self, value):
+        if value and value not in self.VALID_BUDGETS:
+            raise serializers.ValidationError('Faixa de orçamento inválida.')
+        return value
+
+    def _get_or_create_website_user(self):
+        from django.contrib.auth import get_user_model
+        from django.db import IntegrityError
+        User = get_user_model()
+        try:
+            with transaction.atomic():
+                website_user, _ = User.objects.get_or_create(
+                    username='website-bot',
+                    defaults={
+                        'first_name': 'Website',
+                        'last_name': 'Bot',
+                        'email': 'website-bot@inovasystems.com.br',
+                        'role': 'operator',
+                        'is_active': False,
+                    },
+                )
+        except IntegrityError:
+            website_user = User.objects.get(username='website-bot')
+        return website_user
+
+    def create(self, validated_data):
+        import json
+
+        website_user = self._get_or_create_website_user()
 
         # Mapear tamanho do quiz para company_size do Prospect
         tamanho = validated_data.get('tamanho', '')
@@ -262,7 +316,7 @@ class WebsiteLeadSerializer(serializers.Serializer):
         else:
             company_size = 'small'
 
-        # Guardar todos os dados originais do quiz
+        # Guardar todos os dados originais do quiz (com limite de 8KB)
         quiz_data = {
             'servico': validated_data.get('servico', ''),
             'tamanho': validated_data.get('tamanho', ''),
@@ -270,10 +324,15 @@ class WebsiteLeadSerializer(serializers.Serializer):
             'budget': validated_data.get('budget', ''),
             'status_quiz': validated_data.get('status', ''),
         }
+        if len(json.dumps(quiz_data)) > 8192:
+            raise serializers.ValidationError('Quiz data too large.')
 
-        # Determinar qualification_level baseado no status do quiz
-        status_quiz = validated_data.get('status', '')
-        qualification_level = '3' if 'qualificado' in status_quiz.lower() else '2'
+        # Recalcular qualification_level server-side baseado no budget
+        budget = validated_data.get('budget', '')
+        qualified_budgets = {
+            'R$10.000 a R$30.000', 'R$30.000 a R$100.000', 'Acima de R$100.000',
+        }
+        qualification_level = '3' if budget in qualified_budgets else '2'
 
         description = validated_data.get('descricao', '') or validated_data.get('servico', '')
 
