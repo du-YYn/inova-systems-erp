@@ -128,10 +128,11 @@ class TestTwoFactor:
     setup_url = '/api/v1/accounts/2fa/setup/'
 
     def test_2fa_verify_success(self, api_client, regular_user):
+        import hashlib
         secret = pyotp.random_base32()
         regular_user.is_2fa_enabled = True
         regular_user.totp_secret = secret
-        regular_user.temp_2fa_token = 'valid_temp_token_abc'
+        regular_user.temp_2fa_token = hashlib.sha256('valid_temp_token_abc'.encode()).hexdigest()
         regular_user.save()
 
         code = pyotp.TOTP(secret).now()
@@ -144,10 +145,11 @@ class TestTwoFactor:
         assert 'access_token' in response.cookies
 
     def test_2fa_verify_invalid_code(self, api_client, regular_user):
+        import hashlib
         secret = pyotp.random_base32()
         regular_user.is_2fa_enabled = True
         regular_user.totp_secret = secret
-        regular_user.temp_2fa_token = 'valid_temp_token_abc'
+        regular_user.temp_2fa_token = hashlib.sha256('valid_temp_token_abc'.encode()).hexdigest()
         regular_user.save()
 
         response = api_client.post(self.verify_url, {
@@ -239,10 +241,11 @@ class TestPasswordReset:
         assert response.status_code == status.HTTP_200_OK
 
     def test_reset_confirm_success(self, api_client, regular_user):
+        import hashlib
         from django.utils import timezone
         from datetime import timedelta
         token = 'valid_reset_token_xyz'
-        regular_user.password_reset_token = token
+        regular_user.password_reset_token = hashlib.sha256(token.encode()).hexdigest()
         regular_user.password_reset_expires = timezone.now() + timedelta(hours=1)
         regular_user.save()
 

@@ -48,25 +48,25 @@ class TestNotificationModel:
 
 class TestNotificationAPI:
     def test_list_notifications(self, admin_client, notification):
-        response = admin_client.get('/api/v1/notifications/notifications/')
+        response = admin_client.get('/api/v1/notifications/')
         assert response.status_code == 200
 
     def test_mark_read(self, admin_client, notification):
         response = admin_client.patch(
-            f'/api/v1/notifications/notifications/{notification.id}/mark_read/'
+            f'/api/v1/notifications/{notification.id}/mark_read/'
         )
         assert response.status_code == 200
         notification.refresh_from_db()
         assert notification.is_read is True
 
     def test_mark_all_read(self, admin_client, notification):
-        response = admin_client.post('/api/v1/notifications/notifications/mark_all_read/')
+        response = admin_client.post('/api/v1/notifications/mark_all_read/')
         assert response.status_code == 200
         notification.refresh_from_db()
         assert notification.is_read is True
 
     def test_unread_count(self, admin_client, notification):
-        response = admin_client.get('/api/v1/notifications/notifications/unread_count/')
+        response = admin_client.get('/api/v1/notifications/unread_count/')
         assert response.status_code == 200
         assert response.data['unread_count'] == 1
 

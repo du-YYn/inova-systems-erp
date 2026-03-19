@@ -74,12 +74,12 @@ class TestSLAPolicy:
             'resolution_time_high': 4,
             'resolution_time_critical': 2,
         }
-        response = admin_client.post('/api/v1/support/policies/', data, format='json')
+        response = admin_client.post('/api/v1/support/sla-policies/', data, format='json')
         assert response.status_code == 201
         assert response.data['name'] == 'Premium SLA'
 
     def test_list_sla_policies(self, admin_client, sla_policy):
-        response = admin_client.get('/api/v1/support/policies/')
+        response = admin_client.get('/api/v1/support/sla-policies/')
         assert response.status_code == 200
 
 
