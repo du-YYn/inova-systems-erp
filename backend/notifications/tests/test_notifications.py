@@ -52,7 +52,7 @@ class TestNotificationAPI:
         assert response.status_code == 200
 
     def test_mark_read(self, admin_client, notification):
-        response = admin_client.patch(
+        response = admin_client.post(
             f'/api/v1/notifications/{notification.id}/mark_read/'
         )
         assert response.status_code == 200
