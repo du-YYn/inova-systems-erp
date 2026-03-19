@@ -35,7 +35,12 @@ fi
 
 DB_NAME="${DB_NAME:-inova_erp}"
 DB_USER="${DB_USER:-inova_user}"
-BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz"
+ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
+if [ -n "$ENCRYPTION_KEY" ]; then
+    BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz.enc"
+else
+    BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz"
+fi
 
 # ── Criar diretório de backups ────────────────────────────────────────────────
 mkdir -p "$BACKUP_DIR"
@@ -44,17 +49,31 @@ echo "[backup_db] Iniciando backup: $BACKUP_FILE"
 
 # ── Executar pg_dump via docker compose ───────────────────────────────────────
 cd "$PROJECT_DIR"
-docker compose exec -T postgres \
-    pg_dump -U "$DB_USER" "$DB_NAME" \
-    | gzip > "$BACKUP_FILE"
+if [ -n "$ENCRYPTION_KEY" ]; then
+    docker compose exec -T postgres \
+        pg_dump -U "$DB_USER" "$DB_NAME" \
+        | gzip \
+        | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:"$ENCRYPTION_KEY" \
+        > "$BACKUP_FILE"
+    echo "[backup_db] Backup criptografado com AES-256-CBC"
+else
+    docker compose exec -T postgres \
+        pg_dump -U "$DB_USER" "$DB_NAME" \
+        | gzip > "$BACKUP_FILE"
+fi
 
 BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "[backup_db] Backup concluído: $BACKUP_FILE ($BACKUP_SIZE)"
 
+# ── Verificação de integridade ──────────────────────────────────────────────
+CHECKSUM_FILE="$BACKUP_FILE.sha256"
+sha256sum "$BACKUP_FILE" > "$CHECKSUM_FILE"
+echo "[backup_db] Checksum salvo: $CHECKSUM_FILE"
+
 # ── Rotação: remover backups mais antigos que KEEP_DAYS dias ──────────────────
 echo "[backup_db] Removendo backups com mais de $KEEP_DAYS dias..."
-find "$BACKUP_DIR" -name "inova_erp_*.sql.gz" -mtime "+$KEEP_DAYS" -delete
-REMAINING=$(find "$BACKUP_DIR" -name "inova_erp_*.sql.gz" | wc -l)
+find "$BACKUP_DIR" \( -name "inova_erp_*.sql.gz" -o -name "inova_erp_*.sql.gz.enc" \) -mtime "+$KEEP_DAYS" -delete
+REMAINING=$(find "$BACKUP_DIR" \( -name "inova_erp_*.sql.gz" -o -name "inova_erp_*.sql.gz.enc" \) | wc -l)
 echo "[backup_db] Backups mantidos: $REMAINING arquivo(s)"
 
 echo "[backup_db] Concluído em $(date)"

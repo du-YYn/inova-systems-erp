@@ -6,6 +6,8 @@ import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
+import api, { ApiError } from '@/lib/api';
+import { useDebouncedValue, usePagination } from '@/lib/hooks';
 
 interface Customer {
   id: number;
@@ -54,7 +56,7 @@ export default function ClientesPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const search = useDebouncedValue(searchInput);
   const [filterType, setFilterType] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Customer | null>(null);
@@ -63,20 +65,13 @@ export default function ClientesPage() {
   const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const h = () => ({ 'Content-Type': 'application/json' });
-
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
-      if (search) params.set('search', search);
-      if (filterType) params.set('customer_type', filterType);
-      const res = await fetch(`${apiUrl}/sales/customers/?${params}`, {
-        headers: h(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
+      if (search) params.search = search;
+      if (filterType) params.customer_type = filterType;
+      const data = await api.get<{ results: Customer[]; count: number }>('/sales/customers/', params);
       setCustomers(data.results || data);
       setTotal(data.count ?? (data.results || data).length);
     } catch {
@@ -88,10 +83,7 @@ export default function ClientesPage() {
 
   useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
-  useEffect(() => {
-    const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
-    return () => clearTimeout(id);
-  }, [searchInput]);
+  useEffect(() => { setPage(1); }, [search]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const totalPJ = customers.filter(c => c.customer_type === 'PJ').length;
@@ -126,30 +118,20 @@ export default function ClientesPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const url = editTarget
-        ? `${apiUrl}/sales/customers/${editTarget.id}/`
-        : `${apiUrl}/sales/customers/`;
-      // Remove empty strings to avoid invalid-choice / blank validation errors
       const body = Object.fromEntries(
         Object.entries(formData).filter(([, v]) => v !== '')
       );
-      const res = await fetch(url, {
-        method: editTarget ? 'PATCH' : 'POST',
-        headers: h(),
-        credentials: 'include',
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = Object.values(err).flat().join(' ') || 'Erro ao salvar cliente.';
-        toast.error(msg as string);
-        return;
+      if (editTarget) {
+        await api.patch(`/sales/customers/${editTarget.id}/`, body);
+      } else {
+        await api.post('/sales/customers/', body);
       }
       toast.success(editTarget ? 'Cliente atualizado!' : 'Cliente criado com sucesso!');
       setShowModal(false);
       fetchCustomers();
-    } catch {
-      toast.error('Erro ao salvar cliente.');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao salvar cliente.';
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -159,10 +141,7 @@ export default function ClientesPage() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`${apiUrl}/sales/customers/${deleteTarget.id}/`, {
-        method: 'DELETE', headers: h(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.delete(`/sales/customers/${deleteTarget.id}/`);
       toast.success(`Cliente "${deleteTarget.company_name || deleteTarget.name}" removido.`);
       setDeleteTarget(null);
       fetchCustomers();

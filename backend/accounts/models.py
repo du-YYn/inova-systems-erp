@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
+from core.validators import validate_image_extension, validate_image_size
 
 
 class User(AbstractUser):
@@ -17,7 +18,7 @@ class User(AbstractUser):
     temp_2fa_token = models.CharField(max_length=64, blank=True, null=True)
     temp_2fa_expires = models.DateTimeField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True)
-    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, validators=[validate_image_extension, validate_image_size])
     password_reset_token = models.CharField(max_length=64, blank=True, null=True)
     password_reset_expires = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -34,7 +34,7 @@ def check_task_deadlines():
 
         logger.info(f"Verificação de prazos: {tasks.count()} notificações criadas")
         return tasks.count()
-    except Exception as e:
+    except (ImportError, AttributeError, TypeError) as e:
         logger.error(f"Erro em check_task_deadlines: {e}")
         return 0
 
@@ -70,7 +70,7 @@ def check_invoice_overdue():
 
         logger.info(f"Faturas vencidas: {newly_overdue.count()} atualizadas")
         return newly_overdue.count()
-    except Exception as e:
+    except (ImportError, AttributeError, TypeError) as e:
         logger.error(f"Erro em check_invoice_overdue: {e}")
         return 0
 
@@ -105,6 +105,6 @@ def check_sla_warnings():
             )
 
         return at_risk.count()
-    except Exception as e:
+    except (ImportError, AttributeError, TypeError) as e:
         logger.error(f"Erro em check_sla_warnings: {e}")
         return 0

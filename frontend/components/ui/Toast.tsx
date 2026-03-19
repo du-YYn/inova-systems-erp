@@ -75,6 +75,8 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
 
   return (
     <div
+      role="alert"
+      aria-live="assertive"
       className={`${bg} rounded-lg shadow-lg p-4 flex items-start gap-3 transition-all duration-300 ${
         visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'
       }`}

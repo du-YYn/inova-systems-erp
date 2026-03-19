@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from core.validators import validate_file_extension, validate_file_size, validate_tags_list
 
 
 class SLAPolicy(models.Model):
@@ -114,7 +115,7 @@ class SupportTicket(models.Model):
     contact_name = models.CharField(max_length=200, blank=True)
     contact_email = models.EmailField(blank=True)
 
-    tags = models.JSONField(default=list)
+    tags = models.JSONField(default=list, validators=[validate_tags_list])
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
@@ -153,7 +154,7 @@ class TicketAttachment(models.Model):
         TicketComment, on_delete=models.CASCADE, null=True, blank=True,
         related_name='attachments'
     )
-    file = models.FileField(upload_to='ticket_attachments/%Y/%m/')
+    file = models.FileField(upload_to='ticket_attachments/%Y/%m/', validators=[validate_file_extension, validate_file_size])
     filename = models.CharField(max_length=255)
     file_size = models.IntegerField(default=0)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -194,7 +195,7 @@ class KnowledgeBaseArticle(models.Model):
     helpful_count = models.IntegerField(default=0)
     not_helpful_count = models.IntegerField(default=0)
 
-    tags = models.JSONField(default=list)
+    tags = models.JSONField(default=list, validators=[validate_tags_list])
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,

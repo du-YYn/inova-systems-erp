@@ -1,11 +1,12 @@
 from django.db import models
 from django.conf import settings
+from core.validators import validate_template_phases
 
 
 class ProjectTemplate(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    phases = models.JSONField(default=list)  # [{"name": "", "description": "", "order": 0}]
+    phases = models.JSONField(default=list, validators=[validate_template_phases])  # [{"name": "", "description": "", "order": 0}]
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

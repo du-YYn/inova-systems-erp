@@ -30,6 +30,7 @@ from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateTh
 from .tasks import send_password_reset_email
 
 logger = logging.getLogger('accounts')
+from core.audit import log_audit
 User = get_user_model()
 
 _SECURE = getattr(django_settings, 'JWT_COOKIE_SECURE', False)
@@ -109,8 +110,9 @@ class LoginView(APIView):
             )
 
         if user.is_2fa_enabled:
+            import hashlib
             temp_token = secrets.token_urlsafe(32)
-            user.temp_2fa_token = temp_token
+            user.temp_2fa_token = hashlib.sha256(temp_token.encode()).hexdigest()
             user.temp_2fa_expires = timezone.now() + timedelta(minutes=10)
             user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
             return Response({
@@ -120,6 +122,7 @@ class LoginView(APIView):
             })
 
         logger.info(f"Login bem-sucedido: {user.username} (role={user.role})")
+        log_audit(user, 'login', 'user', user.id)
         refresh = RefreshToken.for_user(user)
         response = Response({'user': UserSerializer(user).data})
         _set_auth_cookies(response, refresh)
@@ -135,11 +138,13 @@ class TwoFactorVerifyView(APIView):
         serializer = TwoFactorVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        import hashlib
         temp_token = request.data.get('temp_token')
         code = serializer.validated_data['code']
+        token_hash = hashlib.sha256(temp_token.encode()).hexdigest() if temp_token else ''
 
         try:
-            user = User.objects.get(temp_2fa_token=temp_token)
+            user = User.objects.get(temp_2fa_token=token_hash)
         except User.DoesNotExist:
             return Response({'error': 'Token inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -177,6 +182,7 @@ class TwoFactorSetupView(APIView):
             user.totp_secret = None
             user.save(update_fields=['is_2fa_enabled', 'totp_secret'])
             logger.info(f"2FA desativado: {user.username}")
+            log_audit(user, '2fa_toggle', 'user', user.id, 'enabled' if user.is_2fa_enabled else 'disabled')
             return Response({'message': '2FA desativado', 'enabled': False})
 
         secret = pyotp.random_base32()
@@ -196,6 +202,7 @@ class TwoFactorSetupView(APIView):
         qr_code_b64 = base64.b64encode(buffered.getvalue()).decode()
 
         logger.info(f"2FA ativado: {user.username}")
+        log_audit(user, '2fa_toggle', 'user', user.id, 'enabled' if user.is_2fa_enabled else 'disabled')
         return Response({
             'secret': secret,
             'qr_code': f'data:image/png;base64,{qr_code_b64}',
@@ -232,6 +239,7 @@ class ChangePasswordView(APIView):
         user.set_password(serializer.validated_data['new_password'])
         user.save(update_fields=['password'])
         logger.info(f"Senha alterada: {user.username}")
+        log_audit(user, 'password_change', 'user', user.id)
         return Response({'message': 'Senha alterada com sucesso'})
 
 
@@ -248,6 +256,7 @@ class LogoutView(APIView):
         except (KeyError, ValueError, TypeError, TokenError):
             pass
         logger.info(f"Logout: {request.user.username}")
+        log_audit(request.user, 'logout', 'user', request.user.id)
         response = Response({'message': 'Logout realizado'})
         _clear_auth_cookies(response)
         return response
@@ -271,8 +280,9 @@ class PasswordResetRequestView(APIView):
         except User.DoesNotExist:
             return safe_response
 
+        import hashlib
         token = secrets.token_urlsafe(32)
-        user.password_reset_token = token
+        user.password_reset_token = hashlib.sha256(token.encode()).hexdigest()
         user.password_reset_expires = timezone.now() + timedelta(hours=24)
         user.save(update_fields=['password_reset_token', 'password_reset_expires'])
 
@@ -287,6 +297,7 @@ class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        import hashlib
         token = request.data.get('token')
         new_password = request.data.get('new_password')
 
@@ -295,9 +306,10 @@ class PasswordResetConfirmView(APIView):
                 {'error': 'Token e nova senha são obrigatórios'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
 
         try:
-            user = User.objects.get(password_reset_token=token)
+            user = User.objects.get(password_reset_token=token_hash)
         except User.DoesNotExist:
             return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -315,6 +327,7 @@ class PasswordResetConfirmView(APIView):
         user.save(update_fields=['password', 'password_reset_token', 'password_reset_expires'])
 
         logger.info(f"Senha redefinida via token: {user.username}")
+        log_audit(user, 'password_reset', 'user', user.id)
         return Response({'message': 'Senha redefinida com sucesso'})
 
 
@@ -343,6 +356,7 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
         user = self.get_object()
         if user == request.user:
             return Response({'error': 'Não é possível remover o próprio usuário.'}, status=status.HTTP_400_BAD_REQUEST)
+        log_audit(request.user, 'user_delete', 'user', user.id, f'deleted user: {user.username}')
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 

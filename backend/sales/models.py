@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from core.validators import validate_contact_list, validate_scope_list, validate_timeline_dict, validate_tags_list
 
 
 class Customer(models.Model):
@@ -32,7 +33,7 @@ class Customer(models.Model):
     city = models.CharField(max_length=100, blank=True)
     state = models.CharField(max_length=2, blank=True)
     cep = models.CharField(max_length=9, blank=True)
-    contacts = models.JSONField(default=list)  # [{"name": "", "email": "", "phone": "", "role": ""}]
+    contacts = models.JSONField(default=list, validators=[validate_contact_list])  # [{"name": "", "email": "", "phone": "", "role": ""}]
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='customers')
@@ -185,10 +186,10 @@ class Proposal(models.Model):
     version = models.IntegerField(default=1)
 
     description = models.TextField(blank=True)
-    scope = models.JSONField(default=list)  # Escopo inclusions/exclusions
-    deliverables = models.JSONField(default=list)  # Entregáveis
-    timeline = models.JSONField(default=dict)  # {"start": "", "end": "", "phases": []}
-    requirements = models.JSONField(default=list)  # Requisitos técnicos
+    scope = models.JSONField(default=list, validators=[validate_scope_list])  # Escopo inclusions/exclusions
+    deliverables = models.JSONField(default=list, validators=[validate_scope_list])  # Entregáveis
+    timeline = models.JSONField(default=dict, validators=[validate_timeline_dict])  # {"start": "", "end": "", "phases": []}
+    requirements = models.JSONField(default=list, validators=[validate_scope_list])  # Requisitos técnicos
 
     hours_estimated = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)

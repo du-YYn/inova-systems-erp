@@ -11,7 +11,7 @@ import {
   DollarSign,
   FileText,
   ScrollText,
-  Settings,
+  ShieldCheck,
   X,
   BarChart2,
   UserCircle,
@@ -19,8 +19,11 @@ import {
   Bell,
   ChevronRight,
   Headphones,
+  Target,
+  BellRing,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import api from '@/lib/api';
 
 interface Notif {
   id: number;
@@ -44,34 +47,40 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: 'MENU',
+    title: 'GERAL',
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     ],
   },
   {
-    title: 'OPERAÇÕES',
+    title: 'COMERCIAL',
     items: [
-      { href: '/clientes',  label: 'Clientes',  icon: Building2     },
-      { href: '/crm',       label: 'CRM',        icon: Users         },
+      { href: '/crm',       label: 'CRM',        icon: Target        },
       { href: '/sales',     label: 'Vendas',     icon: FileText      },
+      { href: '/clientes',  label: 'Clientes',  icon: Building2     },
       { href: '/contratos', label: 'Contratos',  icon: ScrollText    },
+    ],
+  },
+  {
+    title: 'OPERACIONAL',
+    items: [
       { href: '/projects',  label: 'Projetos',   icon: FolderKanban  },
       { href: '/suporte',   label: 'Suporte',    icon: Headphones    },
-      { href: '/finance',   label: 'Financeiro', icon: DollarSign    },
     ],
   },
   {
-    title: 'ANÁLISE',
+    title: 'FINANCEIRO',
     items: [
-      { href: '/relatorios', label: 'Relatórios', icon: BarChart2 },
+      { href: '/finance',    label: 'Financeiro',  icon: DollarSign  },
+      { href: '/relatorios', label: 'Relatórios',  icon: BarChart2   },
     ],
   },
   {
-    title: 'CONTA',
+    title: 'ADMINISTRAÇÃO',
     items: [
-      { href: '/perfil',   label: 'Meu Perfil', icon: UserCircle },
-      { href: '/usuarios', label: 'Usuários',   icon: Settings   },
+      { href: '/usuarios',    label: 'Usuários',      icon: ShieldCheck },
+      { href: '/notificacoes', label: 'Notificações', icon: BellRing    },
+      { href: '/perfil',      label: 'Meu Perfil',    icon: UserCircle  },
     ],
   },
 ];
@@ -87,7 +96,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notif[]>([]);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
   useEffect(() => {
     try {
@@ -105,13 +113,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await fetch(`${apiUrl}/notifications/notifications/unread_count/`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUnreadCount(data.unread_count ?? 0);
-      }
+      const data = await api.get<{ unread_count: number }>('/notifications/notifications/unread_count/');
+      setUnreadCount(data.unread_count ?? 0);
     } catch {
       // silently ignore
     }
@@ -119,13 +122,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch(`${apiUrl}/notifications/notifications/?page_size=10`, {
-        credentials: 'include',
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data.results ?? data);
-      }
+      const data = await api.get<{ results: Notif[] }>('/notifications/notifications/', { page_size: '10' });
+      setNotifications(data.results ?? []);
     } catch {
       // silently ignore
     }
@@ -157,10 +155,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleMarkRead = async (id: number) => {
     try {
-      await fetch(`${apiUrl}/notifications/notifications/${id}/mark_read/`, {
-        method: 'PATCH',
-        credentials: 'include',
-      });
+      await api.patch(`/notifications/notifications/${id}/mark_read/`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
@@ -172,10 +167,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch(`${apiUrl}/notifications/notifications/mark_all_read/`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      await api.post('/notifications/notifications/mark_all_read/');
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch {
@@ -195,11 +187,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleLogout = async () => {
     try {
-      await fetch(`${apiUrl}/accounts/logout/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      await api.post('/accounts/logout/');
     } catch {
       // ignora erros de rede no logout
     }
@@ -336,6 +324,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Mobile menu */}
             <button
               onClick={() => setSidebarOpen(true)}
+              aria-label="Abrir menu"
               className="lg:hidden p-2 -ml-1 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <Menu className="w-5 h-5 text-gray-600" />
@@ -359,6 +348,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <button
                 id="notif-bell"
                 onClick={handleBellClick}
+                aria-label="Notificações"
                 className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <Bell className="w-4.5 h-4.5 text-gray-500" />

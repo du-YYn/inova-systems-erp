@@ -26,7 +26,7 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-modal animate-modal-in">
+      <div role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title" className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-modal animate-modal-in">
         <div className="flex items-start gap-4 mb-5">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -38,7 +38,7 @@ export function ConfirmDialog({
             />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+            <h3 id="confirm-dialog-title" className="text-sm font-semibold text-gray-900">{title}</h3>
             <p className="text-sm text-gray-500 mt-1 leading-relaxed">{description}</p>
           </div>
         </div>

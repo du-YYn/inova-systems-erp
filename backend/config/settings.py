@@ -267,6 +267,7 @@ LOGGING = {
         'sales':     {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'finance':   {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'projects':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'audit': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
 

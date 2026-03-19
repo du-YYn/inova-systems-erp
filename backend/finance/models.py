@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from core.validators import validate_invoice_items, validate_tags_list
 
 
 class BankAccount(models.Model):
@@ -97,7 +98,7 @@ class Invoice(models.Model):
     bank_account = models.ForeignKey(BankAccount, on_delete=models.SET_NULL, null=True, blank=True)
 
     description = models.TextField(blank=True)
-    items = models.JSONField(default=list)
+    items = models.JSONField(default=list, validators=[validate_invoice_items])
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
 
@@ -181,7 +182,7 @@ class Transaction(models.Model):
     description = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
 
-    tags = models.JSONField(default=list)
+    tags = models.JSONField(default=list, validators=[validate_tags_list])
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='transactions')
     created_at = models.DateTimeField(auto_now_add=True)

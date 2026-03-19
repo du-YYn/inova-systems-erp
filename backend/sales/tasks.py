@@ -44,7 +44,7 @@ def check_contract_renewals():
                         ),
                     }
                 )
-        except Exception as e:
+        except (ImportError, AttributeError) as e:
             logger.warning(f"Não foi possível criar notificação: {e}")
 
     # Contratos vencidos - atualiza status
