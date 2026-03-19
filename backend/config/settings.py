@@ -13,8 +13,9 @@ if not SECRET_KEY:
     else:
         raise ValueError('DJANGO_SECRET_KEY must be set in production')
 
-# Validate required secrets in production
-if not DEBUG:
+# Validate required secrets in production (skip in CI)
+_is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
+if not DEBUG and not _is_ci:
     _db_password = os.environ.get('DB_PASSWORD', '')
     if not _db_password:
         raise ValueError('DB_PASSWORD must be set in production')
