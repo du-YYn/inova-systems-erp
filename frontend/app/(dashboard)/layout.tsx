@@ -56,9 +56,6 @@ const navSections: NavSection[] = [
     title: 'COMERCIAL',
     items: [
       { href: '/crm',       label: 'CRM',        icon: Target        },
-      { href: '/sales',     label: 'Vendas',     icon: FileText      },
-      { href: '/clientes',  label: 'Clientes',  icon: Building2     },
-      { href: '/contratos', label: 'Contratos',  icon: ScrollText    },
     ],
   },
   {

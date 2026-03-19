@@ -75,9 +75,9 @@ class ProspectViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
-            'lead_received', 'qualifying', 'qualified', 'not_qualified',
-            'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
-            'proposal_sent', 'closed', 'not_closed', 'follow_up',
+            'new', 'qualifying', 'qualified', 'disqualified',
+            'discovery', 'proposal', 'negotiation',
+            'won', 'lost', 'follow_up',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),
@@ -108,7 +108,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.is_decision_maker = is_decision_maker
         prospect.has_urgency      = has_urgency
         prospect.qualification_score = score
-        prospect.status = 'qualified' if score >= 3 else 'not_qualified'
+        prospect.status = 'qualified' if score >= 3 else 'disqualified'
         prospect.save()
         logger.info(f"Prospect {prospect.id} qualificado (score {score}/4) por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -125,7 +125,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.closer_name = closer_name
         prospect.meeting_scheduled_at = meeting_scheduled_at
         prospect.meeting_link = meeting_link
-        prospect.status = 'scheduled'
+        prospect.status = 'discovery'
         prospect.save()
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -135,7 +135,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Lead não compareceu à reunião."""
         prospect = self.get_object()
         prospect.meeting_attended = False
-        prospect.status = 'no_show'
+        prospect.status = 'follow_up'
         prospect.save()
         logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -145,7 +145,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Lead compareceu à reunião."""
         prospect = self.get_object()
         prospect.meeting_attended = True
-        prospect.status = 'meeting_done'
+        prospect.status = 'proposal'
         prospect.save()
         logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -155,8 +155,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Registra que o e-book personalizado foi enviado ao lead."""
         prospect = self.get_object()
         prospect.ebook_sent_at = timezone.now()
-        if prospect.status == 'scheduled':
-            prospect.status = 'pre_meeting'
+        if prospect.status == 'discovery':
+            pass  # mantém em discovery
         prospect.save()
         logger.info(f"E-book enviado para prospect {prospect.id} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -205,7 +205,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         proposal = self.get_object()
-        if proposal.status not in ('sent', 'draft'):
+        if proposal.status not in ('sent', 'draft', 'negotiation', 'viewed'):
             return Response(
                 {'error': f'Proposta não pode ser aprovada (status atual: {proposal.status})'},
                 status=status.HTTP_400_BAD_REQUEST

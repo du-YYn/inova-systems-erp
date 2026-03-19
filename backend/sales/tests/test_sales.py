@@ -164,7 +164,7 @@ class TestProspect:
             'company_name': 'Startup XYZ',
             'contact_name': 'João Silva',
             'contact_email': 'joao@startup.com',
-            'status': 'lead_received',
+            'status': 'new',
             'source': 'website',
         }
         response = manager_client.post(self.url, payload)
@@ -173,7 +173,7 @@ class TestProspect:
     def test_pipeline_action(self, manager_client, db, manager_user):
         Prospect.objects.create(
             company_name='P1', contact_name='C1', contact_email='c1@test.com',
-            status='lead_received', source='website', created_by=manager_user
+            status='new', source='website', created_by=manager_user
         )
         Prospect.objects.create(
             company_name='P2', contact_name='C2', contact_email='c2@test.com',
@@ -182,17 +182,17 @@ class TestProspect:
         response = manager_client.get(f'{self.url}pipeline/')
         assert response.status_code == status.HTTP_200_OK
         statuses = [item['status'] for item in response.data]
-        assert 'lead_received' in statuses
+        assert 'new' in statuses
         assert 'qualified' in statuses
 
     def test_filter_by_status(self, manager_client, db, manager_user):
         Prospect.objects.create(
             company_name='Closed', contact_name='C', contact_email='c@t.com',
-            status='closed', source='website', created_by=manager_user
+            status='won', source='website', created_by=manager_user
         )
-        response = manager_client.get(self.url, {'status': 'closed'})
+        response = manager_client.get(self.url, {'status': 'won'})
         assert response.status_code == status.HTTP_200_OK
-        assert all(p['status'] == 'closed' for p in response.data['results'])
+        assert all(p['status'] == 'won' for p in response.data['results'])
 
 
 # ─── PROPOSAL ────────────────────────────────────────────────────────────────

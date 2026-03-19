@@ -12,14 +12,20 @@ class Customer(models.Model):
 
     SEGMENT_CHOICES = [
         ('startup', 'Startup'),
-        ('mid_size', 'Média Empresa'),
+        ('smb', 'Pequena/Média Empresa'),
         ('enterprise', 'Enterprise'),
         ('government', 'Governo'),
+        ('education', 'Educação'),
+        ('health', 'Saúde'),
+        ('finance', 'Financeiro'),
+        ('retail', 'Varejo'),
+        ('industry', 'Indústria'),
+        ('tech', 'Tecnologia'),
         ('other', 'Outro'),
     ]
 
     customer_type = models.CharField(max_length=2, choices=TYPE_CHOICES, default='PJ')
-    segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='mid_size')
+    segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='smb')
     company_name = models.CharField(max_length=200, blank=True)
     trading_name = models.CharField(max_length=200, blank=True)
     name = models.CharField(max_length=200, blank=True)
@@ -60,18 +66,16 @@ class Prospect(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('lead_received',  'Lead Recebido'),      # quiz preenchido, aguardando SDR
-        ('qualifying',     'Em Qualificação'),     # SDR iniciou conversa
-        ('qualified',      'Qualificado'),         # passou ≥3/4 critérios
-        ('not_qualified',  'Não Qualificado'),     # não atende critérios
-        ('scheduled',      'Agendado'),            # reunião marcada via Calendly
-        ('pre_meeting',    'Pré-Reunião'),          # sequência de comprometimento
-        ('no_show',        'Não Compareceu'),      # faltou à reunião
-        ('meeting_done',   'Reunião Realizada'),   # reunião aconteceu com o Closer
-        ('proposal_sent',  'Proposta Enviada'),    # proposta enviada após reunião
-        ('closed',         'Fechado'),             # projeto contratado
-        ('not_closed',     'Não Fechou'),          # reunião ok mas sem fechamento
-        ('follow_up',      'Em Follow-up'),        # sequência de reativação
+        ('new',           'Novo Lead'),            # lead entrou, aguardando SDR
+        ('qualifying',    'Em Qualificação'),      # SDR iniciou conversa
+        ('qualified',     'Oportunidade'),         # passou ≥3/4 critérios — virou oportunidade
+        ('disqualified',  'Desqualificado'),       # não atende critérios
+        ('discovery',     'Discovery'),            # reunião de levantamento/discovery
+        ('proposal',      'Proposta Enviada'),     # proposta enviada após discovery
+        ('negotiation',   'Em Negociação'),        # ajustes, objeções, condições
+        ('won',           'Ganho'),                # deal fechado — cliente conquistado
+        ('lost',          'Perdido'),              # deal perdido
+        ('follow_up',     'Em Follow-up'),         # sequência de reativação
     ]
 
     QUALIFICATION_LEVEL_CHOICES = [
@@ -91,13 +95,36 @@ class Prospect(models.Model):
         ('large',  'Grande'),
     ]
 
+    SERVICE_INTEREST_CHOICES = [
+        ('software_dev', 'Desenvolvimento de Software'),
+        ('automation',   'Automação de Processos'),
+        ('ai',           'Inteligência Artificial'),
+        ('consulting',   'Consultoria Técnica'),
+        ('support',      'Suporte e Manutenção'),
+        ('mixed',        'Múltiplos Serviços'),
+    ]
+
+    TEMPERATURE_CHOICES = [
+        ('hot',  'Quente'),
+        ('warm', 'Morno'),
+        ('cold', 'Frio'),
+    ]
+
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='prospects', null=True, blank=True)
     company_name = models.CharField(max_length=200)
     contact_name = models.CharField(max_length=200)
     contact_email = models.EmailField()
     contact_phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='website')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='lead_received')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    service_interest = models.CharField(
+        max_length=20, choices=SERVICE_INTEREST_CHOICES, blank=True,
+        help_text='Serviço de interesse principal do lead'
+    )
+    temperature = models.CharField(
+        max_length=10, choices=TEMPERATURE_CHOICES, default='warm',
+        help_text='Temperatura do lead: quente, morno ou frio'
+    )
     estimated_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     description = models.TextField(blank=True)
     next_action = models.TextField(blank=True)
@@ -154,10 +181,12 @@ class Prospect(models.Model):
 class Proposal(models.Model):
     TYPE_CHOICES = [
         ('software_dev', 'Desenvolvimento de Software'),
+        ('automation', 'Automação de Processos'),
+        ('ai', 'Inteligência Artificial'),
+        ('consulting', 'Consultoria Técnica'),
         ('maintenance', 'Manutenção'),
-        ('consulting', 'Consultoria'),
         ('support', 'Suporte'),
-        ('other', 'Outro'),
+        ('mixed', 'Múltiplos Serviços'),
     ]
 
     BILLING_TYPE_CHOICES = [
@@ -169,12 +198,12 @@ class Proposal(models.Model):
 
     STATUS_CHOICES = [
         ('draft', 'Rascunho'),
-        ('sent', 'Enviado'),
-        ('viewed', 'Visualizado'),
-        ('discussion', 'Em Discussão'),
-        ('approved', 'Aprovado'),
-        ('rejected', 'Rejeitado'),
-        ('expired', 'Expirado'),
+        ('sent', 'Enviada'),
+        ('viewed', 'Visualizada'),
+        ('negotiation', 'Em Negociação'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Recusada'),
+        ('expired', 'Expirada'),
     ]
 
     prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='proposals', null=True, blank=True)
@@ -225,11 +254,13 @@ class Proposal(models.Model):
 class Contract(models.Model):
     TYPE_CHOICES = [
         ('software_dev', 'Desenvolvimento de Software'),
+        ('automation', 'Automação de Processos'),
+        ('ai', 'Inteligência Artificial'),
+        ('consulting', 'Consultoria Técnica'),
         ('maintenance', 'Manutenção'),
         ('support', 'Suporte'),
-        ('consulting', 'Consultoria'),
         ('saas', 'SaaS/Assinatura'),
-        ('other', 'Outro'),
+        ('mixed', 'Múltiplos Serviços'),
     ]
 
     BILLING_TYPE_CHOICES = [
