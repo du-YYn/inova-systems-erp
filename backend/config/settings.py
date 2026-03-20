@@ -153,6 +153,7 @@ REST_FRAMEWORK = {
         'login': '5/minute',
         'password_reset': '3/hour',
         'two_factor': '10/hour',
+        'n8n': '300/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -175,6 +176,9 @@ JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+
+# ─── N8N INTEGRATION ─────────────────────────────────────────────────────────
+N8N_API_KEY = os.environ.get('N8N_API_KEY', '')
 
 # ─── CORS ──────────────────────────────────────────────────────────────────────
 

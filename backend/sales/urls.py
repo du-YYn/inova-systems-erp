@@ -15,5 +15,6 @@ router.register(r'win-loss', WinLossReasonViewSet)
 
 urlpatterns = [
     path('website-lead/', WebsiteLeadCreateView.as_view(), name='website-lead'),
+    path('n8n/', include('sales.n8n_urls')),
     path('', include(router.urls)),
 ]
