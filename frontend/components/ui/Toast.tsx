@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'warning';
@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((type: ToastType, message: string) => {
     const id = Math.random().toString(36).slice(2);
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => dismiss(id), 4000);
+    setTimeout(() => dismiss(id), 3500);
   }, [dismiss]);
 
   const success = useCallback((message: string) => toast('success', message), [toast]);
@@ -40,7 +40,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, success, error, warning }}>
       {children}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-80">
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm">
         {toasts.map(t => (
           <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
         ))}
@@ -50,42 +50,61 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
-  const [visible, setVisible] = useState(false);
+  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
+    requestAnimationFrame(() => setPhase('visible'));
+    timerRef.current = setTimeout(() => setPhase('exit'), 3000);
+    return () => clearTimeout(timerRef.current);
   }, []);
 
-  const styles: Record<ToastType, { bg: string; icon: React.ReactNode }> = {
+  useEffect(() => {
+    if (phase === 'exit') {
+      const id = setTimeout(() => onDismiss(toast.id), 300);
+      return () => clearTimeout(id);
+    }
+  }, [phase, toast.id, onDismiss]);
+
+  const styles: Record<ToastType, { bg: string; tint: string; icon: React.ReactNode }> = {
     success: {
-      bg: 'bg-white border-l-4 border-green-500',
+      bg: 'border-green-500',
+      tint: 'bg-green-50',
       icon: <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />,
     },
     error: {
-      bg: 'bg-white border-l-4 border-red-500',
+      bg: 'border-red-500',
+      tint: 'bg-red-50',
       icon: <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />,
     },
     warning: {
-      bg: 'bg-white border-l-4 border-yellow-500',
+      bg: 'border-yellow-500',
+      tint: 'bg-yellow-50',
       icon: <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />,
     },
   };
 
-  const { bg, icon } = styles[toast.type];
+  const { bg, tint, icon } = styles[toast.type];
 
   return (
     <div
       role="alert"
       aria-live="assertive"
-      className={`${bg} rounded-lg shadow-lg p-4 flex items-start gap-3 transition-all duration-300 ${
-        visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8'
+      onMouseEnter={() => clearTimeout(timerRef.current)}
+      onMouseLeave={() => { timerRef.current = setTimeout(() => setPhase('exit'), 1500); }}
+      className={`${tint} border-l-4 ${bg} rounded-lg shadow-lg p-4 flex items-start gap-3 transition-all duration-300 cursor-default ${
+        phase === 'visible'
+          ? 'opacity-100 translate-x-0 scale-100'
+          : phase === 'exit'
+          ? 'opacity-0 translate-x-8 scale-95'
+          : 'opacity-0 translate-x-8 scale-95'
       }`}
     >
       {icon}
-      <p className="text-sm text-gray-700 flex-1">{toast.message}</p>
+      <p className="text-sm text-gray-700 flex-1 leading-snug">{toast.message}</p>
       <button
-        onClick={() => onDismiss(toast.id)}
-        className="p-0.5 hover:bg-gray-100 rounded flex-shrink-0"
+        onClick={() => setPhase('exit')}
+        className="p-0.5 hover:bg-black/5 rounded flex-shrink-0 transition-colors"
       >
         <X className="w-4 h-4 text-gray-400" />
       </button>

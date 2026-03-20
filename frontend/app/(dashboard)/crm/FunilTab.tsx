@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
-  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar,
+  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -637,69 +637,49 @@ export default function FunilTab() {
       </div>
 
       {/* ─── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
-        ) : (
-          <>
-            {/* 1. Leads Recebidos */}
-            <div className="card card-hover p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <UserPlus className="w-5 h-5 text-blue-600" />
+      {(() => {
+        const kpiTotal = kpiLeads + kpiAgendados + kpiEmAndamento + kpiWonCount;
+        const kpiCards = [
+          { label: 'Leads', value: kpiLeads, icon: UserPlus, bg: 'bg-blue-50', color: 'text-blue-600', barColor: 'bg-blue-500' },
+          { label: 'Agendados', value: kpiAgendados, icon: Calendar, bg: 'bg-purple-50', color: 'text-purple-600', barColor: 'bg-purple-500' },
+          { label: 'Em Andamento', value: kpiEmAndamento, icon: CheckCircle, bg: 'bg-indigo-50', color: 'text-indigo-600', barColor: 'bg-indigo-500' },
+          { label: 'Fechados', value: kpiWonCount, icon: TrendingUp, bg: 'bg-green-50', color: 'text-green-600', barColor: 'bg-green-500', extra: kpiWonValue > 0 ? formatCurrency(kpiWonValue) : undefined },
+        ];
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {loading ? (
+              Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
+            ) : (
+              kpiCards.map(({ label, value, icon: Icon, bg, color, barColor, extra }) => (
+                <div key={label} className="card card-hover p-4 group">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-10 h-10 ${bg} rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110`}>
+                      <Icon className={`w-5 h-5 ${color}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide truncate">{label}</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
+                        {extra && <p className="text-xs text-[#A6864A] font-semibold tabular-nums">{extra}</p>}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Funnel progress bar */}
+                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${barColor} rounded-full transition-all duration-700 ease-out`}
+                      style={{ width: kpiTotal > 0 ? `${(value / kpiTotal) * 100}%` : '0%' }}
+                    />
+                  </div>
+                  {kpiTotal > 0 && (
+                    <p className="text-[10px] text-gray-400 mt-1 tabular-nums">{((value / kpiTotal) * 100).toFixed(0)}% do funil</p>
+                  )}
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Leads Recebidos</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiLeads}</p>
-                  <p className="text-xs text-gray-400">lead + em qualificação</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Agendados */}
-            <div className="card card-hover p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-5 h-5 text-purple-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Agendados</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiAgendados}</p>
-                  <p className="text-xs text-gray-400">reuniões agendadas</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. Em Andamento */}
-            <div className="card card-hover p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Em Andamento</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiEmAndamento}</p>
-                  <p className="text-xs text-gray-400">discovery + proposta</p>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Fechados */}
-            <div className="card card-hover p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Fechados</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiWonCount}</p>
-                  <p className="text-xs text-[#A6864A] font-semibold tabular-nums">{formatCurrency(kpiWonValue)}</p>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
+              ))
+            )}
+          </div>
+        );
+      })()}
 
       {/* ─── List View ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
@@ -735,8 +715,17 @@ export default function FunilTab() {
                 <tbody className="divide-y divide-gray-50">
                   {prospects.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-16 text-center text-gray-400 text-sm">
-                        Nenhum prospect encontrado
+                      <td colSpan={6} className="px-4 py-16 text-center">
+                        <div className="flex flex-col items-center">
+                          <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-3">
+                            <Target className="w-7 h-7 text-gray-300" />
+                          </div>
+                          <p className="text-sm text-gray-500 font-medium">Nenhum prospect encontrado</p>
+                          <p className="text-xs text-gray-400 mt-1">Tente ajustar a busca ou adicione um novo lead</p>
+                          <button onClick={openNewModal} className="mt-3 text-xs font-semibold text-[#A6864A] hover:text-[#8B6F3D] transition-colors">
+                            + Novo Lead
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -775,18 +764,36 @@ export default function FunilTab() {
                           {formatCurrency(prospect.estimated_value)}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="relative inline-block">
-                            <select
-                              value={prospect.status}
-                              onChange={e => handleStatusChange(prospect, e.target.value)}
+                          <div className="relative inline-block group">
+                            <button
                               disabled={updatingStatus === prospect.id}
-                              className={`pl-2 pr-6 py-1 rounded-full text-xs font-medium border-0 cursor-pointer appearance-none focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 ${statusColors[prospect.status] || 'bg-gray-100 text-gray-800'}`}
+                              className={`flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-sm hover:ring-1 hover:ring-black/5 disabled:opacity-50 ${statusColors[prospect.status] || 'bg-gray-100 text-gray-800'}`}
                             >
+                              {updatingStatus === prospect.id ? (
+                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <>
+                                  {statusLabels[prospect.status]}
+                                  <ChevronDown className="w-3 h-3 opacity-50" />
+                                </>
+                              )}
+                            </button>
+                            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
                               {Object.entries(statusLabels).map(([val, label]) => (
-                                <option key={val} value={val}>{label}</option>
+                                <button
+                                  key={val}
+                                  onClick={() => handleStatusChange(prospect, val)}
+                                  className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
+                                    prospect.status === val
+                                      ? 'bg-gray-50 font-semibold text-gray-900'
+                                      : 'text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[val]?.split(' ')[0] || 'bg-gray-200'}`} />
+                                  {label}
+                                </button>
                               ))}
-                            </select>
-                            <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none" />
+                            </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
@@ -894,10 +901,35 @@ export default function FunilTab() {
                             )}
                           </div>
                         )}
+                        {/* Score bar */}
+                        {prospect.qualification_score > 0 && (
+                          <div className="mb-2">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <span className="text-[10px] text-gray-400">Score</span>
+                              <span className="text-[10px] font-bold text-gray-500">{prospect.qualification_score}/5</span>
+                            </div>
+                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  prospect.qualification_score >= 4 ? 'bg-green-500' :
+                                  prospect.qualification_score >= 2 ? 'bg-yellow-500' : 'bg-red-400'
+                                }`}
+                                style={{ width: `${(prospect.qualification_score / 5) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#A6864A] tabular-nums">
-                            {formatCurrency(prospect.estimated_value)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-[#A6864A] tabular-nums">
+                              {formatCurrency(prospect.estimated_value)}
+                            </span>
+                            {prospect.days_since_created > 0 && (
+                              <span className={`text-[10px] tabular-nums ${prospect.days_since_created > 14 ? 'text-red-400' : prospect.days_since_created > 7 ? 'text-yellow-500' : 'text-gray-400'}`}>
+                                {prospect.days_since_created}d
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-0.5">
                             <button
                               onClick={() => openEditModal(prospect)}
@@ -917,8 +949,16 @@ export default function FunilTab() {
                     ))}
                   </div>
                   {col.length === 0 && (
-                    <div className="border-2 border-dashed border-gray-100 rounded-xl p-5 text-center">
-                      <p className="text-xs text-gray-300">Sem prospects</p>
+                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
+                      <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <Target className="w-5 h-5 text-gray-300" />
+                      </div>
+                      <p className="text-xs text-gray-400 font-medium">Nenhum lead nesta etapa</p>
+                      {status === 'new' && (
+                        <button onClick={openNewModal} className="text-[10px] text-[#A6864A] font-semibold mt-2 hover:underline">
+                          + Adicionar lead
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
