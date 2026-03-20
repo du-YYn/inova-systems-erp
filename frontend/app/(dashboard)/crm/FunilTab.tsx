@@ -94,50 +94,53 @@ const statusLabels: Record<string, string> = {
   new: 'Lead Recebido',
   qualifying: 'Em Qualificação',
   qualified: 'Reunião Agendada',
-  no_show: 'No-Show',
   discovery: 'Discovery',
   proposal: 'Proposta Enviada',
   won: 'Fechado',
+  follow_up: 'Follow-Up',
   lost: 'Perdido',
   disqualified: 'Desqualificado',
-  follow_up: 'Em Follow-up',
 };
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
   qualifying: 'bg-yellow-100 text-yellow-800',
   qualified: 'bg-purple-100 text-purple-800',
-  no_show: 'bg-orange-100 text-orange-800',
   discovery: 'bg-indigo-100 text-indigo-800',
   proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
+  follow_up: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 text-gray-700',
   disqualified: 'bg-red-100 text-red-800',
-  follow_up: 'bg-pink-100 text-pink-800',
 };
 
 const statusBadgeVariant: Record<string, BadgeVariant> = {
   new: 'info',
   qualifying: 'warning',
   qualified: 'purple',
-  no_show: 'error',
   discovery: 'info',
   proposal: 'gold',
   won: 'success',
+  follow_up: 'warning',
   lost: 'neutral',
   disqualified: 'error',
-  follow_up: 'warning',
 };
 
-// 7 colunas ativas do kanban — Perdido/Desqualificado/Follow-up só na lista
+const FOLLOW_UP_REASONS = [
+  { value: 'nao_agendou', label: 'Não Agendou', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-orange-100 text-orange-700' },
+  { value: 'nao_fechou', label: 'Não Fechou', color: 'bg-red-100 text-red-700' },
+];
+
+// 7 colunas do kanban — Perdido/Desqualificado só na lista
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
   'qualified',
-  'no_show',
   'discovery',
   'proposal',
   'won',
+  'follow_up',
 ];
 
 const sourceOptions = [
@@ -285,6 +288,15 @@ export default function FunilTab() {
   });
   const [savingLoss, setSavingLoss] = useState(false);
 
+  // Modal de Follow-Up
+  const [followUpModalProspect, setFollowUpModalProspect] = useState<Prospect | null>(null);
+  const [followUpForm, setFollowUpForm] = useState({
+    reason: '',
+    next_contact_date: '',
+    notes: '',
+  });
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
   const getHeaders = () => ({ 'Content-Type': 'application/json' });
 
@@ -340,7 +352,7 @@ export default function FunilTab() {
   ).length;
 
   const kpiAgendados = kpiSource.filter(p =>
-    p.status === 'qualified' || p.status === 'no_show'
+    p.status === 'qualified'
   ).length;
 
   const kpiEmAndamento = kpiSource.filter(p =>
@@ -459,6 +471,12 @@ export default function FunilTab() {
       setLossForm({ reason: '', remarketing: '', notes: '' });
       return;
     }
+    // Bloquear movimentação para Follow-Up sem modal de motivo
+    if (newStatus === 'follow_up') {
+      setFollowUpModalProspect(prospect);
+      setFollowUpForm({ reason: '', next_contact_date: '', notes: '' });
+      return;
+    }
     setUpdatingStatus(prospect.id);
     try {
       const res = await fetch(`${apiUrl}/sales/prospects/${prospect.id}/`, {
@@ -512,6 +530,49 @@ export default function FunilTab() {
       toast.error('Erro ao registrar perda.');
     } finally {
       setSavingLoss(false);
+    }
+  };
+
+  const handleFollowUpSubmit = async () => {
+    if (!followUpModalProspect || !followUpForm.reason || !followUpForm.next_contact_date) return;
+    setSavingFollowUp(true);
+    try {
+      const followUpLabel = FOLLOW_UP_REASONS.find(r => r.value === followUpForm.reason)?.label || followUpForm.reason;
+      const res = await fetch(`${apiUrl}/sales/prospects/${followUpModalProspect.id}/`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          status: 'follow_up',
+          next_action: `[${followUpLabel}] ${followUpForm.notes}`.trim(),
+          next_action_date: followUpForm.next_contact_date,
+        }),
+      });
+      if (!res.ok) throw new Error();
+
+      // Registrar atividade de follow-up
+      await fetch(`${apiUrl}/sales/prospect-activities/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          prospect: followUpModalProspect.id,
+          activity_type: 'other',
+          subject: `Follow-Up: ${followUpLabel}`,
+          description: followUpForm.notes || '',
+          next_action: `Retomar contato em ${followUpForm.next_contact_date}`,
+          next_action_date: followUpForm.next_contact_date,
+        }),
+      });
+
+      toast.success('Lead movido para Follow-Up.');
+      setFollowUpModalProspect(null);
+      fetchProspects();
+      fetchAllProspects();
+    } catch {
+      toast.error('Erro ao registrar follow-up.');
+    } finally {
+      setSavingFollowUp(false);
     }
   };
 
@@ -604,7 +665,7 @@ export default function FunilTab() {
                 <div className="min-w-0">
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Agendados</p>
                   <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiAgendados}</p>
-                  <p className="text-xs text-gray-400">reunião agendada + no-show</p>
+                  <p className="text-xs text-gray-400">reuniões agendadas</p>
                 </div>
               </div>
             </div>
@@ -813,6 +874,26 @@ export default function FunilTab() {
                             </span>
                           )}
                         </div>
+                        {/* Follow-Up sub-type badge + next contact */}
+                        {prospect.status === 'follow_up' && prospect.next_action && (
+                          <div className="mb-2">
+                            {FOLLOW_UP_REASONS.map(r => {
+                              if (prospect.next_action?.includes(`[${r.label}]`)) {
+                                return (
+                                  <span key={r.value} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.color}`}>
+                                    {r.label}
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })}
+                            {prospect.next_action_date && (
+                              <p className="text-[10px] text-gray-500 mt-1">
+                                Retomar: {new Date(prospect.next_action_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-[#A6864A] tabular-nums">
                             {formatCurrency(prospect.estimated_value)}
@@ -1196,6 +1277,109 @@ export default function FunilTab() {
                   disabled={!lossForm.reason || !lossForm.remarketing}
                 >
                   Confirmar Perda
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal Obrigatório — Follow-Up ───────────────────────────────── */}
+      {followUpModalProspect && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Mover para Follow-Up</h2>
+              <button
+                onClick={() => setFollowUpModalProspect(null)}
+                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 mb-5">
+              <p className="text-xs text-orange-700 font-medium">
+                Informe o motivo e a data de retomada para que o lead não caia no esquecimento.
+              </p>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-4">
+              Lead: <span className="font-semibold text-gray-900">{followUpModalProspect.company_name}</span>
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className={labelInput}>Motivo do Follow-Up *</label>
+                <div className="flex flex-col gap-2">
+                  {FOLLOW_UP_REASONS.map((r) => (
+                    <label
+                      key={r.value}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
+                        followUpForm.reason === r.value
+                          ? 'border-[#A6864A] bg-[#A6864A]/5 ring-1 ring-[#A6864A]/20'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="followup_reason"
+                        value={r.value}
+                        checked={followUpForm.reason === r.value}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, reason: e.target.value })}
+                        className="text-[#A6864A]"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">{r.label}</span>
+                        <p className="text-xs text-gray-400">
+                          {r.value === 'nao_agendou' && 'Qualificou mas não marcou reunião'}
+                          {r.value === 'nao_compareceu' && 'Agendou mas não compareceu'}
+                          {r.value === 'nao_fechou' && 'Fez discovery/proposta mas não fechou'}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelInput}>Próximo contato em *</label>
+                <input
+                  type="date"
+                  value={followUpForm.next_contact_date}
+                  onChange={(e) => setFollowUpForm({ ...followUpForm, next_contact_date: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className={labelInput}>Observação</label>
+                <textarea
+                  value={followUpForm.notes}
+                  onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
+                  rows={2}
+                  className="input-field resize-none"
+                  placeholder="Contexto adicional..."
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => setFollowUpModalProspect(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  loading={savingFollowUp}
+                  className="flex-1"
+                  onClick={handleFollowUpSubmit}
+                  disabled={!followUpForm.reason || !followUpForm.next_contact_date}
+                >
+                  Confirmar Follow-Up
                 </Button>
               </div>
             </div>
