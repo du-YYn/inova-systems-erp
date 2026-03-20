@@ -6,14 +6,16 @@ import FunilTab from './FunilTab';
 import PropostasTab from './PropostasTab';
 import ContratosTab from './ContratosTab';
 import ContasTab from './ContasTab';
+import AtividadesTab from './AtividadesTab';
 
-type Tab = 'funil' | 'propostas' | 'contratos' | 'contas';
+type Tab = 'funil' | 'propostas' | 'contratos' | 'contas' | 'atividades';
 
 const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'funil', label: 'Funil', icon: Target },
   { key: 'propostas', label: 'Propostas', icon: FileText },
   { key: 'contratos', label: 'Contratos', icon: ScrollText },
   { key: 'contas', label: 'Contas', icon: Building2 },
+  { key: 'atividades', label: 'Atividades', icon: Activity },
 ];
 
 export default function CRMPage() {
@@ -28,21 +30,28 @@ export default function CRMPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-card mb-6 w-fit">
+      <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-card mb-6 w-fit overflow-x-auto">
         {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap ${
               activeTab === key
                 ? 'bg-[#A6864A] text-white shadow-sm'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             }`}
           >
             <Icon className="w-4 h-4" />
-            {label}
+            <span className="hidden sm:inline">{label}</span>
           </button>
         ))}
+      </div>
+
+      {/* Keyboard shortcut hint */}
+      <div className="hidden md:flex items-center gap-4 mb-4 text-[10px] text-gray-400">
+        <span><kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px]">Ctrl+N</kbd> Novo Lead</span>
+        <span><kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px]">Ctrl+K</kbd> Buscar</span>
+        <span><kbd className="px-1 py-0.5 bg-gray-100 rounded text-[10px]">Esc</kbd> Fechar</span>
       </div>
 
       {/* Tab content */}
@@ -50,6 +59,7 @@ export default function CRMPage() {
       {activeTab === 'propostas' && <PropostasTab />}
       {activeTab === 'contratos' && <ContratosTab />}
       {activeTab === 'contas' && <ContasTab />}
+      {activeTab === 'atividades' && <AtividadesTab />}
     </div>
   );
 }

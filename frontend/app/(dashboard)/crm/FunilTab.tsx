@@ -363,6 +363,49 @@ export default function FunilTab() {
   });
   const [savingLoss, setSavingLoss] = useState(false);
 
+  // Filtros avançados
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterTemp, setFilterTemp] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === prospects.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(prospects.map(p => p.id)));
+    }
+  };
+  const handleBulkStatusChange = async (newStatus: string) => {
+    if (selectedIds.size === 0) return;
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map(id =>
+          fetch(`${apiUrl}/sales/prospects/${id}/`, {
+            method: 'PATCH',
+            headers: getHeaders(),
+            credentials: 'include',
+            body: JSON.stringify({ status: newStatus }),
+          })
+        )
+      );
+      toast.success(`${selectedIds.size} leads atualizados.`);
+      setSelectedIds(new Set());
+      fetchProspects();
+      fetchAllProspects();
+    } catch {
+      toast.error('Erro ao atualizar leads.');
+    }
+  };
+
   // Modal de Follow-Up
   const [followUpModalProspect, setFollowUpModalProspect] = useState<Prospect | null>(null);
   const [followUpForm, setFollowUpForm] = useState({
@@ -417,6 +460,32 @@ export default function FunilTab() {
     const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
     return () => clearTimeout(id);
   }, [searchInput]);
+
+  // ─── Keyboard shortcuts ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+N or Cmd+N — new lead
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        openNewModal();
+      }
+      // Ctrl+K or Cmd+K — focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchEl = document.querySelector<HTMLInputElement>('input[placeholder*="Buscar"]');
+        searchEl?.focus();
+      }
+      // Escape — close modals
+      if (e.key === 'Escape') {
+        if (lossModalProspect) setLossModalProspect(null);
+        else if (followUpModalProspect) setFollowUpModalProspect(null);
+        else if (showModal) setShowModal(false);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [showModal, lossModalProspect, followUpModalProspect]);
 
   // ─── Drag-and-drop handlers ──────────────────────────────────────────────
 
@@ -782,17 +851,92 @@ export default function FunilTab() {
       {/* ─── List View ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div className="card overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar prospects..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                className="input-field pl-9"
-              />
+          <div className="p-4 border-b border-gray-100 space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar leads..."
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  className="input-field pl-9"
+                />
+              </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                  showFilters || filterStatus || filterTemp
+                    ? 'bg-[#A6864A]/10 border-[#A6864A]/30 text-[#A6864A]'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                <Target className="w-3.5 h-3.5" />
+                Filtros
+                {(filterStatus || filterTemp) && (
+                  <span className="w-4 h-4 bg-[#A6864A] text-white rounded-full text-[10px] flex items-center justify-center">
+                    {[filterStatus, filterTemp].filter(Boolean).length}
+                  </span>
+                )}
+              </button>
             </div>
+
+            {/* Filtros avançados */}
+            {showFilters && (
+              <div className="flex items-center gap-2 flex-wrap animate-fade-in">
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:ring-1 focus:ring-[#A6864A]/30"
+                >
+                  <option value="">Todos os status</option>
+                  {Object.entries(statusLabels).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterTemp}
+                  onChange={(e) => setFilterTemp(e.target.value)}
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:ring-1 focus:ring-[#A6864A]/30"
+                >
+                  <option value="">Todas as temperaturas</option>
+                  <option value="hot">Quente</option>
+                  <option value="warm">Morno</option>
+                  <option value="cold">Frio</option>
+                </select>
+                {(filterStatus || filterTemp) && (
+                  <button
+                    onClick={() => { setFilterStatus(''); setFilterTemp(''); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Bulk actions bar */}
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 bg-[#A6864A]/5 border border-[#A6864A]/20 rounded-lg px-3 py-2 animate-fade-in">
+                <span className="text-xs font-medium text-[#A6864A]">{selectedIds.size} selecionado(s)</span>
+                <select
+                  onChange={(e) => { if (e.target.value) handleBulkStatusChange(e.target.value); e.target.value = ''; }}
+                  className="text-xs px-2 py-1 rounded border border-[#A6864A]/30 bg-white text-gray-600"
+                  defaultValue=""
+                >
+                  <option value="" disabled>Mover para...</option>
+                  {Object.entries(statusLabels).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Mobile card view */}
@@ -849,6 +993,10 @@ export default function FunilTab() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50/80 border-b border-gray-100">
+                    <th className="px-3 py-3 w-8">
+                      <input type="checkbox" checked={selectedIds.size === prospects.length && prospects.length > 0}
+                        onChange={toggleSelectAll} className="w-3.5 h-3.5 rounded text-[#A6864A] focus:ring-[#A6864A]/30" />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Contato</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Origem</th>
@@ -860,7 +1008,7 @@ export default function FunilTab() {
                 <tbody className="divide-y divide-gray-50">
                   {prospects.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-16 text-center">
+                      <td colSpan={7} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center">
                           <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-3">
                             <Target className="w-7 h-7 text-gray-300" />
@@ -875,7 +1023,11 @@ export default function FunilTab() {
                     </tr>
                   ) : (
                     prospects.map((prospect) => (
-                      <tr key={prospect.id} className="hover:bg-gray-50/60 transition-colors">
+                      <tr key={prospect.id} className={`hover:bg-gray-50/60 transition-colors ${selectedIds.has(prospect.id) ? 'bg-[#A6864A]/5' : ''}`}>
+                        <td className="px-3 py-3 w-8">
+                          <input type="checkbox" checked={selectedIds.has(prospect.id)}
+                            onChange={() => toggleSelect(prospect.id)} className="w-3.5 h-3.5 rounded text-[#A6864A] focus:ring-[#A6864A]/30" />
+                        </td>
                         {/* Empresa + qualif badges */}
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-900 text-sm">{prospect.company_name}</p>
