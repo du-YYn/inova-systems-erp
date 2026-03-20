@@ -22,6 +22,8 @@ interface Prospect {
   contact_phone: string;
   source: string;
   status: string;
+  service_interest: string;
+  temperature: string;
   estimated_value: number;
   description: string;
   next_action: string;
@@ -47,30 +49,38 @@ interface Prospect {
   meeting_attended: boolean | null;
   // post-meeting
   ebook_sent_at: string | null;
+  meeting_transcript: string;
   days_since_created: number;
 }
 
 interface ProspectForm {
+  // Seção 1 — Identificação
   company_name: string;
   contact_name: string;
   contact_email: string;
   contact_phone: string;
   source: string;
   status: string;
-  estimated_value: string;
-  description: string;
-  next_action: string;
-  next_action_date: string;
+  service_interest: string;
+  // Seção 2 — Qualificação
+  company_size: string;
   qualification_level: string;
   usage_type: string;
-  company_size: string;
-  has_operation: boolean | null;
+  estimated_value: string;
   has_budget: boolean | null;
   is_decision_maker: boolean | null;
   has_urgency: boolean | null;
+  has_operation: boolean | null;
+  // Seção 3 — Briefing SDR
+  description: string;
+  temperature: string;
+  next_action: string;
+  next_action_date: string;
+  // Seção 4 — Notas do Closer
   closer_name: string;
   meeting_scheduled_at: string;
   meeting_link: string;
+  meeting_transcript: string;
 }
 
 type ViewMode = 'list' | 'pipeline';
@@ -81,15 +91,15 @@ type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'purple' | 'gold'
 const PAGE_SIZE = 10;
 
 const statusLabels: Record<string, string> = {
-  new: 'Novo Lead',
+  new: 'Lead Recebido',
   qualifying: 'Em Qualificação',
-  qualified: 'Oportunidade',
-  disqualified: 'Desqualificado',
+  qualified: 'Reunião Agendada',
+  no_show: 'No-Show',
   discovery: 'Discovery',
   proposal: 'Proposta Enviada',
-  negotiation: 'Em Negociação',
-  won: 'Ganho',
+  won: 'Fechado',
   lost: 'Perdido',
+  disqualified: 'Desqualificado',
   follow_up: 'Em Follow-up',
 };
 
@@ -97,12 +107,12 @@ const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
   qualifying: 'bg-yellow-100 text-yellow-800',
   qualified: 'bg-purple-100 text-purple-800',
-  disqualified: 'bg-red-100 text-red-800',
+  no_show: 'bg-orange-100 text-orange-800',
   discovery: 'bg-indigo-100 text-indigo-800',
-  proposal: 'bg-orange-100 text-orange-800',
-  negotiation: 'bg-amber-100 text-amber-800',
+  proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
   lost: 'bg-gray-100 text-gray-700',
+  disqualified: 'bg-red-100 text-red-800',
   follow_up: 'bg-pink-100 text-pink-800',
 };
 
@@ -110,22 +120,23 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   new: 'info',
   qualifying: 'warning',
   qualified: 'purple',
-  disqualified: 'error',
+  no_show: 'error',
   discovery: 'info',
-  proposal: 'warning',
-  negotiation: 'gold',
+  proposal: 'gold',
   won: 'success',
   lost: 'neutral',
-  follow_up: 'gold',
+  disqualified: 'error',
+  follow_up: 'warning',
 };
 
+// 7 colunas ativas do kanban — Perdido/Desqualificado/Follow-up só na lista
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
   'qualified',
+  'no_show',
   'discovery',
   'proposal',
-  'negotiation',
   'won',
 ];
 
@@ -139,27 +150,55 @@ const sourceOptions = [
   { value: 'other', label: 'Outro' },
 ];
 
+const serviceInterestOptions = [
+  { value: 'software_dev', label: 'Desenvolvimento Web' },
+  { value: 'mobile', label: 'Aplicativo Mobile' },
+  { value: 'automation', label: 'Automação' },
+  { value: 'ai', label: 'Inteligência Artificial' },
+  { value: 'consulting', label: 'Consultoria' },
+  { value: 'mixed', label: 'Indefinido / Múltiplos' },
+];
+
+const temperatureLabels: Record<string, string> = {
+  hot: 'Quente',
+  warm: 'Morno',
+  cold: 'Frio',
+};
+
+const temperatureColors: Record<string, string> = {
+  hot: 'bg-red-100 text-red-700',
+  warm: 'bg-yellow-100 text-yellow-700',
+  cold: 'bg-blue-100 text-blue-700',
+};
+
 const EMPTY_FORM: ProspectForm = {
+  // Seção 1
   company_name: '',
   contact_name: '',
   contact_email: '',
   contact_phone: '',
   source: 'website',
   status: 'new',
-  estimated_value: '',
-  description: '',
-  next_action: '',
-  next_action_date: '',
+  service_interest: '',
+  // Seção 2
+  company_size: '',
   qualification_level: '',
   usage_type: '',
-  company_size: '',
-  has_operation: null,
+  estimated_value: '',
   has_budget: null,
   is_decision_maker: null,
   has_urgency: null,
+  has_operation: null,
+  // Seção 3
+  description: '',
+  temperature: 'warm',
+  next_action: '',
+  next_action_date: '',
+  // Seção 4
   closer_name: '',
   meeting_scheduled_at: '',
   meeting_link: '',
+  meeting_transcript: '',
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -237,6 +276,15 @@ export default function FunilTab() {
   const [confirmDelete, setConfirmDelete] = useState<Prospect | null>(null);
   const [formData, setFormData] = useState<ProspectForm>(EMPTY_FORM);
 
+  // Modal de motivo de perda
+  const [lossModalProspect, setLossModalProspect] = useState<Prospect | null>(null);
+  const [lossForm, setLossForm] = useState({
+    reason: '',
+    remarketing: '',
+    notes: '',
+  });
+  const [savingLoss, setSavingLoss] = useState(false);
+
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
   const getHeaders = () => ({ 'Content-Type': 'application/json' });
 
@@ -291,10 +339,12 @@ export default function FunilTab() {
     p.status === 'new' || p.status === 'qualifying'
   ).length;
 
-  const kpiQualified = kpiSource.filter(p => p.status === 'qualified').length;
+  const kpiAgendados = kpiSource.filter(p =>
+    p.status === 'qualified' || p.status === 'no_show'
+  ).length;
 
-  const kpiDiscovery = kpiSource.filter(p =>
-    p.status === 'discovery' || p.status === 'proposal' || p.status === 'negotiation'
+  const kpiEmAndamento = kpiSource.filter(p =>
+    p.status === 'discovery' || p.status === 'proposal'
   ).length;
 
   const wonProspects = kpiSource.filter(p => p.status === 'won');
@@ -318,20 +368,23 @@ export default function FunilTab() {
       contact_phone: p.contact_phone || '',
       source: p.source || 'website',
       status: p.status,
-      estimated_value: p.estimated_value ? String(p.estimated_value) : '',
-      description: p.description || '',
-      next_action: p.next_action || '',
-      next_action_date: p.next_action_date || '',
+      service_interest: p.service_interest || '',
+      company_size: p.company_size || '',
       qualification_level: p.qualification_level || '',
       usage_type: p.usage_type || '',
-      company_size: p.company_size || '',
-      has_operation: p.has_operation ?? null,
+      estimated_value: p.estimated_value ? String(p.estimated_value) : '',
       has_budget: p.has_budget ?? null,
       is_decision_maker: p.is_decision_maker ?? null,
       has_urgency: p.has_urgency ?? null,
+      has_operation: p.has_operation ?? null,
+      description: p.description || '',
+      temperature: p.temperature || 'warm',
+      next_action: p.next_action || '',
+      next_action_date: p.next_action_date || '',
       closer_name: p.closer_name || '',
       meeting_scheduled_at: p.meeting_scheduled_at || '',
       meeting_link: p.meeting_link || '',
+      meeting_transcript: p.meeting_transcript || '',
     });
     setShowModal(true);
   };
@@ -352,26 +405,33 @@ export default function FunilTab() {
 
       // Build payload — strip empty strings for optional fields
       const payload: Record<string, unknown> = {
+        // Seção 1
         company_name: formData.company_name,
         contact_name: formData.contact_name,
         contact_email: formData.contact_email,
         contact_phone: formData.contact_phone || '',
         source: formData.source,
         status: formData.status,
-        estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : 0,
-        description: formData.description,
-        next_action: formData.next_action,
-        next_action_date: formData.next_action_date || null,
+        service_interest: formData.service_interest,
+        // Seção 2
+        company_size: formData.company_size,
         qualification_level: formData.qualification_level,
         usage_type: formData.usage_type,
-        company_size: formData.company_size,
-        has_operation: formData.has_operation,
+        estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : 0,
         has_budget: formData.has_budget,
         is_decision_maker: formData.is_decision_maker,
         has_urgency: formData.has_urgency,
+        has_operation: formData.has_operation,
+        // Seção 3
+        description: formData.description,
+        temperature: formData.temperature,
+        next_action: formData.next_action,
+        next_action_date: formData.next_action_date || null,
+        // Seção 4
         closer_name: formData.closer_name,
         meeting_scheduled_at: formData.meeting_scheduled_at || null,
         meeting_link: formData.meeting_link,
+        meeting_transcript: formData.meeting_transcript,
       };
 
       const res = await fetch(url, {
@@ -393,6 +453,12 @@ export default function FunilTab() {
   };
 
   const handleStatusChange = async (prospect: Prospect, newStatus: string) => {
+    // Bloquear movimentação para Perdido sem modal de motivo
+    if (newStatus === 'lost') {
+      setLossModalProspect(prospect);
+      setLossForm({ reason: '', remarketing: '', notes: '' });
+      return;
+    }
     setUpdatingStatus(prospect.id);
     try {
       const res = await fetch(`${apiUrl}/sales/prospects/${prospect.id}/`, {
@@ -409,6 +475,43 @@ export default function FunilTab() {
       toast.error('Erro ao atualizar status.');
     } finally {
       setUpdatingStatus(null);
+    }
+  };
+
+  const handleLossSubmit = async () => {
+    if (!lossModalProspect || !lossForm.reason || !lossForm.remarketing) return;
+    setSavingLoss(true);
+    try {
+      // Atualizar status para perdido
+      const res = await fetch(`${apiUrl}/sales/prospects/${lossModalProspect.id}/`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({ status: 'lost' }),
+      });
+      if (!res.ok) throw new Error();
+
+      // Registrar motivo de perda via win-loss
+      await fetch(`${apiUrl}/sales/win-loss/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        credentials: 'include',
+        body: JSON.stringify({
+          prospect: lossModalProspect.id,
+          result: 'lost',
+          reason: lossForm.reason,
+          notes: `${lossForm.remarketing === 'sim' ? '[REMARKETING] ' : ''}${lossForm.notes}`,
+        }),
+      });
+
+      toast.success('Lead movido para Perdido.');
+      setLossModalProspect(null);
+      fetchProspects();
+      fetchAllProspects();
+    } catch {
+      toast.error('Erro ao registrar perda.');
+    } finally {
+      setSavingLoss(false);
     }
   };
 
@@ -436,8 +539,8 @@ export default function FunilTab() {
   const labelInput = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5';
 
   const qualScoreBadgeColor = (score: number) => {
-    if (score >= 3) return 'bg-green-100 text-green-700';
-    if (score === 2) return 'bg-yellow-100 text-yellow-700';
+    if (score >= 4) return 'bg-green-100 text-green-700';
+    if (score >= 2) return 'bg-yellow-100 text-yellow-700';
     return 'bg-red-100 text-red-700';
   };
 
@@ -492,15 +595,16 @@ export default function FunilTab() {
               </div>
             </div>
 
-            {/* 2. Qualificados */}
+            {/* 2. Agendados */}
             <div className="card card-hover p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-5 h-5 text-purple-600" />
+                  <Calendar className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Qualificados</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiQualified}</p>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Agendados</p>
+                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiAgendados}</p>
+                  <p className="text-xs text-gray-400">reunião agendada + no-show</p>
                 </div>
               </div>
             </div>
@@ -509,24 +613,24 @@ export default function FunilTab() {
             <div className="card card-hover p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Calendar className="w-5 h-5 text-indigo-600" />
+                  <CheckCircle className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Em Andamento</p>
-                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiDiscovery}</p>
-                  <p className="text-xs text-gray-400">discovery + proposta + negociação</p>
+                  <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiEmAndamento}</p>
+                  <p className="text-xs text-gray-400">discovery + proposta</p>
                 </div>
               </div>
             </div>
 
-            {/* 4. Ganhos */}
+            {/* 4. Fechados */}
             <div className="card card-hover p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
                   <TrendingUp className="w-5 h-5 text-green-600" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Ganhos</p>
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide truncate">Fechados</p>
                   <p className="text-lg font-bold text-gray-900 tabular-nums">{kpiWonCount}</p>
                   <p className="text-xs text-[#A6864A] font-semibold tabular-nums">{formatCurrency(kpiWonValue)}</p>
                 </div>
@@ -588,7 +692,7 @@ export default function FunilTab() {
                             )}
                             {prospect.qualification_score > 0 && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${qualScoreBadgeColor(prospect.qualification_score)}`}>
-                                {prospect.qualification_score}/4
+                                {prospect.qualification_score}/5
                               </span>
                             )}
                             {prospect.meeting_scheduled_at && (
@@ -681,18 +785,25 @@ export default function FunilTab() {
                   <div className="flex flex-col gap-2">
                     {col.map(prospect => (
                       <div key={prospect.id} className="card card-hover p-3 cursor-default">
-                        <p className="text-sm font-semibold text-gray-900 mb-0.5">{prospect.company_name}</p>
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-sm font-semibold text-gray-900">{prospect.company_name}</p>
+                          {prospect.temperature && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
+                              {temperatureLabels[prospect.temperature] || prospect.temperature}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-400 mb-1">{prospect.contact_name}</p>
-                        {/* Qualification badges */}
+                        {/* Badges */}
                         <div className="flex items-center gap-1 flex-wrap mb-2">
-                          {prospect.qualification_level && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
-                              N{prospect.qualification_level}
+                          {prospect.service_interest && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {serviceInterestOptions.find(o => o.value === prospect.service_interest)?.label || prospect.service_interest}
                             </span>
                           )}
                           {prospect.qualification_score > 0 && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${qualScoreBadgeColor(prospect.qualification_score)}`}>
-                              {prospect.qualification_score}/4
+                              {prospect.qualification_score}/5
                             </span>
                           )}
                           {prospect.meeting_scheduled_at && (
@@ -754,72 +865,67 @@ export default function FunilTab() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* ── Base info ── */}
-              <div>
-                <label className={labelInput}>Empresa *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.company_name}
-                  onChange={(e) => setField('company_name', e.target.value)}
-                  className="input-field"
-                  placeholder="Nome da empresa"
-                />
-              </div>
-              <div>
-                <label className={labelInput}>Contato *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.contact_name}
-                  onChange={(e) => setField('contact_name', e.target.value)}
-                  className="input-field"
-                  placeholder="Nome do contato"
-                />
-              </div>
-              <div>
-                <label className={labelInput}>Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.contact_email}
-                  onChange={(e) => setField('contact_email', e.target.value)}
-                  className="input-field"
-                  placeholder="email@empresa.com"
-                />
-              </div>
-              <div>
-                <label className={labelInput}>Telefone</label>
-                <input
-                  type="text"
-                  value={formData.contact_phone}
-                  onChange={(e) => setField('contact_phone', e.target.value)}
-                  className="input-field"
-                  placeholder="(11) 99999-9999"
-                />
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelInput}>Origem</label>
-                  <select
-                    value={formData.source}
-                    onChange={(e) => setField('source', e.target.value)}
-                    className="input-field bg-white"
-                  >
-                    {sourceOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+              {/* ══════════ SEÇÃO 1 — IDENTIFICAÇÃO ══════════ */}
+              <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Seção 1 — Identificação</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Nome completo *</label>
+                    <input type="text" required value={formData.contact_name}
+                      onChange={(e) => setField('contact_name', e.target.value)}
+                      className="input-field" placeholder="Nome do contato" />
+                  </div>
+                  <div>
+                    <label className={labelInput}>Empresa *</label>
+                    <input type="text" required value={formData.company_name}
+                      onChange={(e) => setField('company_name', e.target.value)}
+                      className="input-field" placeholder="Nome da empresa" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>WhatsApp *</label>
+                    <input type="text" required value={formData.contact_phone}
+                      onChange={(e) => setField('contact_phone', e.target.value)}
+                      className="input-field" placeholder="(11) 99999-9999" />
+                  </div>
+                  <div>
+                    <label className={labelInput}>E-mail *</label>
+                    <input type="email" required value={formData.contact_email}
+                      onChange={(e) => setField('contact_email', e.target.value)}
+                      className="input-field" placeholder="email@empresa.com" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Tipo de Projeto</label>
+                    <select value={formData.service_interest}
+                      onChange={(e) => setField('service_interest', e.target.value)}
+                      className="input-field bg-white">
+                      <option value="">Selecionar</option>
+                      {serviceInterestOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelInput}>Canal de Origem</label>
+                    <select value={formData.source}
+                      onChange={(e) => setField('source', e.target.value)}
+                      className="input-field bg-white">
+                      {sourceOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 {editingProspect && (
                   <div>
                     <label className={labelInput}>Status</label>
-                    <select
-                      value={formData.status}
+                    <select value={formData.status}
                       onChange={(e) => setField('status', e.target.value)}
-                      className="input-field bg-white"
-                    >
+                      className="input-field bg-white">
                       {Object.entries(statusLabels).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
                       ))}
@@ -828,161 +934,146 @@ export default function FunilTab() {
                 )}
               </div>
 
-              <div>
-                <label className={labelInput}>Valor Estimado (R$)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.estimated_value}
-                  onChange={(e) => setField('estimated_value', e.target.value)}
-                  className="input-field"
-                  placeholder="0,00"
-                />
-              </div>
-              <div>
-                <label className={labelInput}>Descrição</label>
-                <textarea
-                  value={formData.description}
-                  rows={3}
-                  onChange={(e) => setField('description', e.target.value)}
-                  className="input-field resize-none"
-                  placeholder="Observações sobre o prospect..."
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelInput}>Próxima ação</label>
-                  <input
-                    type="text"
-                    value={formData.next_action}
-                    onChange={(e) => setField('next_action', e.target.value)}
-                    className="input-field"
-                    placeholder="Ex: Enviar proposta"
-                  />
+              {/* ══════════ SEÇÃO 2 — QUALIFICAÇÃO ══════════ */}
+              <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">Seção 2 — Qualificação</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Nº de Funcionários</label>
+                    <select value={formData.company_size}
+                      onChange={(e) => setField('company_size', e.target.value)}
+                      className="input-field bg-white">
+                      <option value="">Selecionar</option>
+                      <option value="small">1-10</option>
+                      <option value="medium">11-50</option>
+                      <option value="large">51-200</option>
+                      <option value="enterprise">200+</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelInput}>Budget Declarado (R$)</label>
+                    <input type="number" step="0.01" min="0"
+                      value={formData.estimated_value}
+                      onChange={(e) => setField('estimated_value', e.target.value)}
+                      className="input-field" placeholder="0,00" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Nível de Consciência</label>
+                    <select value={formData.qualification_level}
+                      onChange={(e) => setField('qualification_level', e.target.value)}
+                      className="input-field bg-white">
+                      <option value="">Selecionar</option>
+                      <option value="2">Nível 2 — Consciente do Problema</option>
+                      <option value="3">Nível 3 — Consciente da Solução</option>
+                      <option value="4">Nível 4 — Consciente do Produto</option>
+                    </select>
+                  </div>
+                  {(formData.qualification_level === '3' || formData.qualification_level === '4') && (
+                    <div>
+                      <label className={labelInput}>Tipo de Uso</label>
+                      <select value={formData.usage_type}
+                        onChange={(e) => setField('usage_type', e.target.value)}
+                        className="input-field bg-white">
+                        <option value="">Selecionar</option>
+                        <option value="internal">Uso Interno</option>
+                        <option value="commercial">Uso Comercial</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label className={labelInput}>Data da ação</label>
-                  <input
-                    type="date"
-                    value={formData.next_action_date}
-                    onChange={(e) => setField('next_action_date', e.target.value)}
-                    className="input-field"
-                  />
+                  <label className={labelInput}>Critérios de Qualificação</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <TriCheckbox label="Budget compatível (+2)" value={formData.has_budget} onChange={(v) => setField('has_budget', v)} />
+                    <TriCheckbox label="Tomador de decisão (+1)" value={formData.is_decision_maker} onChange={(v) => setField('is_decision_maker', v)} />
+                    <TriCheckbox label="Urgência alta (+1)" value={formData.has_urgency} onChange={(v) => setField('has_urgency', v)} />
+                    <TriCheckbox label="Já tentou antes (+1)" value={formData.has_operation} onChange={(v) => setField('has_operation', v)} />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Clique para alternar: — não definido · ✓ sim · ✗ não</p>
                 </div>
               </div>
 
-              {/* ── Qualificação ── */}
-              <hr className="border-gray-100 my-2" />
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Qualificação</p>
-
-              <div>
-                <label className={labelInput}>Nível do Lead</label>
-                <select
-                  value={formData.qualification_level}
-                  onChange={(e) => setField('qualification_level', e.target.value)}
-                  className="input-field bg-white"
-                >
-                  <option value="">Selecionar nível</option>
-                  <option value="2">Nível 2 — Consciente do Problema</option>
-                  <option value="3">Nível 3 — Consciente da Solução</option>
-                  <option value="4">Nível 4 — Consciente do Produto</option>
-                </select>
-              </div>
-
-              {(formData.qualification_level === '3' || formData.qualification_level === '4') && (
+              {/* ══════════ SEÇÃO 3 — BRIEFING DO SDR ══════════ */}
+              <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4 space-y-3">
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">Seção 3 — Briefing do SDR</p>
                 <div>
-                  <label className={labelInput}>Tipo de Uso</label>
-                  <select
-                    value={formData.usage_type}
-                    onChange={(e) => setField('usage_type', e.target.value)}
-                    className="input-field bg-white"
-                  >
-                    <option value="">Selecionar</option>
-                    <option value="internal">Uso Interno</option>
-                    <option value="commercial">Uso Comercial</option>
-                  </select>
+                  <label className={labelInput}>Dor Principal (palavras do lead) *</label>
+                  <textarea value={formData.description} rows={3}
+                    onChange={(e) => setField('description', e.target.value)}
+                    className="input-field resize-none"
+                    placeholder="Descreva a dor/problema com as palavras do lead..." />
                 </div>
-              )}
-
-              <div>
-                <label className={labelInput}>Tamanho da empresa</label>
-                <select
-                  value={formData.company_size}
-                  onChange={(e) => setField('company_size', e.target.value)}
-                  className="input-field bg-white"
-                >
-                  <option value="">Selecionar</option>
-                  <option value="small">Pequena</option>
-                  <option value="medium">Média</option>
-                  <option value="large">Grande</option>
-                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Urgência Percebida</label>
+                    <select value={formData.temperature}
+                      onChange={(e) => setField('temperature', e.target.value)}
+                      className="input-field bg-white">
+                      <option value="hot">Alta</option>
+                      <option value="warm">Média</option>
+                      <option value="cold">Baixa</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Próxima Ação</label>
+                    <input type="text" value={formData.next_action}
+                      onChange={(e) => setField('next_action', e.target.value)}
+                      className="input-field" placeholder="Ex: Agendar reunião" />
+                  </div>
+                  <div>
+                    <label className={labelInput}>Data da Ação</label>
+                    <input type="date" value={formData.next_action_date}
+                      onChange={(e) => setField('next_action_date', e.target.value)}
+                      className="input-field" />
+                  </div>
+                </div>
               </div>
 
-              {/* 2x2 qualification checkboxes */}
-              <div>
-                <label className={labelInput}>Critérios de qualificação</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <TriCheckbox
-                    label="Tem operação rodando"
-                    value={formData.has_operation}
-                    onChange={(v) => setField('has_operation', v)}
-                  />
-                  <TriCheckbox
-                    label="Budget compatível"
-                    value={formData.has_budget}
-                    onChange={(v) => setField('has_budget', v)}
-                  />
-                  <TriCheckbox
-                    label="Tomador de decisão"
-                    value={formData.is_decision_maker}
-                    onChange={(v) => setField('is_decision_maker', v)}
-                  />
-                  <TriCheckbox
-                    label="Tem urgência real"
-                    value={formData.has_urgency}
-                    onChange={(v) => setField('has_urgency', v)}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1">Clique para alternar: — não definido · ✓ sim · ✗ não</p>
-              </div>
-
-              {/* ── Agendamento (edit only) ── */}
+              {/* ══════════ SEÇÃO 4 — NOTAS DO CLOSER ══════════ */}
               {editingProspect && (
-                <>
-                  <hr className="border-gray-100 my-2" />
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Agendamento</p>
-
-                  <div>
-                    <label className={labelInput}>Closer</label>
-                    <input
-                      type="text"
-                      value={formData.closer_name}
-                      onChange={(e) => setField('closer_name', e.target.value)}
-                      className="input-field"
-                      placeholder="Nome do closer responsável"
-                    />
+                <div className="bg-green-50/50 border border-green-100 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Seção 4 — Notas do Closer</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelInput}>Closer Responsável</label>
+                      <input type="text" value={formData.closer_name}
+                        onChange={(e) => setField('closer_name', e.target.value)}
+                        className="input-field" placeholder="Nome do closer" />
+                    </div>
+                    <div>
+                      <label className={labelInput}>Valor da Proposta (R$)</label>
+                      <input type="number" step="0.01" min="0"
+                        value={formData.estimated_value}
+                        onChange={(e) => setField('estimated_value', e.target.value)}
+                        className="input-field" placeholder="0,00" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelInput}>Data da Reunião</label>
+                      <input type="datetime-local" value={formData.meeting_scheduled_at}
+                        onChange={(e) => setField('meeting_scheduled_at', e.target.value)}
+                        className="input-field" />
+                    </div>
+                    <div>
+                      <label className={labelInput}>Link da Reunião</label>
+                      <input type="url" value={formData.meeting_link}
+                        onChange={(e) => setField('meeting_link', e.target.value)}
+                        className="input-field" placeholder="https://meet.google.com/..." />
+                    </div>
                   </div>
                   <div>
-                    <label className={labelInput}>Data da Reunião</label>
-                    <input
-                      type="datetime-local"
-                      value={formData.meeting_scheduled_at}
-                      onChange={(e) => setField('meeting_scheduled_at', e.target.value)}
-                      className="input-field"
-                    />
+                    <label className={labelInput}>Notas da Reunião</label>
+                    <textarea value={formData.meeting_transcript} rows={3}
+                      onChange={(e) => setField('meeting_transcript', e.target.value)}
+                      className="input-field resize-none"
+                      placeholder="Resultado da reunião, escopo acordado, expectativas..." />
                   </div>
-                  <div>
-                    <label className={labelInput}>Link da Reunião</label>
-                    <input
-                      type="url"
-                      value={formData.meeting_link}
-                      onChange={(e) => setField('meeting_link', e.target.value)}
-                      className="input-field"
-                      placeholder="https://meet.google.com/..."
-                    />
-                  </div>
-                </>
+                </div>
               )}
 
               {/* ── Actions ── */}
@@ -1013,6 +1104,104 @@ export default function FunilTab() {
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(null)}
       />
+
+      {/* ─── Modal Obrigatório — Motivo de Perda ─────────────────────────── */}
+      {lossModalProspect && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Mover para Perdido</h2>
+              <button
+                onClick={() => setLossModalProspect(null)}
+                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-5">
+              <p className="text-xs text-red-700 font-medium">
+                O preenchimento do motivo de perda é obrigatório. Sem esses dados, não é possível medir onde o funil sangra.
+              </p>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-4">
+              Lead: <span className="font-semibold text-gray-900">{lossModalProspect.company_name}</span>
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className={labelInput}>Motivo da perda *</label>
+                <select
+                  value={lossForm.reason}
+                  onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
+                  className="input-field bg-white"
+                  required
+                >
+                  <option value="">Selecione o motivo</option>
+                  <option value="price">Preço</option>
+                  <option value="timeline">Timing / Prazo</option>
+                  <option value="no_fit">Sem fit</option>
+                  <option value="competitor">Concorrente</option>
+                  <option value="no_response">Sem resposta</option>
+                  <option value="no_budget">Sem orçamento</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+
+              <div>
+                <label className={labelInput}>Entrar em remarketing? *</label>
+                <div className="flex gap-3">
+                  {[['sim', 'Sim'], ['nao', 'Não']].map(([val, label]) => (
+                    <label key={val} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="remarketing"
+                        value={val}
+                        checked={lossForm.remarketing === val}
+                        onChange={(e) => setLossForm({ ...lossForm, remarketing: e.target.value })}
+                        className="text-[#A6864A]"
+                      />
+                      <span className="text-sm">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelInput}>Observação</label>
+                <textarea
+                  value={lossForm.notes}
+                  onChange={(e) => setLossForm({ ...lossForm, notes: e.target.value })}
+                  rows={3}
+                  className="input-field resize-none"
+                  placeholder="Detalhes adicionais sobre a perda..."
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => setLossModalProspect(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  loading={savingLoss}
+                  className="flex-1 !bg-red-600 hover:!bg-red-700"
+                  onClick={handleLossSubmit}
+                  disabled={!lossForm.reason || !lossForm.remarketing}
+                >
+                  Confirmar Perda
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
