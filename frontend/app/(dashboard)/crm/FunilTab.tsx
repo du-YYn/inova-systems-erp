@@ -5,6 +5,9 @@ import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
   Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target,
 } from 'lucide-react';
+import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -256,8 +259,80 @@ function TriCheckbox({
 
 // ─── Page Component ───────────────────────────────────────────────────────────
 
+// ─── Collapsible Section ─────────────────────────────────────────────────────
+
+function Section({ title, color, defaultOpen = true, children }: {
+  title: string; color: string; defaultOpen?: boolean; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const colors: Record<string, string> = {
+    blue: 'bg-blue-50/50 border-blue-100 text-blue-700',
+    purple: 'bg-purple-50/50 border-purple-100 text-purple-700',
+    amber: 'bg-amber-50/50 border-amber-100 text-amber-700',
+    green: 'bg-green-50/50 border-green-100 text-green-700',
+  };
+  const cls = colors[color] || colors.blue;
+  const [bg, border, text] = cls.split(' ');
+
+  return (
+    <div className={`${bg} border ${border} rounded-xl overflow-hidden transition-all`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`w-full flex items-center justify-between px-4 py-3 ${text} hover:bg-black/[0.02] transition-colors`}
+      >
+        <span className="text-xs font-bold uppercase tracking-wider">{title}</span>
+        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <div className={`transition-all duration-200 ease-out ${open ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+        <div className="px-4 pb-4 space-y-3">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Drag-and-Drop Components ────────────────────────────────────────────────
+
+function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useSortable({ id, data: { type: 'column' } });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`w-60 flex flex-col gap-2 transition-all duration-200 rounded-xl ${
+        isOver ? 'ring-2 ring-[#A6864A]/30 bg-[#A6864A]/5' : ''
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function DraggableCard({ prospect, children }: { prospect: Prospect; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `prospect-${prospect.id}`,
+    data: { prospect },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
+
 export default function FunilTab() {
   const toast = useToast();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const [draggedProspect, setDraggedProspect] = useState<Prospect | null>(null);
 
   // Paged list state
   const [prospects, setProspects] = useState<Prospect[]>([]);
@@ -342,6 +417,29 @@ export default function FunilTab() {
     const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
     return () => clearTimeout(id);
   }, [searchInput]);
+
+  // ─── Drag-and-drop handlers ──────────────────────────────────────────────
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { prospect } = event.active.data.current as { prospect: Prospect };
+    setDraggedProspect(prospect);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDraggedProspect(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const prospect = (active.data.current as { prospect: Prospect }).prospect;
+    const targetStatus = over.id as string;
+
+    // Only process if dropping on a column (not another card)
+    if (!PIPELINE_COLUMNS.includes(targetStatus)) return;
+    if (prospect.status === targetStatus) return;
+
+    // Use the same handleStatusChange which handles lost/follow_up modals
+    handleStatusChange(prospect, targetStatus);
+  };
 
   // ─── KPI computations (from full dataset) ────────────────────────────────
 
@@ -631,7 +729,7 @@ export default function FunilTab() {
             </button>
           </div>
           <Button onClick={openNewModal}>
-            <Plus className="w-4 h-4" /> Novo Prospect
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Novo Lead</span>
           </Button>
         </div>
       </div>
@@ -697,7 +795,54 @@ export default function FunilTab() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Mobile card view */}
+          <div className="md:hidden">
+            {loading ? (
+              <div className="p-4"><TableSkeleton rows={4} cols={2} /></div>
+            ) : prospects.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <Target className="w-7 h-7 text-gray-300" />
+                </div>
+                <p className="text-sm text-gray-500">Nenhum prospect encontrado</p>
+                <button onClick={openNewModal} className="mt-2 text-xs font-semibold text-[#A6864A]">+ Novo Lead</button>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {prospects.map(prospect => (
+                  <div key={prospect.id} className="p-4 hover:bg-gray-50/60 transition-colors">
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{prospect.company_name}</p>
+                        <p className="text-xs text-gray-400">{prospect.contact_name} · {prospect.contact_email}</p>
+                      </div>
+                      {prospect.temperature && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
+                          {temperatureLabels[prospect.temperature]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusColors[prospect.status] || 'bg-gray-100'}`}>
+                        {statusLabels[prospect.status]}
+                      </span>
+                      <span className="text-xs font-semibold text-[#A6864A] tabular-nums">{formatCurrency(prospect.estimated_value)}</span>
+                      {prospect.days_since_created > 0 && (
+                        <span className={`text-[10px] ${prospect.days_since_created > 14 ? 'text-red-400' : 'text-gray-400'}`}>{prospect.days_since_created}d</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 mt-2 justify-end">
+                      <button onClick={() => openEditModal(prospect)} className="p-1.5 text-gray-300 hover:text-[#A6864A] rounded-lg"><Edit className="w-4 h-4" /></button>
+                      <button onClick={() => setConfirmDelete(prospect)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Desktop table view */}
+          <div className="overflow-x-auto hidden md:block">
             {loading ? (
               <TableSkeleton rows={6} cols={6} />
             ) : (
@@ -832,13 +977,14 @@ export default function FunilTab() {
 
       {/* ─── Pipeline View ─────────────────────────────────────────────────── */}
       {viewMode === 'pipeline' && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {PIPELINE_COLUMNS.map((status) => {
               const col = allProspects.filter(p => p.status === status);
               const colValue = col.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
               return (
-                <div key={status} className="w-60 flex flex-col gap-2">
+                <DroppableColumn key={status} id={status}>
                   {/* Column header */}
                   <div className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-gray-100 shadow-card">
                     <Badge variant={statusBadgeVariant[status] || 'neutral'} dot>
@@ -850,9 +996,10 @@ export default function FunilTab() {
                     <p className="text-xs text-gray-400 px-1 font-medium tabular-nums">{formatCurrency(colValue)}</p>
                   )}
                   {/* Cards */}
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 min-h-[60px]">
                     {col.map(prospect => (
-                      <div key={prospect.id} className="card card-hover p-3 cursor-default">
+                      <DraggableCard key={prospect.id} prospect={prospect}>
+                      <div className="card card-hover p-3 cursor-grab active:cursor-grabbing">
                         <div className="flex items-center justify-between mb-0.5">
                           <p className="text-sm font-semibold text-gray-900">{prospect.company_name}</p>
                           {prospect.temperature && (
@@ -946,6 +1093,7 @@ export default function FunilTab() {
                           </div>
                         </div>
                       </div>
+                      </DraggableCard>
                     ))}
                   </div>
                   {col.length === 0 && (
@@ -961,11 +1109,22 @@ export default function FunilTab() {
                       )}
                     </div>
                   )}
-                </div>
+                </DroppableColumn>
               );
             })}
           </div>
         </div>
+        {/* Drag overlay — ghost card while dragging */}
+        <DragOverlay>
+          {draggedProspect && (
+            <div className="card p-3 w-60 shadow-xl ring-2 ring-[#A6864A]/20 rotate-2 opacity-90">
+              <p className="text-sm font-semibold text-gray-900">{draggedProspect.company_name}</p>
+              <p className="text-xs text-gray-400">{draggedProspect.contact_name}</p>
+              <p className="text-xs font-bold text-[#A6864A] mt-1">{formatCurrency(draggedProspect.estimated_value)}</p>
+            </div>
+          )}
+        </DragOverlay>
+        </DndContext>
       )}
 
       {/* ─── Modal (create / edit) ─────────────────────────────────────────── */}
@@ -988,8 +1147,7 @@ export default function FunilTab() {
             <form onSubmit={handleSave} className="space-y-4">
 
               {/* ══════════ SEÇÃO 1 — IDENTIFICAÇÃO ══════════ */}
-              <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Seção 1 — Identificação</p>
+              <Section title="Seção 1 — Identificação" color="blue">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelInput}>Nome completo *</label>
@@ -1053,11 +1211,10 @@ export default function FunilTab() {
                     </select>
                   </div>
                 )}
-              </div>
+              </Section>
 
               {/* ══════════ SEÇÃO 2 — QUALIFICAÇÃO ══════════ */}
-              <div className="bg-purple-50/50 border border-purple-100 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-purple-700 uppercase tracking-wider">Seção 2 — Qualificação</p>
+              <Section title="Seção 2 — Qualificação" color="purple">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelInput}>Nº de Funcionários</label>
@@ -1114,11 +1271,10 @@ export default function FunilTab() {
                   </div>
                   <p className="text-[10px] text-gray-400 mt-1">Clique para alternar: — não definido · ✓ sim · ✗ não</p>
                 </div>
-              </div>
+              </Section>
 
               {/* ══════════ SEÇÃO 3 — BRIEFING DO SDR ══════════ */}
-              <div className="bg-amber-50/50 border border-amber-100 rounded-xl p-4 space-y-3">
-                <p className="text-xs font-bold text-amber-700 uppercase tracking-wider">Seção 3 — Briefing do SDR</p>
+              <Section title="Seção 3 — Briefing do SDR" color="amber">
                 <div>
                   <label className={labelInput}>Dor Principal (palavras do lead) *</label>
                   <textarea value={formData.description} rows={3}
@@ -1152,12 +1308,11 @@ export default function FunilTab() {
                       className="input-field" />
                   </div>
                 </div>
-              </div>
+              </Section>
 
               {/* ══════════ SEÇÃO 4 — NOTAS DO CLOSER ══════════ */}
               {editingProspect && (
-                <div className="bg-green-50/50 border border-green-100 rounded-xl p-4 space-y-3">
-                  <p className="text-xs font-bold text-green-700 uppercase tracking-wider">Seção 4 — Notas do Closer</p>
+                <Section title="Seção 4 — Notas do Closer" color="green" defaultOpen={false}>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelInput}>Closer Responsável</label>
@@ -1194,7 +1349,7 @@ export default function FunilTab() {
                       className="input-field resize-none"
                       placeholder="Resultado da reunião, escopo acordado, expectativas..." />
                   </div>
-                </div>
+                </Section>
               )}
 
               {/* ── Actions ── */}
