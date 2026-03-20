@@ -1,4 +1,4 @@
-name: CD — Deploy to Staging
+name: CD — Deploy to Production
 
 on:
   push:
@@ -8,8 +8,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: staging
-    # Só executa se os secrets de deploy estiverem configurados
+    environment: production
     if: ${{ vars.DEPLOY_ENABLED == 'true' }}
 
     steps:
@@ -27,32 +26,19 @@ jobs:
             set -e
             cd /opt/inova-systems-erp
 
-            # Salvar commit anterior para rollback
             PREV_COMMIT=$(git rev-parse HEAD)
 
-            # Backup do banco antes de migrar
-            echo "Realizando backup do banco de dados..."
-            mkdir -p /opt/backups
-            BACKUP_FILE="/opt/backups/backup_$(date +%Y%m%d_%H%M%S).sql"
-            docker compose exec -T postgres pg_dump \
-              -U ${DB_USER:-inova_user} ${DB_NAME:-inova_erp} > "$BACKUP_FILE"
-            echo "Backup salvo em $BACKUP_FILE"
-
-            # Forçar estado do servidor igual ao repositório (evita conflitos com alterações locais)
+            # Atualizar código
             git fetch origin main
             git reset --hard origin/main
-            git clean -fd
-            docker compose pull || { echo "Falha ao baixar imagens"; exit 1; }
-            docker compose up -d --build --remove-orphans
 
-            # Migrations
-            docker compose exec -T backend python manage.py migrate --no-input
-            docker compose exec -T backend python manage.py collectstatic --no-input
+            # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend)
+            docker compose up -d --build --remove-orphans
 
             # Smoke test com retry
             echo "Executando smoke test..."
             SUCCESS=false
-            for i in {1..12}; do
+            for i in $(seq 1 12); do
               HTTP_STATUS=$(docker compose exec -T backend curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ || echo "000")
               if [ "$HTTP_STATUS" = "200" ]; then
                 SUCCESS=true
@@ -63,7 +49,7 @@ jobs:
             done
 
             if [ "$SUCCESS" != "true" ]; then
-              echo "Smoke test falhou! Iniciando rollback para $PREV_COMMIT..."
+              echo "Smoke test falhou! Rollback para $PREV_COMMIT..."
               git reset --hard "$PREV_COMMIT"
               docker compose up -d --build --remove-orphans
               exit 1

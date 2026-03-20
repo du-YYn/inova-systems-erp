@@ -1,8 +1,8 @@
-# Inova Systems ERP — docker-compose.yml v2
+# Inova Systems ERP — docker-compose.yml (standalone)
+# Tráfego HTTPS gerenciado pelo Traefik do Easypanel via rede compartilhada
 services:
   postgres:
     image: postgres:15
-
     restart: unless-stopped
     env_file:
       - .env
@@ -12,10 +12,6 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # SEGURANÇA: portas do banco não expostas externamente em produção.
-    # Para acesso local em desenvolvimento, descomente a linha abaixo:
-    # ports:
-    #   - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-inova_user} -d ${DB_NAME:-inova_erp}"]
       interval: 10s
@@ -24,9 +20,7 @@ services:
 
   redis:
     image: redis:7-alpine
-
     restart: unless-stopped
-    # Autenticação Redis via REDIS_PASSWORD (obrigatório em produção)
     command: >
       sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
                redis-server --requirepass $$REDIS_PASSWORD;
@@ -35,9 +29,6 @@ services:
              fi"
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-    # SEGURANÇA: porta Redis não exposta externamente em produção.
-    # ports:
-    #   - "127.0.0.1:6379:6379"
     healthcheck:
       test: >
         sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
@@ -53,14 +44,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     restart: unless-stopped
     env_file:
       - .env
-    # PRODUÇÃO: portas não expostas diretamente — acesso via Nginx
-    # DESENVOLVIMENTO: descomente para acesso direto
-    # ports:
-    #   - "127.0.0.1:8000:8000"
     environment:
       - DB_HOST=postgres
       - DB_NAME=${DB_NAME:-inova_erp}
@@ -83,8 +69,10 @@ services:
       - static_files:/app/staticfiles
       - media_files:/app/media
     networks:
-      - default
-      - easypanel
+      default:
+      easypanel:
+        aliases:
+          - grupo_ry_inova-erp_backend
     command: >
       sh -c "
         python manage.py migrate --no-input &&
@@ -102,9 +90,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     restart: unless-stopped
-    user: "1000:1000"
     env_file:
       - .env
     environment:
@@ -128,9 +114,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     restart: unless-stopped
-    user: "1000:1000"
     env_file:
       - .env
     environment:
@@ -156,20 +140,17 @@ services:
       dockerfile: Dockerfile
       args:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
-
     restart: unless-stopped
-    # PRODUÇÃO: porta não exposta diretamente — acesso via Nginx
-    # DESENVOLVIMENTO: descomente para acesso direto
-    # ports:
-    #   - "127.0.0.1:3000:3000"
-    networks:
-      - default
-      - easypanel
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
     depends_on:
       backend:
         condition: service_healthy
+    networks:
+      default:
+      easypanel:
+        aliases:
+          - grupo_ry_inova-erp_frontend
 
   db-backup:
     image: postgres:15
@@ -201,9 +182,6 @@ services:
         done
       "
 
-  # nginx e certbot desativados — usando Traefik do EasyPanel como reverse proxy
-  # O Traefik gerencia SSL (Let's Encrypt) e roteamento automaticamente
-
 networks:
   default:
   easypanel:
@@ -214,5 +192,3 @@ volumes:
   static_files:
   media_files:
   db_backups:
-  certbot_conf:
-  certbot_www:
