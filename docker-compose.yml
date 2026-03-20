@@ -73,6 +73,7 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
       - SECURE_SSL_REDIRECT=${SECURE_SSL_REDIRECT:-false}
+      - WEBSITE_API_KEY=${WEBSITE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -115,6 +116,7 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
+      - WEBSITE_API_KEY=${WEBSITE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,6 +142,7 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
+      - WEBSITE_API_KEY=${WEBSITE_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,6 +171,36 @@ services:
       backend:
         condition: service_healthy
 
+  db-backup:
+    image: postgres:15
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - PGHOST=postgres
+      - PGUSER=${DB_USER:-inova_user}
+      - PGPASSWORD=${DB_PASSWORD}
+      - PGDATABASE=${DB_NAME:-inova_erp}
+    volumes:
+      - db_backups:/backups
+    command: >
+      sh -c "
+        while true; do
+          STAMP=$$(date +%Y-%m-%d_%H%M);
+          echo \"[$$STAMP] Starting backup...\";
+          pg_dump --format=custom -f /backups/erp_$$STAMP.dump;
+          if [ $$? -eq 0 ]; then
+            echo \"[$$STAMP] Backup OK: $$(du -h /backups/erp_$$STAMP.dump | cut -f1)\";
+            find /backups -name 'erp_*.dump' -mtime +7 -delete;
+            echo \"[$$STAMP] Old backups cleaned.\";
+          else
+            echo \"[$$STAMP] BACKUP FAILED!\";
+          fi;
+          sleep 86400;
+        done
+      "
+
   # nginx e certbot desativados — usando Traefik do EasyPanel como reverse proxy
   # O Traefik gerencia SSL (Let's Encrypt) e roteamento automaticamente
 
@@ -180,5 +213,6 @@ volumes:
   postgres_data:
   static_files:
   media_files:
+  db_backups:
   certbot_conf:
   certbot_www:
