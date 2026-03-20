@@ -9,6 +9,21 @@
     --color-text-primary: #0A0A0A;
     --color-text-secondary: #444444;
     --color-accent-gold: #A6864A;
+    --color-accent-gold-light: #C4A67C;
+    --color-accent-gold-dark: #8B6F3D;
+
+    /* Design tokens — spacing */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    /* Design tokens — animation */
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 350ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
   }
 
   body {
@@ -66,6 +81,45 @@
 }
 
 @layer utilities {
+  /* Stagger animation for pipeline cards */
+  .animate-stagger-in {
+    animation: staggerIn var(--duration-normal) var(--ease-out) both;
+  }
+  .animate-stagger-in:nth-child(1) { animation-delay: 0ms; }
+  .animate-stagger-in:nth-child(2) { animation-delay: 50ms; }
+  .animate-stagger-in:nth-child(3) { animation-delay: 100ms; }
+  .animate-stagger-in:nth-child(4) { animation-delay: 150ms; }
+  .animate-stagger-in:nth-child(5) { animation-delay: 200ms; }
+  .animate-stagger-in:nth-child(n+6) { animation-delay: 250ms; }
+
+  @keyframes staggerIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Fade in */
+  .animate-fade-in {
+    animation: fadeIn var(--duration-fast) ease-out both;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Modal entrance */
+  .animate-modal-in {
+    animation: modalIn var(--duration-normal) var(--ease-out) both;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  /* Accessible focus ring */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-[#A6864A]/40 focus-visible:ring-offset-2;
+  }
+
   .animate-shake {
     animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
   }

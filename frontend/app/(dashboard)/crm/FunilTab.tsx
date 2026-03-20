@@ -644,6 +644,10 @@ export default function FunilTab() {
       setFollowUpForm({ reason: '', next_contact_date: '', notes: '' });
       return;
     }
+    // Optimistic UI — atualiza local antes da API
+    const prevStatus = prospect.status;
+    setAllProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: newStatus } : p));
+    setProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: newStatus } : p));
     setUpdatingStatus(prospect.id);
     try {
       const res = await fetch(`${apiUrl}/sales/prospects/${prospect.id}/`, {
@@ -657,6 +661,9 @@ export default function FunilTab() {
       fetchProspects();
       fetchAllProspects();
     } catch {
+      // Rollback on failure
+      setAllProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: prevStatus } : p));
+      setProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: prevStatus } : p));
       toast.error('Erro ao atualizar status.');
     } finally {
       setUpdatingStatus(null);
@@ -1151,7 +1158,7 @@ export default function FunilTab() {
                   <div className="flex flex-col gap-2 min-h-[60px]">
                     {col.map(prospect => (
                       <DraggableCard key={prospect.id} prospect={prospect}>
-                      <div className="card card-hover p-3 cursor-grab active:cursor-grabbing">
+                      <div className="card card-hover p-3 cursor-grab active:cursor-grabbing animate-stagger-in">
                         <div className="flex items-center justify-between mb-0.5">
                           <p className="text-sm font-semibold text-gray-900">{prospect.company_name}</p>
                           {prospect.temperature && (
