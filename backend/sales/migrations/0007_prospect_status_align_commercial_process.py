@@ -85,7 +85,7 @@ class Migration(migrations.Migration):
             model_name='prospect',
             name='last_message',
             field=models.TextField(
-                blank=True, default='',
+                blank=True,
                 help_text='Última mensagem do lead via WhatsApp',
             ),
         ),
