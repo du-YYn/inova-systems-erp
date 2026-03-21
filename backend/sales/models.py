@@ -66,16 +66,30 @@ class Prospect(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('new',           'Novo Lead'),            # lead entrou, aguardando SDR
+        ('new',           'Lead Recebido'),        # quiz preenchido, aguardando abordagem SDR
         ('qualifying',    'Em Qualificação'),      # SDR iniciou conversa
-        ('qualified',     'Oportunidade'),         # passou ≥3/4 critérios — virou oportunidade
-        ('disqualified',  'Desqualificado'),       # não atende critérios
-        ('discovery',     'Discovery'),            # reunião de levantamento/discovery
-        ('proposal',      'Proposta Enviada'),     # proposta enviada após discovery
-        ('negotiation',   'Em Negociação'),        # ajustes, objeções, condições
-        ('won',           'Ganho'),                # deal fechado — cliente conquistado
-        ('lost',          'Perdido'),              # deal perdido
+        ('qualified',     'Qualificado'),          # passou ≥3/4 critérios de qualificação
+        ('disqualified',  'Não Qualificado'),      # não atende critérios mínimos
+        ('scheduled',     'Agendado'),             # reunião marcada via Calendly/Google
+        ('pre_meeting',   'Pré-Reunião'),          # sequência de comprometimento em andamento
+        ('no_show',       'Não Compareceu'),       # lead não apareceu na reunião
+        ('meeting_done',  'Reunião Realizada'),    # reunião aconteceu com o Closer
+        ('proposal',      'Proposta Enviada'),     # proposta comercial enviada
+        ('won',           'Fechado'),              # projeto contratado
+        ('not_closed',    'Não Fechou'),           # reunião realizada mas sem fechamento
+        ('lost',          'Perdido'),              # deal perdido (analytics)
         ('follow_up',     'Em Follow-up'),         # sequência de reativação
+    ]
+
+    FOLLOW_UP_REASON_CHOICES = [
+        ('nao_agendou',     'Não Agendou'),        # qualificado mas não agendou reunião
+        ('nao_compareceu',  'Não Compareceu'),     # agendou mas não compareceu
+        ('nao_fechou',      'Não Fechou'),         # reunião realizada mas não fechou
+    ]
+
+    PRE_MEETING_SCENARIO_CHOICES = [
+        (1, '2 a 5 dias de antecedência'),
+        (2, 'Reunião no dia seguinte'),
     ]
 
     QUALIFICATION_LEVEL_CHOICES = [
@@ -165,6 +179,22 @@ class Prospect(models.Model):
     # ── Pós-agendamento ───────────────────────────────────────────────────────
     ebook_sent_at = models.DateTimeField(null=True, blank=True)
     meeting_transcript = models.TextField(blank=True, help_text='Transcrição processada da reunião comercial')
+
+    # ── Follow-up ────────────────────────────────────────────────────────────
+    follow_up_reason = models.CharField(
+        max_length=20, choices=FOLLOW_UP_REASON_CHOICES, blank=True,
+        help_text='Sub-cenário do follow-up: nao_agendou, nao_compareceu, nao_fechou'
+    )
+
+    # ── Pré-reunião ──────────────────────────────────────────────────────────
+    pre_meeting_scenario = models.IntegerField(
+        choices=PRE_MEETING_SCENARIO_CHOICES, null=True, blank=True,
+        help_text='Cenário de pré-reunião: 1 (2-5 dias) ou 2 (dia seguinte)'
+    )
+
+    # ── Última mensagem (SDR via n8n) ────────────────────────────────────────
+    last_message = models.TextField(blank=True, help_text='Última mensagem do lead via WhatsApp')
+    last_message_at = models.DateTimeField(null=True, blank=True)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_prospects')
     created_at = models.DateTimeField(auto_now_add=True)

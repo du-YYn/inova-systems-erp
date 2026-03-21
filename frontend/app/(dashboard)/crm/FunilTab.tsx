@@ -53,6 +53,13 @@ interface Prospect {
   // post-meeting
   ebook_sent_at: string | null;
   meeting_transcript: string;
+  // follow-up
+  follow_up_reason: string;
+  // pre-meeting
+  pre_meeting_scenario: number | null;
+  // last message
+  last_message: string;
+  last_message_at: string | null;
   days_since_created: number;
 }
 
@@ -96,37 +103,49 @@ const PAGE_SIZE = 10;
 const statusLabels: Record<string, string> = {
   new: 'Lead Recebido',
   qualifying: 'Em Qualificação',
-  qualified: 'Reunião Agendada',
-  discovery: 'Discovery',
+  qualified: 'Qualificado',
+  disqualified: 'Não Qualificado',
+  scheduled: 'Agendado',
+  pre_meeting: 'Pré-Reunião',
+  no_show: 'Não Compareceu',
+  meeting_done: 'Reunião Realizada',
   proposal: 'Proposta Enviada',
   won: 'Fechado',
-  follow_up: 'Follow-Up',
+  not_closed: 'Não Fechou',
   lost: 'Perdido',
-  disqualified: 'Desqualificado',
+  follow_up: 'Follow-Up',
 };
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
   qualifying: 'bg-yellow-100 text-yellow-800',
   qualified: 'bg-purple-100 text-purple-800',
-  discovery: 'bg-indigo-100 text-indigo-800',
+  disqualified: 'bg-red-100 text-red-800',
+  scheduled: 'bg-indigo-100 text-indigo-800',
+  pre_meeting: 'bg-cyan-100 text-cyan-800',
+  no_show: 'bg-rose-100 text-rose-800',
+  meeting_done: 'bg-teal-100 text-teal-800',
   proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
-  follow_up: 'bg-orange-100 text-orange-800',
+  not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 text-gray-700',
-  disqualified: 'bg-red-100 text-red-800',
+  follow_up: 'bg-orange-100 text-orange-800',
 };
 
 const statusBadgeVariant: Record<string, BadgeVariant> = {
   new: 'info',
   qualifying: 'warning',
   qualified: 'purple',
-  discovery: 'info',
+  disqualified: 'error',
+  scheduled: 'info',
+  pre_meeting: 'info',
+  no_show: 'error',
+  meeting_done: 'success',
   proposal: 'gold',
   won: 'success',
-  follow_up: 'warning',
+  not_closed: 'warning',
   lost: 'neutral',
-  disqualified: 'error',
+  follow_up: 'warning',
 };
 
 const FOLLOW_UP_REASONS = [
@@ -135,14 +154,18 @@ const FOLLOW_UP_REASONS = [
   { value: 'nao_fechou', label: 'Não Fechou', color: 'bg-red-100 text-red-700' },
 ];
 
-// 7 colunas do kanban — Perdido/Desqualificado só na lista
+// Colunas do kanban — Perdido/Desqualificado/Não Qualificado só na lista
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
   'qualified',
-  'discovery',
+  'scheduled',
+  'pre_meeting',
+  'no_show',
+  'meeting_done',
   'proposal',
   'won',
+  'not_closed',
   'follow_up',
 ];
 
@@ -519,11 +542,11 @@ export default function FunilTab() {
   ).length;
 
   const kpiAgendados = kpiSource.filter(p =>
-    p.status === 'qualified'
+    p.status === 'scheduled' || p.status === 'pre_meeting'
   ).length;
 
   const kpiEmAndamento = kpiSource.filter(p =>
-    p.status === 'discovery' || p.status === 'proposal'
+    p.status === 'scheduled' || p.status === 'pre_meeting' || p.status === 'meeting_done' || p.status === 'proposal'
   ).length;
 
   const wonProspects = kpiSource.filter(p => p.status === 'won');
@@ -718,6 +741,7 @@ export default function FunilTab() {
         credentials: 'include',
         body: JSON.stringify({
           status: 'follow_up',
+          follow_up_reason: followUpForm.reason,
           next_action: `[${followUpLabel}] ${followUpForm.notes}`.trim(),
           next_action_date: followUpForm.next_contact_date,
         }),
@@ -1046,7 +1070,7 @@ export default function FunilTab() {
                             )}
                             {prospect.qualification_score > 0 && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${qualScoreBadgeColor(prospect.qualification_score)}`}>
-                                {prospect.qualification_score}/5
+                                {prospect.qualification_score}/4
                               </span>
                             )}
                             {prospect.meeting_scheduled_at && (
@@ -1177,7 +1201,7 @@ export default function FunilTab() {
                           )}
                           {prospect.qualification_score > 0 && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${qualScoreBadgeColor(prospect.qualification_score)}`}>
-                              {prospect.qualification_score}/5
+                              {prospect.qualification_score}/4
                             </span>
                           )}
                           {prospect.meeting_scheduled_at && (
@@ -1188,10 +1212,10 @@ export default function FunilTab() {
                           )}
                         </div>
                         {/* Follow-Up sub-type badge + next contact */}
-                        {prospect.status === 'follow_up' && prospect.next_action && (
+                        {(prospect.status === 'follow_up' || prospect.status === 'no_show' || prospect.status === 'not_closed') && (prospect.follow_up_reason || prospect.next_action) && (
                           <div className="mb-2">
                             {FOLLOW_UP_REASONS.map(r => {
-                              if (prospect.next_action?.includes(`[${r.label}]`)) {
+                              if (prospect.follow_up_reason === r.value || prospect.next_action?.includes(`[${r.label}]`)) {
                                 return (
                                   <span key={r.value} className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${r.color}`}>
                                     {r.label}
@@ -1212,7 +1236,7 @@ export default function FunilTab() {
                           <div className="mb-2">
                             <div className="flex items-center justify-between mb-0.5">
                               <span className="text-[10px] text-gray-400">Score</span>
-                              <span className="text-[10px] font-bold text-gray-500">{prospect.qualification_score}/5</span>
+                              <span className="text-[10px] font-bold text-gray-500">{prospect.qualification_score}/4</span>
                             </div>
                             <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
                               <div
@@ -1220,7 +1244,7 @@ export default function FunilTab() {
                                   prospect.qualification_score >= 4 ? 'bg-green-500' :
                                   prospect.qualification_score >= 2 ? 'bg-yellow-500' : 'bg-red-400'
                                 }`}
-                                style={{ width: `${(prospect.qualification_score / 5) * 100}%` }}
+                                style={{ width: `${(prospect.qualification_score / 4) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -1688,7 +1712,7 @@ export default function FunilTab() {
                         <p className="text-xs text-gray-400">
                           {r.value === 'nao_agendou' && 'Qualificou mas não marcou reunião'}
                           {r.value === 'nao_compareceu' && 'Agendou mas não compareceu'}
-                          {r.value === 'nao_fechou' && 'Fez discovery/proposta mas não fechou'}
+                          {r.value === 'nao_fechou' && 'Reunião realizada mas não fechou'}
                         </p>
                       </div>
                     </label>

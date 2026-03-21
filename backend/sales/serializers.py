@@ -98,6 +98,13 @@ class ProspectSerializer(serializers.ModelSerializer):
             # pós-agendamento
             "ebook_sent_at",
             "meeting_transcript",
+            # follow-up
+            "follow_up_reason",
+            # pré-reunião
+            "pre_meeting_scenario",
+            # última mensagem
+            "last_message",
+            "last_message_at",
             # meta
             "created_by",
             "created_by_name",
@@ -329,12 +336,24 @@ class WebsiteLeadSerializer(serializers.Serializer):
         if len(json.dumps(quiz_data)) > 8192:
             raise serializers.ValidationError('Quiz data too large.')
 
-        # Recalcular qualification_level server-side baseado no budget
+        # Recalcular qualification_level server-side
+        # Nível 2 — Consciente do Problema: escolheu "Ainda não sei" ou budget baixo
+        # Nível 3 — Consciente da Solução: escolheu solução específica
+        # Nível 4 — Consciente do Produto: solução específica + budget alto + empresa média/grande
         budget = validated_data.get('budget', '')
+        servico = validated_data.get('servico', '')
         qualified_budgets = {
             'R$10.000 a R$30.000', 'R$30.000 a R$100.000', 'Acima de R$100.000',
         }
-        qualification_level = '3' if budget in qualified_budgets else '2'
+        high_budgets = {'R$30.000 a R$100.000', 'Acima de R$100.000'}
+        has_specific_service = servico and 'Ainda não sei' not in servico
+
+        if has_specific_service and budget in high_budgets and company_size in ('medium', 'large'):
+            qualification_level = '4'
+        elif has_specific_service and budget in qualified_budgets:
+            qualification_level = '3'
+        else:
+            qualification_level = '2'
 
         description = validated_data.get('descricao', '') or validated_data.get('servico', '')
 

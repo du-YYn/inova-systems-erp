@@ -76,8 +76,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def pipeline(self, request):
         STATUS_ORDER = [
             'new', 'qualifying', 'qualified', 'disqualified',
-            'discovery', 'proposal', 'negotiation',
-            'won', 'lost', 'follow_up',
+            'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
+            'proposal', 'won', 'not_closed', 'lost', 'follow_up',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),
@@ -125,7 +125,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.closer_name = closer_name
         prospect.meeting_scheduled_at = meeting_scheduled_at
         prospect.meeting_link = meeting_link
-        prospect.status = 'discovery'
+        prospect.status = 'scheduled'
         prospect.save()
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -135,7 +135,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Lead não compareceu à reunião."""
         prospect = self.get_object()
         prospect.meeting_attended = False
-        prospect.status = 'follow_up'
+        prospect.status = 'no_show'
+        prospect.follow_up_reason = 'nao_compareceu'
         prospect.save()
         logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -145,7 +146,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Lead compareceu à reunião."""
         prospect = self.get_object()
         prospect.meeting_attended = True
-        prospect.status = 'proposal'
+        prospect.status = 'meeting_done'
         prospect.save()
         logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
@@ -155,8 +156,6 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Registra que o e-book personalizado foi enviado ao lead."""
         prospect = self.get_object()
         prospect.ebook_sent_at = timezone.now()
-        if prospect.status == 'discovery':
-            pass  # mantém em discovery
         prospect.save()
         logger.info(f"E-book enviado para prospect {prospect.id} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)

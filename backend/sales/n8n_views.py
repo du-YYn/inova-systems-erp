@@ -9,8 +9,8 @@ from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Prospect
-from .serializers import ProspectSerializer
+from .models import Prospect, Proposal, Customer
+from .serializers import ProspectSerializer, ProposalSerializer
 from .n8n_auth import N8NApiKeyAuthentication
 
 logger = logging.getLogger('sales')
@@ -91,28 +91,29 @@ class LeadUpdateView(N8NBaseView):
     Usado pelo SDR para registrar qualificacao, agendamento, transcricao, etc.
     """
 
-    # Mapeamento de status do n8n para status do ERP
+    # Mapeamento 1:1 de status do n8n para status do ERP
     STATUS_MAP = {
         'qualifying': 'qualifying',
         'qualified': 'qualified',
         'not_qualified': 'disqualified',
-        'scheduled': 'discovery',
-        'pre_meeting': 'discovery',
-        'no_show': 'follow_up',
-        'meeting_done': 'proposal',
+        'scheduled': 'scheduled',
+        'pre_meeting': 'pre_meeting',
+        'no_show': 'no_show',
+        'meeting_done': 'meeting_done',
         'proposal_sent': 'proposal',
-        'proposal_draft': 'proposal',
         'closed': 'won',
-        'not_closed': 'follow_up',
+        'not_closed': 'not_closed',
         'follow_up': 'follow_up',
     }
 
     ALLOWED_FIELDS = {
         'status', 'has_operation', 'has_budget', 'is_decision_maker',
         'has_urgency', 'qualification_score', 'closer_name',
-        'meeting_scheduled_at', 'meeting_transcript', 'meeting_attended',
+        'meeting_scheduled_at', 'meeting_link', 'meeting_transcript',
+        'meeting_attended', 'ebook_sent_at',
         'last_message', 'last_message_at', 'temperature',
         'qualification_level', 'usage_type', 'description',
+        'follow_up_reason', 'pre_meeting_scenario',
     }
 
     def patch(self, request, pk):
@@ -150,10 +151,6 @@ class LeadUpdateView(N8NBaseView):
                         value = False
                     elif value.lower() in ('null', 'none', ''):
                         value = None
-
-            # Campos extras que nao existem no model — registrar como atividade
-            if field in ('last_message', 'last_message_at'):
-                continue
 
             if hasattr(prospect, field):
                 setattr(prospect, field, value)
@@ -200,21 +197,19 @@ class FollowUpLeadsView(N8NBaseView):
 
         # Cenario 2: no-show detectado (agendamento passou e meeting_attended is null)
         cenario_2_detectado = Prospect.objects.filter(
-            status='discovery',
+            status__in=['scheduled', 'pre_meeting'],
             meeting_scheduled_at__lt=now - timezone.timedelta(hours=1),
             meeting_attended__isnull=True,
         ).values_list('id', flat=True)
 
         # Cenario 2: ja marcados como no-show
         cenario_2_marcado = Prospect.objects.filter(
-            status='follow_up',
-            meeting_attended=False,
+            status='no_show',
         ).values_list('id', flat=True)
 
-        # Cenario 3: reuniao realizada mas nao fechou (follow_up com meeting_attended=True)
+        # Cenario 3: reuniao realizada mas nao fechou
         cenario_3 = Prospect.objects.filter(
-            status='follow_up',
-            meeting_attended=True,
+            status='not_closed',
         ).values_list('id', flat=True)
 
         all_ids = set(cenario_1) | set(cenario_2_detectado) | set(cenario_2_marcado) | set(cenario_3)
@@ -237,6 +232,79 @@ class FollowUpLeadsView(N8NBaseView):
             'count': len(results),
             'leads': results,
         })
+
+
+class ProposalCreateView(N8NBaseView):
+    """
+    POST /api/v1/sales/n8n/proposals/create/
+    Cria uma proposta a partir dos dados do lead.
+    Usado pelo Agente de Proposta após agendamento confirmado.
+    """
+
+    def post(self, request):
+        prospect_id = request.data.get('prospect_id')
+        if not prospect_id:
+            return Response(
+                {'error': 'prospect_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            prospect = Prospect.objects.get(pk=prospect_id)
+        except Prospect.DoesNotExist:
+            return Response(
+                {'error': 'Prospect não encontrado'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Buscar ou criar Customer vinculado ao prospect
+        if not prospect.customer:
+            customer, _ = Customer.objects.get_or_create(
+                email=prospect.contact_email,
+                defaults={
+                    'company_name': prospect.company_name,
+                    'name': prospect.contact_name,
+                    'phone': prospect.contact_phone,
+                    'created_by': request.user,
+                },
+            )
+            prospect.customer = customer
+            prospect.save(update_fields=['customer', 'updated_at'])
+        else:
+            customer = prospect.customer
+
+        # Gerar número sequencial
+        from django.db import transaction as db_transaction
+        with db_transaction.atomic():
+            last_proposal = Proposal.objects.select_for_update().order_by('-id').first()
+            if last_proposal:
+                try:
+                    last_seq = int(last_proposal.number.split('-')[1])
+                except (IndexError, ValueError):
+                    last_seq = 0
+            else:
+                last_seq = 0
+            next_number = f"PROP-{last_seq + 1:05d}"
+
+            proposal = Proposal.objects.create(
+                prospect=prospect,
+                customer=customer,
+                number=next_number,
+                title=request.data.get('title', f'Proposta - {prospect.company_name}'),
+                proposal_type=request.data.get('proposal_type', 'mixed'),
+                billing_type=request.data.get('billing_type', 'fixed'),
+                description=request.data.get('description', prospect.description),
+                scope=request.data.get('scope', []),
+                deliverables=request.data.get('deliverables', []),
+                total_value=request.data.get('total_value', 0),
+                valid_until=request.data.get('valid_until', (timezone.now() + timezone.timedelta(days=30)).date()),
+                notes=request.data.get('notes', ''),
+                status='draft',
+                created_by=request.user,
+            )
+
+        logger.info(f"n8n created proposal {proposal.number} for prospect {prospect_id}")
+        return Response(ProposalSerializer(proposal).data, status=status.HTTP_201_CREATED)
 
 
 class SendEmailView(N8NBaseView):
