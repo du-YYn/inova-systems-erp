@@ -84,6 +84,14 @@
     @apply hover:shadow-card-hover hover:-translate-y-0.5;
   }
 
+  /* Demo mode — sensitive data blur */
+  .sensitive-blur {
+    filter: blur(5px);
+    user-select: none;
+    pointer-events: none;
+    transition: filter 0.2s ease;
+  }
+
   /* Input field */
   .input-field {
     @apply w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl text-sm

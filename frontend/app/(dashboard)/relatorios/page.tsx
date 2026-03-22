@@ -22,6 +22,7 @@ import {
   Legend,
 } from 'recharts';
 import { CardSkeleton } from '@/components/ui/Skeleton';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -394,16 +395,16 @@ export default function RelatoriosPage() {
           <div className="grid grid-cols-3 gap-4">
             <div className="card p-5">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Receitas</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(cashSummary.income)}</p>
+              <p className="text-2xl font-bold text-green-600"><Sensitive>{formatCurrency(cashSummary.income)}</Sensitive></p>
             </div>
             <div className="card p-5">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Despesas</p>
-              <p className="text-2xl font-bold text-red-600">{formatCurrency(cashSummary.expense)}</p>
+              <p className="text-2xl font-bold text-red-600"><Sensitive>{formatCurrency(cashSummary.expense)}</Sensitive></p>
             </div>
             <div className="card p-5">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Saldo</p>
               <p className={`text-2xl font-bold ${cashSummary.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(cashSummary.balance)}
+                <Sensitive>{formatCurrency(cashSummary.balance)}</Sensitive>
               </p>
             </div>
           </div>
@@ -480,7 +481,7 @@ export default function RelatoriosPage() {
                     <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                       {projectBudgets.map((p, i) => (
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{p.name}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.name}</Sensitive></td>
                           <td className="py-3 px-4">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               p.status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -493,7 +494,7 @@ export default function RelatoriosPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {p.total_budget > 0 ? formatCurrency(p.total_budget) : '—'}
+                            <Sensitive>{p.total_budget > 0 ? formatCurrency(p.total_budget) : '—'}</Sensitive>
                           </td>
                         </tr>
                       ))}
@@ -515,25 +516,25 @@ export default function RelatoriosPage() {
               <div className="card p-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Total Prospects</p>
                 <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                  {pipelineData.reduce((s, d) => s + d.count, 0)}
+                  <Sensitive>{pipelineData.reduce((s, d) => s + d.count, 0)}</Sensitive>
                 </p>
               </div>
               <div className="card p-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Valor Total</p>
                 <p className="text-xl font-bold text-accent-gold">
-                  {formatCurrency(pipelineData.reduce((s, d) => s + d.value, 0))}
+                  <Sensitive>{formatCurrency(pipelineData.reduce((s, d) => s + d.value, 0))}</Sensitive>
                 </p>
               </div>
               <div className="card p-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Fechados</p>
                 <p className="text-xl font-bold text-green-600">
-                  {pipelineData.find(d => d.label === 'Fechado')?.count || 0}
+                  <Sensitive>{pipelineData.find(d => d.label === 'Fechado')?.count || 0}</Sensitive>
                 </p>
               </div>
               <div className="card p-4">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Em Proposta</p>
                 <p className="text-xl font-bold text-orange-600">
-                  {pipelineData.find(d => d.label === 'Proposta')?.count || 0}
+                  <Sensitive>{pipelineData.find(d => d.label === 'Proposta')?.count || 0}</Sensitive>
                 </p>
               </div>
             </div>
@@ -573,8 +574,8 @@ export default function RelatoriosPage() {
                   {pipelineData.map((row, i) => (
                     <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                       <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{row.label}</td>
-                      <td className="py-3 px-4 text-right text-sm text-gray-500 dark:text-gray-400">{row.count}</td>
-                      <td className="py-3 px-4 text-right text-sm font-medium text-accent-gold">{formatCurrency(row.value)}</td>
+                      <td className="py-3 px-4 text-right text-sm text-gray-500 dark:text-gray-400"><Sensitive>{row.count}</Sensitive></td>
+                      <td className="py-3 px-4 text-right text-sm font-medium text-accent-gold"><Sensitive>{formatCurrency(row.value)}</Sensitive></td>
                     </tr>
                   ))}
                 </tbody>
@@ -601,21 +602,21 @@ export default function RelatoriosPage() {
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Receita</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency(profitabilityData.reduce((s, p) => s + p.revenue, 0))}
+                    <Sensitive>{formatCurrency(profitabilityData.reduce((s, p) => s + p.revenue, 0))}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Custo</p>
                   <p className="text-2xl font-bold text-red-600">
-                    {formatCurrency(profitabilityData.reduce((s, p) => s + p.total_cost, 0))}
+                    <Sensitive>{formatCurrency(profitabilityData.reduce((s, p) => s + p.total_cost, 0))}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Margem Média</p>
                   <p className="text-2xl font-bold text-accent-gold">
-                    {profitabilityData.length > 0
+                    <Sensitive>{profitabilityData.length > 0
                       ? (profitabilityData.reduce((s, p) => s + p.margin_pct, 0) / profitabilityData.length).toFixed(1)
-                      : '0'}%
+                      : '0'}%</Sensitive>
                   </p>
                 </div>
               </div>
@@ -641,12 +642,12 @@ export default function RelatoriosPage() {
                     <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                       {profitabilityData.map(p => (
                         <tr key={p.project_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{p.project_name}</td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200">{formatCurrency(p.revenue)}</td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200">{formatCurrency(p.labor_cost)}</td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200">{formatCurrency(p.direct_expenses)}</td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200">{formatCurrency(p.total_cost)}</td>
-                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200">{formatCurrency(p.gross_margin)}</td>
+                          <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.project_name}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{formatCurrency(p.revenue)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{formatCurrency(p.labor_cost)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{formatCurrency(p.direct_expenses)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{formatCurrency(p.total_cost)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{formatCurrency(p.gross_margin)}</Sensitive></td>
                           <td className="py-3 px-4 text-right">
                             <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                               p.margin_pct >= 40
@@ -655,7 +656,7 @@ export default function RelatoriosPage() {
                                 ? 'bg-yellow-100 text-yellow-800'
                                 : 'bg-red-100 text-red-800'
                             }`}>
-                              {p.margin_pct.toFixed(1)}%
+                              <Sensitive>{p.margin_pct.toFixed(1)}%</Sensitive>
                             </span>
                           </td>
                         </tr>
@@ -718,30 +719,30 @@ export default function RelatoriosPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Receita Bruta</span>
-                  <span className="text-sm font-bold text-green-600">{formatCurrency(dreData.receita_bruta)}</span>
+                  <span className="text-sm font-bold text-green-600"><Sensitive>{formatCurrency(dreData.receita_bruta)}</Sensitive></span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm text-gray-500 dark:text-gray-400">(-) Deduções</span>
-                  <span className="text-sm font-medium text-red-500">({formatCurrency(dreData.deducoes)})</span>
+                  <span className="text-sm font-medium text-red-500"><Sensitive>({formatCurrency(dreData.deducoes)})</Sensitive></span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700 bg-blue-50 -mx-6 px-6 rounded">
                   <span className="text-sm font-semibold text-blue-800">= Receita Líquida</span>
-                  <span className="text-sm font-bold text-blue-700">{formatCurrency(dreData.receita_liquida)}</span>
+                  <span className="text-sm font-bold text-blue-700"><Sensitive>{formatCurrency(dreData.receita_liquida)}</Sensitive></span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-700">
                   <span className="text-sm text-gray-500 dark:text-gray-400">(-) Despesas Operacionais</span>
-                  <span className="text-sm font-medium text-red-500">({formatCurrency(dreData.despesas_operacionais)})</span>
+                  <span className="text-sm font-medium text-red-500"><Sensitive>({formatCurrency(dreData.despesas_operacionais)})</Sensitive></span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700 bg-amber-50 -mx-6 px-6 rounded">
                   <span className="text-sm font-semibold text-amber-800">= EBITDA</span>
                   <span className={`text-sm font-bold ${dreData.ebitda >= 0 ? 'text-amber-700' : 'text-red-600'}`}>
-                    {formatCurrency(dreData.ebitda)}
+                    <Sensitive>{formatCurrency(dreData.ebitda)}</Sensitive>
                   </span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 -mx-6 px-6 rounded">
                   <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">= Lucro Líquido</span>
                   <span className={`text-sm font-bold ${dreData.lucro_liquido >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(dreData.lucro_liquido)}
+                    <Sensitive>{formatCurrency(dreData.lucro_liquido)}</Sensitive>
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-3">
@@ -749,7 +750,7 @@ export default function RelatoriosPage() {
                   <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
                     dreData.margem_liquida >= 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
-                    {dreData.margem_liquida.toFixed(1)}%
+                    <Sensitive>{dreData.margem_liquida.toFixed(1)}%</Sensitive>
                   </span>
                 </div>
               </div>
@@ -775,7 +776,7 @@ export default function RelatoriosPage() {
               <div className="card p-5">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total em Aberto (vencido)</p>
                 <p className="text-2xl font-bold text-red-600">
-                  {formatCurrency(agingData.reduce((s, b) => s + b.total, 0))}
+                  <Sensitive>{formatCurrency(agingData.reduce((s, b) => s + b.total, 0))}</Sensitive>
                 </p>
               </div>
 
@@ -784,8 +785,8 @@ export default function RelatoriosPage() {
                 {agingData.map(bucket => (
                   <div key={bucket.bucket} className="card p-4">
                     <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{bucket.bucket}</p>
-                    <p className="text-lg font-bold text-red-600">{formatCurrency(bucket.total)}</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{bucket.count} fatura{bucket.count !== 1 ? 's' : ''}</p>
+                    <p className="text-lg font-bold text-red-600"><Sensitive>{formatCurrency(bucket.total)}</Sensitive></p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><Sensitive>{bucket.count}</Sensitive> fatura{bucket.count !== 1 ? 's' : ''}</p>
                   </div>
                 ))}
               </div>
@@ -796,7 +797,7 @@ export default function RelatoriosPage() {
                   <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-red-500" />
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{bucket.bucket}</h3>
-                    <span className="ml-auto text-sm font-medium text-red-600">{formatCurrency(bucket.total)}</span>
+                    <span className="ml-auto text-sm font-medium text-red-600"><Sensitive>{formatCurrency(bucket.total)}</Sensitive></span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full">
@@ -812,13 +813,13 @@ export default function RelatoriosPage() {
                       <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                         {bucket.invoices.map(inv => (
                           <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                            <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-200 font-mono">{inv.number}</td>
-                            <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100 font-medium">{inv.customer_name}</td>
+                            <td className="py-3 px-4 text-sm text-gray-700 dark:text-gray-200 font-mono"><Sensitive>{inv.number}</Sensitive></td>
+                            <td className="py-3 px-4 text-sm text-gray-900 dark:text-gray-100 font-medium"><Sensitive>{inv.customer_name}</Sensitive></td>
                             <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">
                               {new Date(inv.due_date).toLocaleDateString('pt-BR')}
                             </td>
                             <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {formatCurrency(inv.total)}
+                              <Sensitive>{formatCurrency(inv.total)}</Sensitive>
                             </td>
                             <td className="py-3 px-4 text-right">
                               <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
@@ -855,19 +856,19 @@ export default function RelatoriosPage() {
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">MRR Atual</p>
                   <p className="text-2xl font-bold text-accent-gold">
-                    {formatCurrency(forecastData[0]?.contracted_mrr || 0)}
+                    <Sensitive>{formatCurrency(forecastData[0]?.contracted_mrr || 0)}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Projeção 6 meses</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(forecastData.slice(0, 6).reduce((s, m) => s + m.total, 0))}
+                    <Sensitive>{formatCurrency(forecastData.slice(0, 6).reduce((s, m) => s + m.total, 0))}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Projeção 12 meses</p>
                   <p className="text-2xl font-bold text-green-600">
-                    {formatCurrency(forecastData.slice(0, 12).reduce((s, m) => s + m.total, 0))}
+                    <Sensitive>{formatCurrency(forecastData.slice(0, 12).reduce((s, m) => s + m.total, 0))}</Sensitive>
                   </p>
                 </div>
               </div>
@@ -908,9 +909,9 @@ export default function RelatoriosPage() {
                       {forecastData.slice(0, 12).map((row, i) => (
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                           <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{row.month}</td>
-                          <td className="py-3 px-4 text-right text-sm text-accent-gold font-medium">{formatCurrency(row.contracted_mrr)}</td>
-                          <td className="py-3 px-4 text-right text-sm text-blue-600">{formatCurrency(row.pipeline_mrr)}</td>
-                          <td className="py-3 px-4 text-right text-sm font-bold text-green-600">{formatCurrency(row.total)}</td>
+                          <td className="py-3 px-4 text-right text-sm text-accent-gold font-medium"><Sensitive>{formatCurrency(row.contracted_mrr)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-blue-600"><Sensitive>{formatCurrency(row.pipeline_mrr)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm font-bold text-green-600"><Sensitive>{formatCurrency(row.total)}</Sensitive></td>
                         </tr>
                       ))}
                     </tbody>

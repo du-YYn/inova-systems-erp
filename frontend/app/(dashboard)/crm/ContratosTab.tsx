@@ -7,6 +7,7 @@ import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import FocusTrap from '@/components/ui/FocusTrap';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api, { ApiError } from '@/lib/api';
 
 interface Contract {
@@ -207,21 +208,21 @@ export default function ContratosTab() {
                 <ScrollText className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Total</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{stats.total_contracts}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{stats.total_contracts}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Ativos</p>
               </div>
-              <p className="text-2xl font-semibold text-green-600">{stats.active_contracts}</p>
+              <p className="text-2xl font-semibold text-green-600"><Sensitive>{stats.active_contracts}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-accent-gold" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">MRR</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(stats.mrr)}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(stats.mrr)}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
@@ -229,7 +230,7 @@ export default function ContratosTab() {
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Vencendo (30d)</p>
               </div>
               <p className={`text-2xl font-semibold ${stats.expiring_contracts > 0 ? 'text-orange-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                {stats.expiring_contracts}
+                <Sensitive>{stats.expiring_contracts}</Sensitive>
               </p>
             </div>
           </>
@@ -291,20 +292,20 @@ export default function ContratosTab() {
               {contracts.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.number}</p>
-                    {c.proposal_title && <p className="text-xs text-gray-500 dark:text-gray-400">Prop: {c.proposal_title}</p>}
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{c.title}</Sensitive></p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono"><Sensitive>{c.number}</Sensitive></p>
+                    {c.proposal_title && <p className="text-xs text-gray-500 dark:text-gray-400">Prop: <Sensitive>{c.proposal_title}</Sensitive></p>}
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-900 dark:text-gray-100">{c.customer_name || '—'}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100"><Sensitive>{c.customer_name || '—'}</Sensitive></p>
                   </td>
                   <td className="px-6 py-4">
                     <p className="text-sm text-gray-900 dark:text-gray-100">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
                   </td>
                   <td className="px-6 py-4">
-                    {c.monthly_value && <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(c.monthly_value)}/mês</p>}
-                    {c.hourly_rate && <p className="text-xs text-gray-500 dark:text-gray-400">{formatCurrency(c.hourly_rate)}/h</p>}
+                    {c.monthly_value && <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(c.monthly_value)}</Sensitive>/mês</p>}
+                    {c.hourly_rate && <p className="text-xs text-gray-500 dark:text-gray-400"><Sensitive>{formatCurrency(c.hourly_rate)}</Sensitive>/h</p>}
                     {!c.monthly_value && !c.hourly_rate && <p className="text-sm text-gray-500 dark:text-gray-400">—</p>}
                   </td>
                   <td className="px-6 py-4">

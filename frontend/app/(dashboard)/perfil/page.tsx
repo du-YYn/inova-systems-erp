@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import api, { ApiError } from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 interface UserProfile {
   id: number;
@@ -269,9 +270,9 @@ export default function PerfilPage() {
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              {[profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username}
+              <Sensitive>{[profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username}</Sensitive>
             </h2>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">{profile.email}</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm"><Sensitive>{profile.email}</Sensitive></p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 profile.role === 'admin' ? 'bg-purple-100 text-purple-800' :

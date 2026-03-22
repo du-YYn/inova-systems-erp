@@ -9,6 +9,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import FocusTrap from '@/components/ui/FocusTrap';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 interface Ticket {
@@ -257,9 +258,9 @@ export default function SuportePage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">#{ticket.number}</span>
-                        <h2 className="font-semibold text-gray-800 dark:text-gray-100 leading-tight text-base">{ticket.title}</h2>
-                        {ticket.customer_name && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{ticket.customer_name}</p>}
+                        <span className="text-xs text-gray-400 dark:text-gray-500 font-mono">#<Sensitive>{ticket.number}</Sensitive></span>
+                        <h2 className="font-semibold text-gray-800 dark:text-gray-100 leading-tight text-base"><Sensitive>{ticket.title}</Sensitive></h2>
+                        {ticket.customer_name && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5"><Sensitive>{ticket.customer_name}</Sensitive></p>}
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${statusConfig[ticket.status]?.color || 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
@@ -271,7 +272,7 @@ export default function SuportePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 dark:text-gray-500">
-                      {ticket.assigned_to_name && <span className="flex items-center gap-1"><User className="w-3 h-3" />{ticket.assigned_to_name}</span>}
+                      {ticket.assigned_to_name && <span className="flex items-center gap-1"><User className="w-3 h-3" /><Sensitive>{ticket.assigned_to_name}</Sensitive></span>}
                       <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{ticket.comments_count}</span>
                       <span>{formatDate(ticket.created_at)}</span>
                       {ticket.is_sla_breached && (
@@ -310,7 +311,7 @@ export default function SuportePage() {
           {!loading && kbArticles.map(article => (
             <div key={article.id} className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
               <div className="flex items-start justify-between mb-2">
-                <h2 className="font-semibold text-gray-800 dark:text-gray-100 flex-1 pr-2 text-base">{article.title}</h2>
+                <h2 className="font-semibold text-gray-800 dark:text-gray-100 flex-1 pr-2 text-base"><Sensitive>{article.title}</Sensitive></h2>
                 <div className="flex flex-col gap-1 flex-shrink-0">
                   <span className={`px-2 py-0.5 text-xs rounded-full ${article.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                     {article.status === 'published' ? 'Publicado' : 'Rascunho'}
@@ -367,7 +368,7 @@ export default function SuportePage() {
               { label: 'SLA Violado', value: stats.sla_breached, color: 'text-red-700 bg-red-50' },
             ].map(s => (
               <div key={s.label} className={`rounded-xl p-4 ${s.color}`}>
-                <div className="text-2xl font-bold">{s.value}</div>
+                <div className="text-2xl font-bold"><Sensitive>{s.value}</Sensitive></div>
                 <div className="text-xs mt-0.5">{s.label}</div>
               </div>
             ))}
@@ -388,7 +389,7 @@ export default function SuportePage() {
                       bp.priority === 'medium' ? 'bg-blue-500' : 'bg-gray-400'
                     }`} style={{ width: `${stats.total ? (bp.count / stats.total) * 100 : 0}%` }} />
                   </div>
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 w-6">{bp.count}</span>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 w-6"><Sensitive>{bp.count}</Sensitive></span>
                 </div>
               ))}
             </div>
@@ -479,8 +480,8 @@ export default function SuportePage() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-5 border-b">
               <div>
-                <span className="text-xs font-mono text-gray-400 dark:text-gray-500">#{selectedTicket.number}</span>
-                <h2 className="font-semibold text-gray-800 dark:text-gray-100">{selectedTicket.title}</h2>
+                <span className="text-xs font-mono text-gray-400 dark:text-gray-500">#<Sensitive>{selectedTicket.number}</Sensitive></span>
+                <h2 className="font-semibold text-gray-800 dark:text-gray-100"><Sensitive>{selectedTicket.title}</Sensitive></h2>
               </div>
               <button onClick={() => setSelectedTicket(null)} aria-label="Fechar"><X className="w-5 h-5 text-gray-400 dark:text-gray-500" /></button>
             </div>
@@ -529,7 +530,7 @@ export default function SuportePage() {
                   {ticketComments.map(c => (
                     <div key={c.id} className={`p-3 rounded-lg text-sm ${c.is_internal ? 'bg-yellow-50 border border-yellow-200' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-gray-700 dark:text-gray-200">{c.user_name}</span>
+                        <span className="font-medium text-gray-700 dark:text-gray-200"><Sensitive>{c.user_name}</Sensitive></span>
                         <div className="flex items-center gap-2">
                           {c.is_internal && <span className="text-xs text-yellow-600 font-medium">Interno</span>}
                           <span className="text-xs text-gray-400 dark:text-gray-500">{formatDateTime(c.created_at)}</span>

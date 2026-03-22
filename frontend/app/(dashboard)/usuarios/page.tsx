@@ -21,6 +21,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api, { ApiError } from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -272,7 +273,7 @@ export default function UsuariosPage() {
               <Icon className="w-5 h-5" />
             </div>
             <p className="text-gray-500 dark:text-gray-400 text-sm">{label}</p>
-            <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5">{value}</p>
+            <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-0.5"><Sensitive>{value}</Sensitive></p>
           </div>
         ))}
       </div>
@@ -335,8 +336,8 @@ export default function UsuariosPage() {
                           <span className="text-sm font-semibold text-accent-gold">{initials}</span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.full_name || user.username}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">@{user.username}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{user.full_name || user.username}</Sensitive></p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">@<Sensitive>{user.username}</Sensitive></p>
                         </div>
                       </div>
                     </td>
@@ -347,7 +348,7 @@ export default function UsuariosPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 hidden md:table-cell">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">{user.email || '—'}</span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400"><Sensitive>{user.email || '—'}</Sensitive></span>
                     </td>
                     <td className="hidden md:table-cell py-3 px-4">
                       <span className="text-sm text-gray-500 dark:text-gray-400">{formatDate(user.created_at)}</span>

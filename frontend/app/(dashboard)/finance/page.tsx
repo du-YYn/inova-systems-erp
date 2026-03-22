@@ -29,6 +29,7 @@ import { CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -827,21 +828,21 @@ export default function FinancePage() {
                     <ArrowUpRight className="w-6 h-6 text-green-600" />
                   </div>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">Receitas do Mês</p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.received_this_month)}</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{formatCurrency(stats.received_this_month)}</Sensitive></p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
                   <div className="w-12 h-12 bg-red-50 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4">
                     <ArrowDownRight className="w-6 h-6 text-red-600" />
                   </div>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">Despesas do Mês</p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.paid_this_month)}</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{formatCurrency(stats.paid_this_month)}</Sensitive></p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
                   <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
                     <DollarSign className="w-6 h-6 text-blue-600" />
                   </div>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">A Receber</p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.pending_receivables)}</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{formatCurrency(stats.pending_receivables)}</Sensitive></p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
                   <div className="flex items-start justify-between mb-4">
@@ -850,12 +851,12 @@ export default function FinancePage() {
                     </div>
                     {stats.overdue_invoices > 0 && (
                       <span className="px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-800 text-xs rounded-full flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> {stats.overdue_invoices} vencidas
+                        <AlertCircle className="w-3 h-3" /> <Sensitive>{stats.overdue_invoices}</Sensitive> vencidas
                       </span>
                     )}
                   </div>
                   <p className="text-gray-500 dark:text-gray-400 text-sm">A Pagar</p>
-                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.pending_payables)}</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{formatCurrency(stats.pending_payables)}</Sensitive></p>
                 </div>
               </>
             )}
@@ -880,11 +881,11 @@ export default function FinancePage() {
                           <DollarSign className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.number || inv.description || `Fatura #${inv.id}`}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{inv.customer_name || '—'}{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{inv.number || inv.description || `Fatura #${inv.id}`}</Sensitive></p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400"><Sensitive>{inv.customer_name || '—'}</Sensitive>{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-green-600 ml-4">{formatCurrency(inv.total)}</span>
+                      <span className="text-sm font-medium text-green-600 ml-4"><Sensitive>{formatCurrency(inv.total)}</Sensitive></span>
                     </div>
                   ))}
                 </div>
@@ -908,11 +909,11 @@ export default function FinancePage() {
                           <CreditCard className="w-5 h-5 text-red-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.number || inv.description || `Despesa #${inv.id}`}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{inv.number || inv.description || `Despesa #${inv.id}`}</Sensitive></p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">{inv.due_date ? `Vence ${formatDate(inv.due_date)}` : '—'}</p>
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-red-600 ml-4">{formatCurrency(inv.total)}</span>
+                      <span className="text-sm font-medium text-red-600 ml-4"><Sensitive>{formatCurrency(inv.total)}</Sensitive></span>
                     </div>
                   ))}
                 </div>
@@ -1007,10 +1008,10 @@ export default function FinancePage() {
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                   {invoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-mono text-gray-900 dark:text-gray-100">{inv.number}</td>
+                      <td className="py-3 px-4 text-sm font-mono text-gray-900 dark:text-gray-100"><Sensitive>{inv.number}</Sensitive></td>
                       <td className="py-3 px-4">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.description || '—'}</p>
-                        {inv.customer_name && <p className="text-xs text-gray-500 dark:text-gray-400">{inv.customer_name}</p>}
+                        {inv.customer_name && <p className="text-xs text-gray-500 dark:text-gray-400"><Sensitive>{inv.customer_name}</Sensitive></p>}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${inv.invoice_type === 'receivable' ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-red-100 dark:bg-red-900/40 text-red-800'}`}>
@@ -1018,7 +1019,7 @@ export default function FinancePage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
-                      <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(inv.total)}</td>
+                      <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(inv.total)}</Sensitive></td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
                           inv.status === 'paid' ? 'bg-green-100 dark:bg-green-900/40 text-green-800' :
@@ -1129,7 +1130,7 @@ export default function FinancePage() {
                       <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{tx.bank_account_name || '—'}</td>
                       <td className="py-3 px-4 text-right">
                         <span className={`text-sm font-semibold ${tx.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                          {tx.transaction_type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                          {tx.transaction_type === 'income' ? '+' : '-'}<Sensitive>{formatCurrency(tx.amount)}</Sensitive>
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -1178,7 +1179,7 @@ export default function FinancePage() {
                   <tr key={ba.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{ba.name}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{ba.name}</Sensitive></span>
                         {ba.is_default && (
                           <span className="px-1.5 py-0.5 bg-accent-gold/10 text-accent-gold text-xs rounded">Padrão</span>
                         )}
@@ -1186,7 +1187,7 @@ export default function FinancePage() {
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{ba.bank || '—'}</td>
                     <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">
-                      {ba.agency ? `Ag. ${ba.agency}` : ''}{ba.agency && ba.account_number ? ' / ' : ''}{ba.account_number || '—'}
+                      <Sensitive>{ba.agency ? `Ag. ${ba.agency}` : ''}{ba.agency && ba.account_number ? ' / ' : ''}{ba.account_number || '—'}</Sensitive>
                     </td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 text-xs rounded capitalize">
@@ -1195,7 +1196,7 @@ export default function FinancePage() {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className={`text-sm font-semibold ${Number(ba.balance) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(ba.balance)}
+                        <Sensitive>{formatCurrency(ba.balance)}</Sensitive>
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
@@ -1326,8 +1327,8 @@ export default function FinancePage() {
                       style={{ width: `${progress}%` }} />
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500 dark:text-gray-400">Realizado: <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(budget.actual)}</span></span>
-                    <span className="text-gray-500 dark:text-gray-400">Planejado: <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(budget.planned)}</span></span>
+                    <span className="text-gray-500 dark:text-gray-400">Realizado: <span className="font-medium text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(budget.actual)}</Sensitive></span></span>
+                    <span className="text-gray-500 dark:text-gray-400">Planejado: <span className="font-medium text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(budget.planned)}</Sensitive></span></span>
                   </div>
                 </div>
               );

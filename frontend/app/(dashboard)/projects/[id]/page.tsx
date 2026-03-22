@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 // Types
 interface Project {
@@ -295,12 +296,12 @@ export default function ProjectDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{project.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100"><Sensitive>{project.name}</Sensitive></h1>
             <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700'}`}>
               {project.status}
             </span>
           </div>
-          {project.customer_name && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{project.customer_name}</p>}
+          {project.customer_name && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5"><Sensitive>{project.customer_name}</Sensitive></p>}
         </div>
       </div>
 
@@ -317,7 +318,7 @@ export default function ProjectDetailPage() {
         <div className="flex gap-6 mt-3 text-xs text-gray-500 dark:text-gray-400">
           <span>Início: {formatDate(project.start_date)}</span>
           {project.deadline && <span className="text-orange-600">Prazo: {formatDate(project.deadline)}</span>}
-          <span>Time: {project.team_names?.join(', ') || '-'}</span>
+          <span>Time: <Sensitive>{project.team_names?.join(', ') || '-'}</Sensitive></span>
         </div>
       </div>
 
@@ -346,10 +347,10 @@ export default function ProjectDetailPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500 dark:text-gray-400">Tipo</span><p className="font-medium">{project.project_type}</p></div>
               <div><span className="text-gray-500 dark:text-gray-400">Faturamento</span><p className="font-medium">{project.billing_type}</p></div>
-              <div><span className="text-gray-500 dark:text-gray-400">Orçamento</span><p className="font-medium">{formatCurrency(project.budget_value)}</p></div>
-              <div><span className="text-gray-500 dark:text-gray-400">Horas Budget</span><p className="font-medium">{project.budget_hours}h</p></div>
-              <div><span className="text-gray-500 dark:text-gray-400">Horas Logadas</span><p className="font-medium">{totalLoggedHours.toFixed(1)}h</p></div>
-              <div><span className="text-gray-500 dark:text-gray-400">Gerente</span><p className="font-medium">{project.manager_name || '-'}</p></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Orçamento</span><p className="font-medium"><Sensitive>{formatCurrency(project.budget_value)}</Sensitive></p></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Horas Budget</span><p className="font-medium"><Sensitive>{project.budget_hours}h</Sensitive></p></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Horas Logadas</span><p className="font-medium"><Sensitive>{totalLoggedHours.toFixed(1)}h</Sensitive></p></div>
+              <div><span className="text-gray-500 dark:text-gray-400">Gerente</span><p className="font-medium"><Sensitive>{project.manager_name || '-'}</Sensitive></p></div>
             </div>
             {project.description && (
               <div><p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Descrição</p><p className="text-sm text-gray-700 dark:text-gray-200">{project.description}</p></div>
@@ -370,20 +371,20 @@ export default function ProjectDetailPage() {
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Receita</span>
-                  <span className="font-semibold text-green-600">{formatCurrency(profitability.revenue)}</span>
+                  <span className="font-semibold text-green-600"><Sensitive>{formatCurrency(profitability.revenue)}</Sensitive></span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Custo de mão de obra</span>
-                  <span className="font-medium text-red-500">- {formatCurrency(profitability.labor_cost)}</span>
+                  <span className="font-medium text-red-500">- <Sensitive>{formatCurrency(profitability.labor_cost)}</Sensitive></span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-gray-400">Despesas diretas</span>
-                  <span className="font-medium text-red-500">- {formatCurrency(profitability.direct_expenses)}</span>
+                  <span className="font-medium text-red-500">- <Sensitive>{formatCurrency(profitability.direct_expenses)}</Sensitive></span>
                 </div>
                 <div className="border-t pt-2 flex justify-between">
                   <span className="font-semibold">Margem Bruta</span>
                   <span className={`font-bold ${profitability.gross_margin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(profitability.gross_margin)} ({profitability.margin_pct}%)
+                    <Sensitive>{formatCurrency(profitability.gross_margin)} ({profitability.margin_pct}%)</Sensitive>
                   </span>
                 </div>
               </div>
@@ -441,7 +442,7 @@ export default function ProjectDetailPage() {
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${priorityColors[task.priority]}`}>{task.priority}</span>
                           </div>
                           <p className="text-sm font-medium text-gray-800 dark:text-gray-100 leading-tight">{task.title}</p>
-                          {task.assigned_to_name && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{task.assigned_to_name}</p>}
+                          {task.assigned_to_name && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5"><Sensitive>{task.assigned_to_name}</Sensitive></p>}
                           {task.due_date && <p className="text-xs text-gray-400 dark:text-gray-500">{formatDate(task.due_date)}</p>}
                         </div>
                       </div>
@@ -543,7 +544,7 @@ export default function ProjectDetailPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {timeEntries.map(entry => (
                   <tr key={entry.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100">{entry.user_name}</td>
+                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-100"><Sensitive>{entry.user_name}</Sensitive></td>
                     <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{formatDate(entry.date)}</td>
                     <td className="px-4 py-3 font-semibold text-accent-gold">{entry.hours}h</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-xs truncate">{entry.description || '-'}</td>
@@ -613,9 +614,9 @@ export default function ProjectDetailPage() {
                   <h3 className="font-medium text-gray-800 dark:text-gray-100">{cr.title}</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{cr.description}</p>
                   <div className="flex gap-4 text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                    <span>+{cr.impact_hours}h</span>
-                    <span>+{formatCurrency(cr.impact_value)}</span>
-                    <span>por {cr.created_by_name}</span>
+                    <span>+<Sensitive>{cr.impact_hours}h</Sensitive></span>
+                    <span>+<Sensitive>{formatCurrency(cr.impact_value)}</Sensitive></span>
+                    <span>por <Sensitive>{cr.created_by_name}</Sensitive></span>
                   </div>
                 </div>
                 <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${

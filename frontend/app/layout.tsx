@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { DemoProvider } from "@/components/ui/DemoContext";
 
 export const metadata: Metadata = {
   title: "Inova Systems Solutions ERP",
@@ -31,9 +32,11 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-bg-primary">
-        <ToastProvider>
-          {children}
-        </ToastProvider>
+        <DemoProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </DemoProvider>
       </body>
     </html>
   );

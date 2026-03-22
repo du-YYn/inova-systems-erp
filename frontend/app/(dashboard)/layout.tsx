@@ -25,6 +25,8 @@ import {
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { DemoToggle } from '@/components/ui/DemoToggle';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 interface Notif {
   id: number;
@@ -281,10 +283,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-200 truncate leading-tight">
-              {user?.username || 'Usuário'}
+              <Sensitive>{user?.username || 'Usuário'}</Sensitive>
             </p>
             <p className="text-[11px] text-slate-500 truncate leading-tight">
-              {user?.email || ''}
+              <Sensitive>{user?.email || ''}</Sensitive>
             </p>
           </div>
         </div>
@@ -368,6 +370,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             <div className="flex-1" />
 
+            {/* Demo mode toggle */}
+            <DemoToggle />
+
             {/* Theme toggle */}
             <ThemeToggle />
 
@@ -426,10 +431,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
-                              {notif.title}
+                              <Sensitive>{notif.title}</Sensitive>
                             </p>
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                              {notif.message}
+                              <Sensitive>{notif.message}</Sensitive>
                             </p>
                             <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                               {relativeTime(notif.created_at)}
@@ -463,7 +468,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {user?.username?.charAt(0).toUpperCase() || 'U'}
               </div>
               <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:block">
-                {user?.username || 'Usuário'}
+                <Sensitive>{user?.username || 'Usuário'}</Sensitive>
               </span>
             </Link>
           </div>

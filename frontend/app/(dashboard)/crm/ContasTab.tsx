@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api, { ApiError } from '@/lib/api';
 import { useDebouncedValue, usePagination } from '@/lib/hooks';
 import FocusTrap from '@/components/ui/FocusTrap';
@@ -180,25 +181,25 @@ export default function ContasTab() {
           <>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <p className="text-gray-500 dark:text-gray-400 text-sm">Total</p>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{total}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{total}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <p className="text-gray-500 dark:text-gray-400 text-sm">Ativos</p>
-              <p className="text-2xl font-semibold text-green-600 mt-1">{totalActive}</p>
+              <p className="text-2xl font-semibold text-green-600 mt-1"><Sensitive>{totalActive}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-1">
                 <Building2 className="w-4 h-4 text-blue-500" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Jurídicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPJ}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{totalPJ}</Sensitive></p>
             </div>
             <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-4 h-4 text-purple-500" />
                 <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Físicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPF}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{totalPF}</Sensitive></p>
             </div>
           </>
         )}
@@ -268,9 +269,9 @@ export default function ContasTab() {
                         }
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayName(c)}</p>
-                        {c.trading_name && <p className="text-xs text-gray-500 dark:text-gray-400">{c.trading_name}</p>}
-                        {c.document && <p className="text-xs text-gray-500 dark:text-gray-400">{c.document}</p>}
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{displayName(c)}</Sensitive></p>
+                        {c.trading_name && <p className="text-xs text-gray-500 dark:text-gray-400"><Sensitive>{c.trading_name}</Sensitive></p>}
+                        {c.document && <p className="text-xs text-gray-500 dark:text-gray-400"><Sensitive>{c.document}</Sensitive></p>}
                       </div>
                     </div>
                   </td>
@@ -287,12 +288,12 @@ export default function ContasTab() {
                   <td className="px-6 py-4">
                     {c.email && (
                       <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
-                        <Mail className="w-3 h-3" />{c.email}
+                        <Mail className="w-3 h-3" /><Sensitive>{c.email}</Sensitive>
                       </div>
                     )}
                     {c.phone && (
                       <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                        <Phone className="w-3 h-3" />{c.phone}
+                        <Phone className="w-3 h-3" /><Sensitive>{c.phone}</Sensitive>
                       </div>
                     )}
                   </td>
@@ -300,7 +301,7 @@ export default function ContasTab() {
                     {(c.city || c.state) && (
                       <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <MapPin className="w-3 h-3" />
-                        {[c.city, c.state].filter(Boolean).join(' — ')}
+                        <Sensitive>{[c.city, c.state].filter(Boolean).join(' — ')}</Sensitive>
                       </div>
                     )}
                   </td>

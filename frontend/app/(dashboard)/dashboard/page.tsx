@@ -28,6 +28,7 @@ import {
   Cell,
 } from 'recharts';
 import api from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 interface Stats {
   mrr: number;
@@ -185,7 +186,7 @@ export default function DashboardPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          Bem-vindo{userName ? `, ${userName}` : ''}!
+          Bem-vindo{userName ? <>, <Sensitive>{userName}</Sensitive></> : ''}!
         </h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">Visão geral do seu negócio em tempo real.</p>
       </div>
@@ -203,7 +204,7 @@ export default function DashboardPage() {
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Receita Recorrente</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">
-            {loading ? <span className="skeleton h-7 w-28 block" /> : formatCurrency(stats.mrr)}
+            {loading ? <span className="skeleton h-7 w-28 block" /> : <Sensitive>{formatCurrency(stats.mrr)}</Sensitive>}
           </p>
         </div>
 
@@ -214,13 +215,13 @@ export default function DashboardPage() {
             </div>
             {stats.expiring_contracts > 0 && !loading && (
               <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
-                {stats.expiring_contracts} expirando
+                <Sensitive>{stats.expiring_contracts}</Sensitive> expirando
               </span>
             )}
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Contratos Ativos</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">
-            {loading ? <span className="skeleton h-7 w-16 block" /> : stats.active_contracts}
+            {loading ? <span className="skeleton h-7 w-16 block" /> : <Sensitive>{stats.active_contracts}</Sensitive>}
           </p>
         </div>
 
@@ -233,7 +234,7 @@ export default function DashboardPage() {
           <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Projetos Ativos</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">
             {loading ? <span className="skeleton h-7 w-20 block" /> : (
-              <>{stats.active_projects}<span className="text-gray-400 dark:text-gray-500 text-lg font-normal">/{stats.total_projects}</span></>
+              <><Sensitive>{stats.active_projects}</Sensitive><span className="text-gray-400 dark:text-gray-500 text-lg font-normal">/<Sensitive>{stats.total_projects}</Sensitive></span></>
             )}
           </p>
         </div>
@@ -246,7 +247,7 @@ export default function DashboardPage() {
           </div>
           <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wide">Receita do Mês</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1.5 tabular-nums">
-            {loading ? <span className="skeleton h-7 w-28 block" /> : formatCurrency(stats.received_this_month)}
+            {loading ? <span className="skeleton h-7 w-28 block" /> : <Sensitive>{formatCurrency(stats.received_this_month)}</Sensitive>}
           </p>
         </div>
       </div>
@@ -279,19 +280,19 @@ export default function DashboardPage() {
             <div>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-medium">Receitas</p>
               <p className="text-sm font-bold text-emerald-600 tabular-nums">
-                {loading ? '...' : formatCurrency(stats.received_this_month)}
+                {loading ? '...' : <Sensitive>{formatCurrency(stats.received_this_month)}</Sensitive>}
               </p>
             </div>
             <div>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-medium">Despesas</p>
               <p className="text-sm font-bold text-red-500 tabular-nums">
-                {loading ? '...' : formatCurrency(stats.paid_this_month)}
+                {loading ? '...' : <Sensitive>{formatCurrency(stats.paid_this_month)}</Sensitive>}
               </p>
             </div>
             <div>
               <p className="text-[11px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-medium">Saldo</p>
               <p className={`text-sm font-bold tabular-nums ${stats.received_this_month - stats.paid_this_month >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {loading ? '...' : formatCurrency(stats.received_this_month - stats.paid_this_month)}
+                {loading ? '...' : <Sensitive>{formatCurrency(stats.received_this_month - stats.paid_this_month)}</Sensitive>}
               </p>
             </div>
           </div>

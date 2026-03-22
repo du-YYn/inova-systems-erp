@@ -5,6 +5,7 @@ import { Phone, Mail, Video, MessageCircle, Monitor, Linkedin, MoreHorizontal, C
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Pagination } from '@/components/ui/Pagination';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 interface Activity {
@@ -131,7 +132,7 @@ export default function AtividadesTab() {
                   {/* Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">{activity.subject}</span>
+                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{activity.subject}</Sensitive></span>
                       <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${colorCls}`}>
                         {activityLabels[activity.activity_type] || activity.activity_type}
                       </span>
@@ -143,11 +144,11 @@ export default function AtividadesTab() {
                       )}
                     </div>
                     {activity.description && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{activity.description}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2"><Sensitive>{activity.description}</Sensitive></p>
                     )}
                     {activity.outcome && (
                       <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">
-                        <span className="font-medium">Resultado:</span> {activity.outcome}
+                        <span className="font-medium">Resultado:</span> <Sensitive>{activity.outcome}</Sensitive>
                       </p>
                     )}
                     {activity.next_action && (
@@ -161,7 +162,7 @@ export default function AtividadesTab() {
                   {/* Meta */}
                   <div className="text-right flex-shrink-0">
                     <p className="text-[10px] text-gray-400 dark:text-gray-500">{formatDate(activity.date)}</p>
-                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{activity.created_by_name}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5"><Sensitive>{activity.created_by_name}</Sensitive></p>
                   </div>
                 </div>
               );

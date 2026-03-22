@@ -12,6 +12,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import FocusTrap from '@/components/ui/FocusTrap';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 interface Proposal {
@@ -198,9 +199,9 @@ export default function PropostasTab() {
         {loading ? Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
             {[
-              { icon: FileText, bg: 'bg-blue-50', color: 'text-blue-600', label: 'Total de Propostas', value: total },
-              { icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600', label: 'Aprovadas', value: approvedCount },
-              { icon: TrendingUp, bg: 'bg-violet-50', color: 'text-violet-600', label: 'Valor Aprovado', value: formatCurrency(approvedValue) },
+              { icon: FileText, bg: 'bg-blue-50', color: 'text-blue-600', label: 'Total de Propostas', value: <Sensitive>{total}</Sensitive> },
+              { icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600', label: 'Aprovadas', value: <Sensitive>{approvedCount}</Sensitive> },
+              { icon: TrendingUp, bg: 'bg-violet-50', color: 'text-violet-600', label: 'Valor Aprovado', value: <Sensitive>{formatCurrency(approvedValue)}</Sensitive> },
             ].map(({ icon: Icon, bg, color, label, value }) => (
               <div key={label} className="card card-hover p-5">
                 <div className="flex items-center gap-3">
@@ -252,12 +253,12 @@ export default function PropostasTab() {
                   </tr>
                 ) : proposals.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{p.number}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{p.title}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{p.customer_name || p.prospect_company || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"><Sensitive>{p.number}</Sensitive></td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.title}</Sensitive></td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><Sensitive>{p.customer_name || p.prospect_company || '—'}</Sensitive></td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                      {p.total_value ? formatCurrency(p.total_value) : '—'}
+                      <Sensitive>{p.total_value ? formatCurrency(p.total_value) : '—'}</Sensitive>
                     </td>
                     <td className="px-4 py-3">
                       <Badge variant={statusBadge[p.status] || 'neutral'}>

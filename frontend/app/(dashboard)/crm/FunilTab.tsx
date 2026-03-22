@@ -15,6 +15,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Badge } from '@/components/ui/Badge';
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -785,7 +786,7 @@ export default function FunilTab() {
           { label: 'Leads', value: kpiLeads, icon: UserPlus, bg: 'bg-blue-50', color: 'text-blue-600', barColor: 'bg-blue-500' },
           { label: 'Agendados', value: kpiAgendados, icon: Calendar, bg: 'bg-purple-50', color: 'text-purple-600', barColor: 'bg-purple-500' },
           { label: 'Em Andamento', value: kpiEmAndamento, icon: CheckCircle, bg: 'bg-indigo-50', color: 'text-indigo-600', barColor: 'bg-indigo-500' },
-          { label: 'Fechados', value: kpiWonCount, icon: TrendingUp, bg: 'bg-green-50', color: 'text-green-600', barColor: 'bg-green-500', extra: kpiWonValue > 0 ? formatCurrency(kpiWonValue) : undefined },
+          { label: 'Fechados', value: kpiWonCount, icon: TrendingUp, bg: 'bg-green-50', color: 'text-green-600', barColor: 'bg-green-500', extra: kpiWonValue > 0 ? <Sensitive>{formatCurrency(kpiWonValue)}</Sensitive> : undefined },
         ];
         return (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -801,7 +802,7 @@ export default function FunilTab() {
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide truncate">{label}</p>
                       <div className="flex items-baseline gap-2">
-                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{value}</p>
+                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums"><Sensitive>{value}</Sensitive></p>
                         {extra && <p className="text-xs text-accent-gold font-semibold tabular-nums">{extra}</p>}
                       </div>
                     </div>
@@ -932,8 +933,8 @@ export default function FunilTab() {
                   <div key={prospect.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors">
                     <div className="flex items-start justify-between mb-1">
                       <div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{prospect.company_name}</p>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">{prospect.contact_name} · {prospect.contact_email}</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm"><Sensitive>{prospect.company_name}</Sensitive></p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500"><Sensitive>{prospect.contact_name}</Sensitive> · <Sensitive>{prospect.contact_email}</Sensitive></p>
                       </div>
                       {prospect.temperature && (
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
@@ -945,7 +946,7 @@ export default function FunilTab() {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusColors[prospect.status] || 'bg-gray-100 dark:bg-gray-700'}`}>
                         {statusLabels[prospect.status]}
                       </span>
-                      <span className="text-xs font-semibold text-accent-gold tabular-nums">{formatCurrency(prospect.estimated_value)}</span>
+                      <span className="text-xs font-semibold text-accent-gold tabular-nums"><Sensitive>{formatCurrency(prospect.estimated_value)}</Sensitive></span>
                       {prospect.days_since_created > 0 && (
                         <span className={`text-[10px] ${prospect.days_since_created > 14 ? 'text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>{prospect.days_since_created}d</span>
                       )}
@@ -1005,7 +1006,7 @@ export default function FunilTab() {
                         </td>
                         {/* Empresa + qualif badges */}
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{prospect.company_name}</p>
+                          <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm"><Sensitive>{prospect.company_name}</Sensitive></p>
                           <div className="flex items-center gap-1 mt-1 flex-wrap">
                             {prospect.qualification_level && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
@@ -1026,14 +1027,14 @@ export default function FunilTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-sm text-gray-800 dark:text-gray-100">{prospect.contact_name}</p>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">{prospect.contact_email}</p>
+                          <p className="text-sm text-gray-800 dark:text-gray-100"><Sensitive>{prospect.contact_name}</Sensitive></p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500"><Sensitive>{prospect.contact_email}</Sensitive></p>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 capitalize">
                           {sourceOptions.find(s => s.value === prospect.source)?.label ?? prospect.source}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
-                          {formatCurrency(prospect.estimated_value)}
+                          <Sensitive>{formatCurrency(prospect.estimated_value)}</Sensitive>
                         </td>
                         <td className="px-4 py-3">
                           <div className="relative inline-block group">
@@ -1122,7 +1123,7 @@ export default function FunilTab() {
                     <span className="text-xs text-gray-400 dark:text-gray-500 font-semibold">{col.length}</span>
                   </div>
                   {col.length > 0 && (
-                    <p className="text-xs text-gray-400 dark:text-gray-500 px-1 font-medium tabular-nums">{formatCurrency(colValue)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 px-1 font-medium tabular-nums"><Sensitive>{formatCurrency(colValue)}</Sensitive></p>
                   )}
                   {/* Cards */}
                   <div className="flex flex-col gap-2 min-h-[60px]">
@@ -1130,14 +1131,14 @@ export default function FunilTab() {
                       <DraggableCard key={prospect.id} prospect={prospect}>
                       <div className="card card-hover p-3 cursor-grab active:cursor-grabbing animate-stagger-in">
                         <div className="flex items-center justify-between mb-0.5">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{prospect.company_name}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{prospect.company_name}</Sensitive></p>
                           {prospect.temperature && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
                               {temperatureLabels[prospect.temperature] || prospect.temperature}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{prospect.contact_name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1"><Sensitive>{prospect.contact_name}</Sensitive></p>
                         {/* Badges */}
                         <div className="flex items-center gap-1 flex-wrap mb-2">
                           {prospect.service_interest && (
@@ -1198,7 +1199,7 @@ export default function FunilTab() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-bold text-accent-gold tabular-nums">
-                              {formatCurrency(prospect.estimated_value)}
+                              <Sensitive>{formatCurrency(prospect.estimated_value)}</Sensitive>
                             </span>
                             {prospect.days_since_created > 0 && (
                               <span className={`text-[10px] tabular-nums ${prospect.days_since_created > 14 ? 'text-red-400' : prospect.days_since_created > 7 ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500'}`}>
@@ -1249,9 +1250,9 @@ export default function FunilTab() {
         <DragOverlay>
           {draggedProspect && (
             <div className="card p-3 w-60 shadow-xl ring-2 ring-accent-gold/20 rotate-2 opacity-90">
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{draggedProspect.company_name}</p>
-              <p className="text-xs text-gray-400 dark:text-gray-500">{draggedProspect.contact_name}</p>
-              <p className="text-xs font-bold text-accent-gold mt-1">{formatCurrency(draggedProspect.estimated_value)}</p>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{draggedProspect.company_name}</Sensitive></p>
+              <p className="text-xs text-gray-400 dark:text-gray-500"><Sensitive>{draggedProspect.contact_name}</Sensitive></p>
+              <p className="text-xs font-bold text-accent-gold mt-1"><Sensitive>{formatCurrency(draggedProspect.estimated_value)}</Sensitive></p>
             </div>
           )}
         </DragOverlay>

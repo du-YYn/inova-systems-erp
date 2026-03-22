@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api from '@/lib/api';
+import { Sensitive } from '@/components/ui/Sensitive';
 
 interface Project {
   id: number;
@@ -264,7 +265,7 @@ export default function ProjectsPage() {
                         onClick={() => router.push(`/projects/${project.id}`)}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1 flex-1">{project.name}</h3>
+                          <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1 flex-1"><Sensitive>{project.name}</Sensitive></h3>
                           <button
                             onClick={() => setDeleteTarget(project)}
                             className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
@@ -275,7 +276,7 @@ export default function ProjectsPage() {
                           </button>
                         </div>
                         {project.customer_name && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{project.customer_name}</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3"><Sensitive>{project.customer_name}</Sensitive></p>
                         )}
 
                         <div className="flex items-center justify-between mb-2">
@@ -285,7 +286,7 @@ export default function ProjectsPage() {
                           </span>
                           {project.budget_value && (
                             <span className="text-sm font-medium text-accent-gold">
-                              {formatCurrency(project.budget_value)}
+                              <Sensitive>{formatCurrency(project.budget_value)}</Sensitive>
                             </span>
                           )}
                         </div>

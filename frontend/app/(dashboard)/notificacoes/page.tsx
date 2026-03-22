@@ -37,6 +37,7 @@ type FilterTab = 'all' | 'unread' | 'read';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
 
 function relativeTime(dateStr: string): string {
@@ -263,10 +264,10 @@ export default function NotificacoesPage() {
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 leading-snug">
-                    {notification.title}
+                    <Sensitive>{notification.title}</Sensitive>
                   </p>
                   <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
-                    {notification.message}
+                    <Sensitive>{notification.message}</Sensitive>
                   </p>
                 </div>
 
