@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 import api from '@/lib/api';
 
 interface Proposal {
@@ -66,6 +67,7 @@ const EMPTY_FORM = {
 
 export default function PropostasTab() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
@@ -349,7 +351,7 @@ export default function PropostasTab() {
                 <label className={labelInput}>Título *</label>
                 <input type="text" required value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="input-field" placeholder="Título da proposta" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Título da proposta" />
               </div>
               <div>
                 <label className={labelInput}>Cliente</label>
@@ -389,7 +391,7 @@ export default function PropostasTab() {
                   <label className={labelInput}>Valor Total (R$)</label>
                   <input type="number" step="0.01" value={formData.total_value}
                     onChange={(e) => setFormData({ ...formData, total_value: e.target.value })}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
                   <label className={labelInput}>Validade</label>
@@ -401,7 +403,7 @@ export default function PropostasTab() {
               <div>
                 <label className={labelInput}>Observações</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3} className="input-field resize-none" placeholder="Observações sobre a proposta..." />
+                  rows={3} className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Observações sobre a proposta..." />
               </div>
               <div className="flex gap-2 pt-2">
                 <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowModal(false)}>

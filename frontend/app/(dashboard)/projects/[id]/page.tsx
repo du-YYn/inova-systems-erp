@@ -13,6 +13,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 
 // Types
 interface Project {
@@ -104,6 +105,7 @@ const formatDate = (d: string | null) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
 
 export default function ProjectDetailPage() {
+  const { isDemoMode } = useDemoMode();
   const params = useParams();
   const router = useRouter();
   const toast = useToast();
@@ -670,7 +672,7 @@ export default function ProjectDetailPage() {
             <div className="p-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Título *</label>
-                <input className="input-field mt-1" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))} />
+                <input className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -708,7 +710,7 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Descrição</label>
-                <textarea rows={3} className="input-field mt-1" value={taskForm.description}
+                <textarea rows={3} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={taskForm.description}
                   onChange={e => setTaskForm(f => ({ ...f, description: e.target.value }))} />
               </div>
             </div>
@@ -736,7 +738,7 @@ export default function ProjectDetailPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Horas *</label>
-                  <input type="number" step="0.5" min="0.5" className="input-field mt-1" value={timeForm.hours}
+                  <input type="number" step="0.5" min="0.5" className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={timeForm.hours}
                     onChange={e => setTimeForm(f => ({ ...f, hours: e.target.value }))} />
                 </div>
                 <div>
@@ -757,7 +759,7 @@ export default function ProjectDetailPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Descrição</label>
-                <textarea rows={3} className="input-field mt-1" value={timeForm.description}
+                <textarea rows={3} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={timeForm.description}
                   onChange={e => setTimeForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <label className="flex items-center gap-2 text-sm">
@@ -787,22 +789,22 @@ export default function ProjectDetailPage() {
             <div className="p-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Título *</label>
-                <input className="input-field mt-1" value={crForm.title} onChange={e => setCrForm(f => ({ ...f, title: e.target.value }))} />
+                <input className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={crForm.title} onChange={e => setCrForm(f => ({ ...f, title: e.target.value }))} />
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Descrição</label>
-                <textarea rows={3} className="input-field mt-1" value={crForm.description}
+                <textarea rows={3} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={crForm.description}
                   onChange={e => setCrForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Impacto em Horas</label>
-                  <input type="number" step="0.5" className="input-field mt-1" value={crForm.impact_hours}
+                  <input type="number" step="0.5" className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={crForm.impact_hours}
                     onChange={e => setCrForm(f => ({ ...f, impact_hours: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Impacto em Valor (R$)</label>
-                  <input type="number" step="0.01" className="input-field mt-1" value={crForm.impact_value}
+                  <input type="number" step="0.01" className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={crForm.impact_value}
                     onChange={e => setCrForm(f => ({ ...f, impact_value: e.target.value }))} />
                 </div>
               </div>

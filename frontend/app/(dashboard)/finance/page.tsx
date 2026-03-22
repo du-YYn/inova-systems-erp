@@ -30,6 +30,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,7 @@ type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categor
 
 export default function FinancePage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const today = new Date().toISOString().split('T')[0];
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
@@ -1416,14 +1418,14 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={invoiceForm.description}
                   onChange={e => setInvoiceForm({ ...invoiceForm, description: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={invoiceForm.value}
                     onChange={e => setInvoiceForm({ ...invoiceForm, value: e.target.value })}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Emissão *</label>
@@ -1501,14 +1503,14 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={transactionForm.description}
                   onChange={e => setTransactionForm({ ...transactionForm, description: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={transactionForm.amount}
                     onChange={e => setTransactionForm({ ...transactionForm, amount: e.target.value })}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
@@ -1572,14 +1574,14 @@ export default function FinancePage() {
                 <input type="text" required value={bankAccountForm.name}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
                   placeholder="Ex: Conta Principal"
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Banco</label>
                 <input type="text" value={bankAccountForm.bank}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, bank: e.target.value })}
                   placeholder="Ex: Itaú, Nubank..."
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo de Conta</label>
@@ -1598,14 +1600,14 @@ export default function FinancePage() {
                   <input type="text" value={bankAccountForm.agency}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, agency: e.target.value })}
                     placeholder="0001"
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Número da Conta</label>
                   <input type="text" value={bankAccountForm.account_number}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, account_number: e.target.value })}
                     placeholder="12345-6"
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
               </div>
               <div>
@@ -1613,7 +1615,7 @@ export default function FinancePage() {
                 <input type="text" value={bankAccountForm.pix_key}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, pix_key: e.target.value })}
                   placeholder="CPF, CNPJ, e-mail ou telefone"
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBankAccountModal(false)}
@@ -1647,13 +1649,13 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={revenueForm.description}
                   onChange={(e) => setRevenueForm({ ...revenueForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
+                  className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500 ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={revenueForm.amount}
                   onChange={(e) => setRevenueForm({ ...revenueForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
+                  className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500 ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
@@ -1704,13 +1706,13 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
+                  className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={expenseForm.amount}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
+                  className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
@@ -1812,7 +1814,7 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={budgetForm.name}
                   onChange={(e) => setBudgetForm({ ...budgetForm, name: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Categoria *</label>
@@ -1851,7 +1853,7 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor Planejado (R$) *</label>
                 <input type="number" step="0.01" required value={budgetForm.planned}
                   onChange={(e) => setBudgetForm({ ...budgetForm, planned: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBudgetModal(false)}
@@ -1885,20 +1887,20 @@ export default function FinancePage() {
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={costCenterForm.name}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, name: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Código</label>
                 <input type="text" value={costCenterForm.code}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, code: e.target.value })}
                   placeholder="Ex: CC-001"
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição</label>
                 <textarea value={costCenterForm.description} rows={3}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, description: e.target.value })}
-                  className="input-field resize-none" />
+                  className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowCostCenterModal(false)}

@@ -7,6 +7,7 @@ import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 import api, { ApiError } from '@/lib/api';
 import { useDebouncedValue, usePagination } from '@/lib/hooks';
 import FocusTrap from '@/components/ui/FocusTrap';
@@ -59,6 +60,7 @@ const segmentLabels: Record<string, string> = {
 
 export default function ContasTab() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -386,7 +388,7 @@ export default function ContasTab() {
                       type="text" required
                       value={formData.company_name}
                       onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                      className="w-full input-field"
+                      className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                     />
                   </div>
                   <div>
@@ -395,7 +397,7 @@ export default function ContasTab() {
                       type="text"
                       value={formData.trading_name}
                       onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
-                      className="w-full input-field"
+                      className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                     />
                   </div>
                 </>
@@ -406,7 +408,7 @@ export default function ContasTab() {
                     type="text" required
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
               )}
@@ -420,7 +422,7 @@ export default function ContasTab() {
                     type="text"
                     value={formData.document}
                     onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -445,7 +447,7 @@ export default function ContasTab() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -454,7 +456,7 @@ export default function ContasTab() {
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
               </div>
@@ -466,7 +468,7 @@ export default function ContasTab() {
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -477,7 +479,7 @@ export default function ContasTab() {
                     placeholder="SP"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
               </div>

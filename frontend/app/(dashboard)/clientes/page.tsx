@@ -9,6 +9,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import api, { ApiError } from '@/lib/api';
 import { useDebouncedValue, usePagination } from '@/lib/hooks';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 
@@ -54,6 +55,7 @@ const segmentLabels: Record<string, string> = {
 
 export default function ClientesPage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
@@ -442,7 +444,7 @@ export default function ClientesPage() {
                         value={formData.company_name}
                         onChange={(e) => { setFormData({ ...formData, company_name: e.target.value }); setErrors(prev => ({ ...prev, company_name: '' })); }}
                         onBlur={() => validateField('company_name', formData.company_name)}
-                        className="w-full input-field"
+                        className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                       />
                     )}
                   </FormField>
@@ -452,7 +454,7 @@ export default function ClientesPage() {
                         type="text" {...props}
                         value={formData.trading_name}
                         onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
-                        className="w-full input-field"
+                        className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                       />
                     )}
                   </FormField>
@@ -465,7 +467,7 @@ export default function ClientesPage() {
                       value={formData.name}
                       onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setErrors(prev => ({ ...prev, name: '' })); }}
                       onBlur={() => validateField('name', formData.name)}
-                      className="w-full input-field"
+                      className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                     />
                   )}
                 </FormField>
@@ -480,7 +482,7 @@ export default function ClientesPage() {
                     type="text"
                     value={formData.document}
                     onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -506,7 +508,7 @@ export default function ClientesPage() {
                       value={formData.email}
                       onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setErrors(prev => ({ ...prev, email: '' })); }}
                       onBlur={() => validateField('email', formData.email)}
-                      className="w-full input-field"
+                      className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                     />
                   )}
                 </FormField>
@@ -516,7 +518,7 @@ export default function ClientesPage() {
                       type="text" {...props}
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full input-field"
+                      className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                     />
                   )}
                 </FormField>
@@ -529,7 +531,7 @@ export default function ClientesPage() {
                     type="text"
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -540,7 +542,7 @@ export default function ClientesPage() {
                     placeholder="SP"
                     value={formData.state}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                    className="w-full input-field"
+                    className={`w-full input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
               </div>

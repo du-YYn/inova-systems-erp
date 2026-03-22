@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 import api from '@/lib/api';
 
 interface Ticket {
@@ -61,6 +62,7 @@ const EMPTY_TICKET_FORM = {
 
 export default function SuportePage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [activeTab, setActiveTab] = useState('tickets');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [kbArticles, setKbArticles] = useState<KBArticle[]>([]);
@@ -443,18 +445,18 @@ export default function SuportePage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Nome do Contato</label>
-                  <input className="input-field mt-1" value={ticketForm.contact_name}
+                  <input className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={ticketForm.contact_name}
                     onChange={e => setTicketForm(f => ({ ...f, contact_name: e.target.value }))} />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Email do Contato</label>
-                  <input type="email" className="input-field mt-1" value={ticketForm.contact_email}
+                  <input type="email" className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={ticketForm.contact_email}
                     onChange={e => setTicketForm(f => ({ ...f, contact_email: e.target.value }))} />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Descrição *</label>
-                <textarea rows={4} className="input-field mt-1" value={ticketForm.description}
+                <textarea rows={4} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`} value={ticketForm.description}
                   onChange={e => setTicketForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div>
@@ -504,7 +506,7 @@ export default function SuportePage() {
 
               {/* Info */}
               <div className="text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-                <p>{selectedTicket.description}</p>
+                <p><Sensitive>{selectedTicket.description}</Sensitive></p>
               </div>
 
               {/* Quick actions */}
@@ -536,7 +538,7 @@ export default function SuportePage() {
                           <span className="text-xs text-gray-400 dark:text-gray-500">{formatDateTime(c.created_at)}</span>
                         </div>
                       </div>
-                      <p className="text-gray-600 dark:text-gray-300">{c.content}</p>
+                      <p className="text-gray-600 dark:text-gray-300"><Sensitive>{c.content}</Sensitive></p>
                     </div>
                   ))}
                 </div>

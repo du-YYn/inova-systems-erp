@@ -15,6 +15,7 @@ import { FormField } from '@/components/ui/FormField';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 
 interface Proposal {
   id: number;
@@ -66,6 +67,7 @@ const EMPTY_FORM = {
 
 export default function SalesPage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
@@ -404,7 +406,7 @@ export default function SalesPage() {
                   <input type="text" {...props} value={formData.title}
                     onChange={(e) => { setFormData({ ...formData, title: e.target.value }); setErrors(prev => ({ ...prev, title: '' })); }}
                     onBlur={() => validateField('title', formData.title)}
-                    className="input-field" placeholder="Título da proposta" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Título da proposta" />
                 )}
               </FormField>
               <FormField label="Cliente" required error={errors.customer}>
@@ -448,7 +450,7 @@ export default function SalesPage() {
                     <input type="number" step="0.01" {...props} value={formData.total_value}
                       onChange={(e) => { setFormData({ ...formData, total_value: e.target.value }); setErrors(prev => ({ ...prev, total_value: '' })); }}
                       onBlur={() => validateField('total_value', formData.total_value)}
-                      className="input-field" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                   )}
                 </FormField>
                 <FormField label="Validade">
@@ -462,7 +464,7 @@ export default function SalesPage() {
               <FormField label="Observações">
                 {(props) => (
                   <textarea {...props} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    rows={3} className="input-field resize-none" placeholder="Observações sobre a proposta..." />
+                    rows={3} className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Observações sobre a proposta..." />
                 )}
               </FormField>
               <div className="flex gap-2 pt-2">

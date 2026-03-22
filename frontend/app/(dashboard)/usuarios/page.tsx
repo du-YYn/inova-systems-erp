@@ -22,6 +22,7 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api, { ApiError } from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ const EMPTY_FORM = {
 
 export default function UsuariosPage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -410,14 +412,14 @@ export default function UsuariosPage() {
                   {(props) => (
                     <input type="text" {...props} value={form.first_name}
                       onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-                      className="input-field" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                   )}
                 </FormField>
                 <FormField label="Sobrenome">
                   {(props) => (
                     <input type="text" {...props} value={form.last_name}
                       onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-                      className="input-field" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                   )}
                 </FormField>
               </div>
@@ -426,7 +428,7 @@ export default function UsuariosPage() {
                   <input type="text" {...props} value={form.username}
                     onChange={(e) => { setForm({ ...form, username: e.target.value }); setErrors(prev => ({ ...prev, username: '' })); }}
                     onBlur={() => validateField('username', form.username)}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 )}
               </FormField>
               <FormField label="Email" required error={errors.email}>
@@ -434,7 +436,7 @@ export default function UsuariosPage() {
                   <input type="email" {...props} value={form.email}
                     onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors(prev => ({ ...prev, email: '' })); }}
                     onBlur={() => validateField('email', form.email)}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 )}
               </FormField>
               <FormField label="Telefone">
@@ -442,7 +444,7 @@ export default function UsuariosPage() {
                   <input type="tel" {...props} value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
                     placeholder="+55 (11) 99999-9999"
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 )}
               </FormField>
               <FormField label="Perfil" required error={errors.role}>

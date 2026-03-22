@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Badge } from '@/components/ui/Badge';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -357,6 +358,7 @@ function DraggableCard({ prospect, children }: { prospect: Prospect; children: R
 
 export default function FunilTab() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const [draggedProspect, setDraggedProspect] = useState<Prospect | null>(null);
 
@@ -1287,13 +1289,13 @@ export default function FunilTab() {
                     <label className={labelInput}>Nome completo *</label>
                     <input type="text" required value={formData.contact_name}
                       onChange={(e) => setField('contact_name', e.target.value)}
-                      className="input-field" placeholder="Nome do contato" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Nome do contato" />
                   </div>
                   <div>
                     <label className={labelInput}>Empresa *</label>
                     <input type="text" required value={formData.company_name}
                       onChange={(e) => setField('company_name', e.target.value)}
-                      className="input-field" placeholder="Nome da empresa" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Nome da empresa" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1301,13 +1303,13 @@ export default function FunilTab() {
                     <label className={labelInput}>WhatsApp *</label>
                     <input type="text" required value={formData.contact_phone}
                       onChange={(e) => setField('contact_phone', e.target.value)}
-                      className="input-field" placeholder="(11) 99999-9999" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="(11) 99999-9999" />
                   </div>
                   <div>
                     <label className={labelInput}>E-mail *</label>
                     <input type="email" required value={formData.contact_email}
                       onChange={(e) => setField('contact_email', e.target.value)}
-                      className="input-field" placeholder="email@empresa.com" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="email@empresa.com" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1367,7 +1369,7 @@ export default function FunilTab() {
                     <input type="number" step="0.01" min="0"
                       value={formData.estimated_value}
                       onChange={(e) => setField('estimated_value', e.target.value)}
-                      className="input-field" placeholder="0,00" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="0,00" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1413,7 +1415,7 @@ export default function FunilTab() {
                   <label className={labelInput}>Dor Principal (palavras do lead) *</label>
                   <textarea value={formData.description} rows={3}
                     onChange={(e) => setField('description', e.target.value)}
-                    className="input-field resize-none"
+                    className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
                     placeholder="Descreva a dor/problema com as palavras do lead..." />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1433,7 +1435,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Próxima Ação</label>
                     <input type="text" value={formData.next_action}
                       onChange={(e) => setField('next_action', e.target.value)}
-                      className="input-field" placeholder="Ex: Agendar reunião" />
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Ex: Agendar reunião" />
                   </div>
                   <div>
                     <label className={labelInput}>Data da Ação</label>
@@ -1452,14 +1454,14 @@ export default function FunilTab() {
                       <label className={labelInput}>Closer Responsável</label>
                       <input type="text" value={formData.closer_name}
                         onChange={(e) => setField('closer_name', e.target.value)}
-                        className="input-field" placeholder="Nome do closer" />
+                        className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Nome do closer" />
                     </div>
                     <div>
                       <label className={labelInput}>Valor da Proposta (R$)</label>
                       <input type="number" step="0.01" min="0"
                         value={formData.estimated_value}
                         onChange={(e) => setField('estimated_value', e.target.value)}
-                        className="input-field" placeholder="0,00" />
+                        className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="0,00" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -1473,14 +1475,14 @@ export default function FunilTab() {
                       <label className={labelInput}>Link da Reunião</label>
                       <input type="url" value={formData.meeting_link}
                         onChange={(e) => setField('meeting_link', e.target.value)}
-                        className="input-field" placeholder="https://meet.google.com/..." />
+                        className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="https://meet.google.com/..." />
                     </div>
                   </div>
                   <div>
                     <label className={labelInput}>Notas da Reunião</label>
                     <textarea value={formData.meeting_transcript} rows={3}
                       onChange={(e) => setField('meeting_transcript', e.target.value)}
-                      className="input-field resize-none"
+                      className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
                       placeholder="Resultado da reunião, escopo acordado, expectativas..." />
                   </div>
                 </Section>

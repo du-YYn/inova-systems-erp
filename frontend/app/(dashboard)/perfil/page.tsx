@@ -5,6 +5,7 @@ import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase } from 'lucide-r
 import { useToast } from '@/components/ui/Toast';
 import api, { ApiError } from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { useDemoMode } from '@/components/ui/DemoContext';
 
 interface UserProfile {
   id: number;
@@ -42,6 +43,7 @@ interface EmployeeProfile {
 
 export default function PerfilPage() {
   const toast = useToast();
+  const { isDemoMode } = useDemoMode();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -326,20 +328,20 @@ export default function PerfilPage() {
                   <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Nome</label>
                   <input type="text" value={profileForm.first_name}
                     onChange={e => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Sobrenome</label>
                   <input type="text" value={profileForm.last_name}
                     onChange={e => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                    className="input-field" />
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">E-mail</label>
                 <input type="email" value={profileForm.email}
                   onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
-                  className="input-field" />
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Usuário</label>
@@ -621,7 +623,7 @@ export default function PerfilPage() {
                     step="0.01"
                     value={employeeProfile.hourly_cost}
                     onChange={e => setEmployeeProfile(prev => ({ ...prev, hourly_cost: e.target.value }))}
-                    className="input-field"
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -703,7 +705,7 @@ export default function PerfilPage() {
                   placeholder="Breve descrição profissional..."
                   value={employeeProfile.bio}
                   onChange={e => setEmployeeProfile(prev => ({ ...prev, bio: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none"
+                  className={`w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
                 />
               </div>
 
@@ -716,7 +718,7 @@ export default function PerfilPage() {
                     placeholder="https://linkedin.com/in/usuario"
                     value={employeeProfile.linkedin_url}
                     onChange={e => setEmployeeProfile(prev => ({ ...prev, linkedin_url: e.target.value }))}
-                    className="input-field"
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
                 <div>
@@ -726,7 +728,7 @@ export default function PerfilPage() {
                     placeholder="https://github.com/usuario"
                     value={employeeProfile.github_url}
                     onChange={e => setEmployeeProfile(prev => ({ ...prev, github_url: e.target.value }))}
-                    className="input-field"
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
                   />
                 </div>
               </div>
