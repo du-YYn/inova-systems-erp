@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import api, { ApiError } from '@/lib/api';
 import { useDebouncedValue, usePagination } from '@/lib/hooks';
+import FocusTrap from '@/components/ui/FocusTrap';
 
 interface Customer {
   id: number;
@@ -177,27 +178,27 @@ export default function ContasTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {loading ? Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-gray-500 text-sm">Total</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">{total}</p>
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Total</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{total}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-gray-500 text-sm">Ativos</p>
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Ativos</p>
               <p className="text-2xl font-semibold text-green-600 mt-1">{totalActive}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-1">
                 <Building2 className="w-4 h-4 text-blue-500" />
-                <p className="text-gray-500 text-sm">Pessoas Jurídicas</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Jurídicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{totalPJ}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPJ}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-4 h-4 text-purple-500" />
-                <p className="text-gray-500 text-sm">Pessoas Físicas</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Físicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{totalPF}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPF}</p>
             </div>
           </>
         )}
@@ -206,13 +207,13 @@ export default function ContasTab() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-48 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por nome, empresa, documento..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
           />
         </div>
         <div className="flex gap-2">
@@ -223,7 +224,7 @@ export default function ContasTab() {
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filterType === val
                   ? 'bg-accent-gold text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
               }`}
             >
               {label}
@@ -237,25 +238,25 @@ export default function ContasTab() {
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={5} /></div>
         ) : customers.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
+          <div className="text-center py-16 text-gray-500 dark:text-gray-400">
             <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Nenhum cliente encontrado</p>
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Tipo</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Contato</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Localização</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Cliente</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Tipo</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Contato</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Localização</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
               {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -267,9 +268,9 @@ export default function ContasTab() {
                         }
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{displayName(c)}</p>
-                        {c.trading_name && <p className="text-xs text-gray-500">{c.trading_name}</p>}
-                        {c.document && <p className="text-xs text-gray-500">{c.document}</p>}
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayName(c)}</p>
+                        {c.trading_name && <p className="text-xs text-gray-500 dark:text-gray-400">{c.trading_name}</p>}
+                        {c.document && <p className="text-xs text-gray-500 dark:text-gray-400">{c.document}</p>}
                       </div>
                     </div>
                   </td>
@@ -280,24 +281,24 @@ export default function ContasTab() {
                       {c.customer_type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
                     </span>
                     {c.segment && (
-                      <p className="text-xs text-gray-500 mt-1">{segmentLabels[c.segment] || c.segment}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{segmentLabels[c.segment] || c.segment}</p>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     {c.email && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
                         <Mail className="w-3 h-3" />{c.email}
                       </div>
                     )}
                     {c.phone && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <Phone className="w-3 h-3" />{c.phone}
                       </div>
                     )}
                   </td>
                   <td className="px-6 py-4">
                     {(c.city || c.state) && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <MapPin className="w-3 h-3" />
                         {[c.city, c.state].filter(Boolean).join(' — ')}
                       </div>
@@ -305,7 +306,7 @@ export default function ContasTab() {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      c.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      c.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                     }`}>
                       {c.is_active ? 'Ativo' : 'Inativo'}
                     </span>
@@ -314,15 +315,17 @@ export default function ContasTab() {
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={() => openEdit(c)}
-                        className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-accent-gold transition-colors"
                         title="Editar"
+                        aria-label="Editar"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(c)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                         title="Remover"
+                        aria-label="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -344,18 +347,19 @@ export default function ContasTab() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                 {editTarget ? 'Editar Cliente' : 'Novo Cliente'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Tipo *</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo *</label>
                 <div className="flex gap-3">
                   {[['PJ', 'Pessoa Jurídica'], ['PF', 'Pessoa Física']].map(([val, label]) => (
                     <label key={val} className="flex items-center gap-2 cursor-pointer">
@@ -376,7 +380,7 @@ export default function ContasTab() {
               {formData.customer_type === 'PJ' ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Razão Social *</label>
+                    <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Razão Social *</label>
                     <input
                       type="text" required
                       value={formData.company_name}
@@ -385,7 +389,7 @@ export default function ContasTab() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Nome Fantasia</label>
+                    <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Nome Fantasia</label>
                     <input
                       type="text"
                       value={formData.trading_name}
@@ -396,7 +400,7 @@ export default function ContasTab() {
                 </>
               ) : (
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome Completo *</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Nome Completo *</label>
                   <input
                     type="text" required
                     value={formData.name}
@@ -408,7 +412,7 @@ export default function ContasTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                     {formData.customer_type === 'PJ' ? 'CNPJ' : 'CPF'}
                   </label>
                   <input
@@ -419,11 +423,11 @@ export default function ContasTab() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Segmento</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Segmento</label>
                   <select
                     value={formData.segment}
                     onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                    className="w-full input-field bg-white"
+                    className="w-full input-field bg-white dark:bg-gray-800"
                   >
                     <option value="">Selecione</option>
                     {Object.entries(segmentLabels).map(([k, v]) => (
@@ -435,7 +439,7 @@ export default function ContasTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Email</label>
                   <input
                     type="email"
                     value={formData.email}
@@ -444,7 +448,7 @@ export default function ContasTab() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Telefone</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Telefone</label>
                   <input
                     type="text"
                     value={formData.phone}
@@ -456,7 +460,7 @@ export default function ContasTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Cidade</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cidade</label>
                   <input
                     type="text"
                     value={formData.city}
@@ -465,7 +469,7 @@ export default function ContasTab() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Estado</label>
                   <input
                     type="text"
                     maxLength={2}
@@ -481,7 +485,7 @@ export default function ContasTab() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -495,6 +499,7 @@ export default function ContasTab() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 

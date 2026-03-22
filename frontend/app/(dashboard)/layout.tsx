@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface Notif {
   id: number;
@@ -201,13 +202,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     (item) => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)),
   );
 
+  // Detect nested pages (e.g. /projects/123)
+  const pathSegments = pathname.split('/').filter(Boolean);
+  const isNestedPage = pathSegments.length > 1;
+
   const SidebarContent = () => (
     <>
       {/* Logo */}
       <div className="flex items-center justify-between px-6 py-5 border-b border-white/8">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-xl font-bold text-[#A6864A] tracking-tighter leading-none">
+            <h1 className="text-xl font-bold text-accent-gold tracking-tighter leading-none">
               Inova.
             </h1>
             <p className="text-[9px] font-medium text-slate-500 tracking-[0.18em] mt-0.5 uppercase">
@@ -246,19 +251,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       transition-all duration-150
                       ${
                         isActive
-                          ? 'bg-[#A6864A]/15 text-[#C4A67C]'
+                          ? 'bg-accent-gold/15 text-accent-gold-light'
                           : 'text-slate-400 hover:bg-white/6 hover:text-slate-200'
                       }
                     `}
                   >
                     <Icon
                       className={`w-4 h-4 flex-shrink-0 ${
-                        isActive ? 'text-[#A6864A]' : 'text-slate-500'
+                        isActive ? 'text-accent-gold' : 'text-slate-500'
                       }`}
                     />
                     <span className="flex-1">{item.label}</span>
                     {isActive && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#A6864A] flex-shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent-gold flex-shrink-0" />
                     )}
                   </Link>
                 );
@@ -271,7 +276,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* User footer */}
       <div className="px-3 pb-4 border-t border-white/8 pt-3">
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/6 transition-colors cursor-pointer group mb-1">
-          <div className="w-8 h-8 bg-gradient-to-br from-[#A6864A] to-[#6B5032] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          <div className="w-8 h-8 bg-gradient-to-br from-accent-gold to-[#6B5032] rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {user?.username?.charAt(0).toUpperCase() || 'U'}
           </div>
           <div className="flex-1 min-w-0">
@@ -295,7 +300,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   );
 
   return (
-    <div className="min-h-screen bg-[#ECECEC]">
+    <div className="min-h-screen bg-[#ECECEC] dark:bg-gray-900">
+      {/* Skip to main content — accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:bg-white focus:px-4 focus:py-2 focus:rounded-lg focus:shadow-lg focus:text-accent-gold focus:font-semibold focus:outline-none"
+      >
+        Pular para o conteúdo principal
+      </a>
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -321,39 +334,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main area */}
       <div className="lg:ml-72 flex flex-col min-h-screen">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-topbar">
+        <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-700 shadow-topbar">
           <div className="flex items-center h-14 px-4 lg:px-6 gap-4">
             {/* Mobile menu */}
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Abrir menu"
-              className="lg:hidden p-2 -ml-1 rounded-lg hover:bg-gray-100 transition-colors"
+              className="lg:hidden p-2 -ml-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              <Menu className="w-5 h-5 text-gray-600" />
+              <Menu className="w-5 h-5 text-gray-600 dark:text-gray-300" />
             </button>
 
             {/* Breadcrumb */}
             <div className="flex items-center gap-1.5 text-sm min-w-0">
-              <span className="text-gray-400 hidden sm:block">Inova ERP</span>
+              <span className="text-gray-400 dark:text-gray-500 hidden sm:block">Inova ERP</span>
               {currentPage && (
                 <>
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 hidden sm:block" />
-                  <span className="font-semibold text-gray-800 truncate">{currentPage.label}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0 hidden sm:block" />
+                  {isNestedPage ? (
+                    <>
+                      <Link href={currentPage.href} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors hidden sm:block">
+                        {currentPage.label}
+                      </Link>
+                      <ChevronRight className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0 hidden sm:block" />
+                      <span className="font-semibold text-gray-800 dark:text-gray-100 truncate">Detalhes</span>
+                    </>
+                  ) : (
+                    <span className="font-semibold text-gray-800 dark:text-gray-100 truncate">{currentPage.label}</span>
+                  )}
                 </>
               )}
             </div>
 
             <div className="flex-1" />
 
-            {/* Right actions — notification bell */}
+            {/* Theme toggle */}
+            <ThemeToggle />
+
+            {/* Notification bell */}
             <div className="relative">
               <button
                 id="notif-bell"
                 onClick={handleBellClick}
                 aria-label="Notificações"
-                className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <Bell className="w-4.5 h-4.5 text-gray-500" />
+                <Bell className="w-4.5 h-4.5 text-gray-500 dark:text-gray-400" />
                 {unreadCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                     {unreadCount > 9 ? '9+' : unreadCount}
@@ -364,11 +390,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {notifOpen && (
                 <div
                   id="notif-dropdown"
-                  className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-100 z-50 overflow-hidden"
+                  className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 z-50 overflow-hidden"
                 >
                   {/* Header */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                    <span className="text-sm font-semibold text-gray-800">Notificações</span>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Notificações</span>
                     <button
                       onClick={handleMarkAllRead}
                       className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
@@ -378,9 +404,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </div>
 
                   {/* List */}
-                  <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                  <ul className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-700">
                     {notifications.length === 0 ? (
-                      <li className="px-4 py-6 text-center text-sm text-gray-400">
+                      <li className="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500">
                         Nenhuma notificação
                       </li>
                     ) : (
@@ -388,8 +414,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         <li
                           key={notif.id}
                           onClick={() => !notif.is_read && handleMarkRead(notif.id)}
-                          className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-                            !notif.is_read ? 'bg-blue-50/40' : ''
+                          className={`flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
+                            !notif.is_read ? 'bg-blue-50/40 dark:bg-blue-900/20' : ''
                           }`}
                         >
                           {/* Blue dot for unread */}
@@ -399,13 +425,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             }`}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">
+                            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">
                               {notif.title}
                             </p>
-                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                               {notif.message}
                             </p>
-                            <p className="text-[10px] text-gray-400 mt-1">
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
                               {relativeTime(notif.created_at)}
                             </p>
                           </div>
@@ -415,7 +441,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </ul>
 
                   {/* Footer */}
-                  <div className="border-t border-gray-100 px-4 py-2.5">
+                  <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2.5">
                     <Link
                       href="/notificacoes"
                       onClick={() => setNotifOpen(false)}
@@ -431,12 +457,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {/* Avatar */}
             <Link
               href="/perfil"
-              className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl hover:bg-gray-100 transition-colors"
+              className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
-              <div className="w-7 h-7 bg-gradient-to-br from-[#A6864A] to-[#6B5032] rounded-full flex items-center justify-center text-white text-xs font-bold">
+              <div className="w-7 h-7 bg-gradient-to-br from-accent-gold to-[#6B5032] rounded-full flex items-center justify-center text-white text-xs font-bold">
                 {user?.username?.charAt(0).toUpperCase() || 'U'}
               </div>
-              <span className="text-sm font-medium text-gray-700 hidden sm:block">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:block">
                 {user?.username || 'Usuário'}
               </span>
             </Link>
@@ -444,7 +470,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         {/* Page content */}
-        <main className="flex-1 p-4 lg:p-8 bg-[#ECECEC]">
+        <main id="main-content" className="flex-1 p-4 lg:p-8 bg-[#ECECEC] dark:bg-gray-900">
           {children}
         </main>
       </div>

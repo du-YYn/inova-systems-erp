@@ -30,7 +30,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((type: ToastType, message: string) => {
     const id = Math.random().toString(36).slice(2);
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => dismiss(id), 3500);
+    setTimeout(() => dismiss(id), 3300);
   }, [dismiss]);
 
   const success = useCallback((message: string) => toast('success', message), [toast]);
@@ -69,17 +69,17 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
   const styles: Record<ToastType, { bg: string; tint: string; icon: React.ReactNode }> = {
     success: {
       bg: 'border-green-500',
-      tint: 'bg-green-50',
+      tint: 'bg-green-50 dark:bg-green-900/30',
       icon: <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />,
     },
     error: {
       bg: 'border-red-500',
-      tint: 'bg-red-50',
+      tint: 'bg-red-50 dark:bg-red-900/30',
       icon: <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />,
     },
     warning: {
       bg: 'border-yellow-500',
-      tint: 'bg-yellow-50',
+      tint: 'bg-yellow-50 dark:bg-yellow-900/30',
       icon: <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />,
     },
   };
@@ -101,12 +101,12 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
       }`}
     >
       {icon}
-      <p className="text-sm text-gray-700 flex-1 leading-snug">{toast.message}</p>
+      <p className="text-sm text-gray-700 dark:text-gray-200 flex-1 leading-snug">{toast.message}</p>
       <button
         onClick={() => setPhase('exit')}
         className="p-0.5 hover:bg-black/5 rounded flex-shrink-0 transition-colors"
       >
-        <X className="w-4 h-4 text-gray-400" />
+        <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
       </button>
     </div>
   );

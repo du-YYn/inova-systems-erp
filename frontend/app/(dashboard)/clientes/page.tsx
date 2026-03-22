@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Plus, Search, Building2, User, Trash2, Edit, X, Phone, Mail, MapPin } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -8,6 +8,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import api, { ApiError } from '@/lib/api';
 import { useDebouncedValue, usePagination } from '@/lib/hooks';
+import FocusTrap from '@/components/ui/FocusTrap';
+import { FormField } from '@/components/ui/FormField';
 
 interface Customer {
   id: number;
@@ -64,6 +66,60 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  const isDirty = useMemo(() => {
+    if (editTarget) {
+      return formData.company_name !== (editTarget.company_name || '') ||
+        formData.name !== (editTarget.name || '') ||
+        formData.email !== (editTarget.email || '') ||
+        formData.trading_name !== (editTarget.trading_name || '') ||
+        formData.document !== (editTarget.document || '') ||
+        formData.phone !== (editTarget.phone || '') ||
+        formData.city !== (editTarget.city || '') ||
+        formData.state !== (editTarget.state || '') ||
+        formData.segment !== (editTarget.segment || '') ||
+        formData.customer_type !== editTarget.customer_type;
+    }
+    return formData.company_name !== '' || formData.name !== '' || formData.email !== '';
+  }, [formData, editTarget]);
+
+  const handleCloseModal = useCallback(() => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+    } else {
+      setShowModal(false);
+    }
+  }, [isDirty]);
+
+  const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  const validateField = (field: string, value: string) => {
+    let error = '';
+    switch (field) {
+      case 'company_name':
+        if (formData.customer_type === 'PJ' && !value.trim()) error = 'Nome é obrigatório';
+        break;
+      case 'name':
+        if (formData.customer_type === 'PF' && !value.trim()) error = 'Nome é obrigatório';
+        break;
+      case 'email':
+        if (!value.trim()) error = 'Email é obrigatório';
+        else if (!isValidEmail(value)) error = 'Formato de email inválido';
+        break;
+    }
+    setErrors(prev => ({ ...prev, [field]: error }));
+    return error;
+  };
+
+  const validateAll = () => {
+    const nameField = formData.customer_type === 'PJ' ? 'company_name' : 'name';
+    const nameValue = formData.customer_type === 'PJ' ? formData.company_name : formData.name;
+    const e1 = validateField(nameField, nameValue);
+    const e2 = validateField('email', formData.email);
+    return !e1 && !e2;
+  };
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
@@ -93,6 +149,7 @@ export default function ClientesPage() {
   const openCreate = () => {
     setEditTarget(null);
     setFormData({ ...EMPTY_FORM });
+    setErrors({});
     setShowModal(true);
   };
 
@@ -111,11 +168,13 @@ export default function ClientesPage() {
       segment: c.segment || '',
       notes: '',
     });
+    setErrors({});
     setShowModal(true);
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateAll()) return;
     setSaving(true);
     try {
       const body = Object.fromEntries(
@@ -158,8 +217,8 @@ export default function ClientesPage() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Clientes</h1>
-          <p className="text-gray-500 mt-1">Cadastro e gestão de clientes</p>
+          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Clientes</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Cadastro e gestão de clientes</p>
         </div>
         <button
           onClick={openCreate}
@@ -174,27 +233,27 @@ export default function ClientesPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {loading ? Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-gray-500 text-sm">Total</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">{total}</p>
+            <div className="card card-hover p-5">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Total</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{total}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
-              <p className="text-gray-500 text-sm">Ativos</p>
+            <div className="card card-hover p-5">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Ativos</p>
               <p className="text-2xl font-semibold text-green-600 mt-1">{totalActive}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="card card-hover p-5">
               <div className="flex items-center gap-2 mb-1">
                 <Building2 className="w-4 h-4 text-blue-500" />
-                <p className="text-gray-500 text-sm">Pessoas Jurídicas</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Jurídicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{totalPJ}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPJ}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="card card-hover p-5">
               <div className="flex items-center gap-2 mb-1">
                 <User className="w-4 h-4 text-purple-500" />
-                <p className="text-gray-500 text-sm">Pessoas Físicas</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Pessoas Físicas</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{totalPF}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{totalPF}</p>
             </div>
           </>
         )}
@@ -203,13 +262,13 @@ export default function ClientesPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-48 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por nome, empresa, documento..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
           />
         </div>
         <div className="flex gap-2">
@@ -220,7 +279,7 @@ export default function ClientesPage() {
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filterType === val
                   ? 'bg-accent-gold text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
               }`}
             >
               {label}
@@ -234,29 +293,29 @@ export default function ClientesPage() {
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={5} /></div>
         ) : customers.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
-            <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+          <div className="text-center py-16 text-gray-500 dark:text-gray-400">
+            <Building2 className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-500" />
             <p>Nenhum cliente encontrado</p>
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Tipo</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Contato</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Localização</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Cliente</th>
+                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Tipo</th>
+                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Contato</th>
+                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Localização</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
               {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        c.customer_type === 'PJ' ? 'bg-blue-100' : 'bg-purple-100'
+                        c.customer_type === 'PJ' ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-purple-100 dark:bg-purple-900/40'
                       }`}>
                         {c.customer_type === 'PJ'
                           ? <Building2 className="w-4 h-4 text-blue-600" />
@@ -264,37 +323,37 @@ export default function ClientesPage() {
                         }
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{displayName(c)}</p>
-                        {c.trading_name && <p className="text-xs text-gray-500">{c.trading_name}</p>}
-                        {c.document && <p className="text-xs text-gray-500">{c.document}</p>}
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{displayName(c)}</p>
+                        {c.trading_name && <p className="text-xs text-gray-500 dark:text-gray-400">{c.trading_name}</p>}
+                        {c.document && <p className="text-xs text-gray-500 dark:text-gray-400">{c.document}</p>}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="hidden md:table-cell px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      c.customer_type === 'PJ' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                      c.customer_type === 'PJ' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-800'
                     }`}>
                       {c.customer_type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
                     </span>
                     {c.segment && (
-                      <p className="text-xs text-gray-500 mt-1">{segmentLabels[c.segment] || c.segment}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{segmentLabels[c.segment] || c.segment}</p>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="hidden md:table-cell px-6 py-4">
                     {c.email && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500 mb-1">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
                         <Mail className="w-3 h-3" />{c.email}
                       </div>
                     )}
                     {c.phone && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <Phone className="w-3 h-3" />{c.phone}
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="hidden md:table-cell px-6 py-4">
                     {(c.city || c.state) && (
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                         <MapPin className="w-3 h-3" />
                         {[c.city, c.state].filter(Boolean).join(' — ')}
                       </div>
@@ -302,7 +361,7 @@ export default function ClientesPage() {
                   </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      c.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                      c.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600'
                     }`}>
                       {c.is_active ? 'Ativo' : 'Inativo'}
                     </span>
@@ -311,15 +370,17 @@ export default function ClientesPage() {
                     <div className="flex items-center gap-2 justify-end">
                       <button
                         onClick={() => openEdit(c)}
-                        className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors"
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-accent-gold transition-colors"
                         title="Editar"
+                        aria-label="Editar"
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setDeleteTarget(c)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
                         title="Remover"
+                        aria-label="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -341,18 +402,19 @@ export default function ClientesPage() {
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={handleCloseModal}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
                 {editTarget ? 'Editar Cliente' : 'Novo Cliente'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <button onClick={handleCloseModal} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Tipo *</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo *</label>
                 <div className="flex gap-3">
                   {[['PJ', 'Pessoa Jurídica'], ['PF', 'Pessoa Física']].map(([val, label]) => (
                     <label key={val} className="flex items-center gap-2 cursor-pointer">
@@ -372,40 +434,45 @@ export default function ClientesPage() {
 
               {formData.customer_type === 'PJ' ? (
                 <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Razão Social *</label>
-                    <input
-                      type="text" required
-                      value={formData.company_name}
-                      onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                      className="w-full input-field"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Nome Fantasia</label>
-                    <input
-                      type="text"
-                      value={formData.trading_name}
-                      onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
-                      className="w-full input-field"
-                    />
-                  </div>
+                  <FormField label="Razão Social" required error={errors.company_name}>
+                    {(props) => (
+                      <input
+                        type="text" {...props}
+                        value={formData.company_name}
+                        onChange={(e) => { setFormData({ ...formData, company_name: e.target.value }); setErrors(prev => ({ ...prev, company_name: '' })); }}
+                        onBlur={() => validateField('company_name', formData.company_name)}
+                        className="w-full input-field"
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="Nome Fantasia">
+                    {(props) => (
+                      <input
+                        type="text" {...props}
+                        value={formData.trading_name}
+                        onChange={(e) => setFormData({ ...formData, trading_name: e.target.value })}
+                        className="w-full input-field"
+                      />
+                    )}
+                  </FormField>
                 </>
               ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome Completo *</label>
-                  <input
-                    type="text" required
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
+                <FormField label="Nome Completo" required error={errors.name}>
+                  {(props) => (
+                    <input
+                      type="text" {...props}
+                      value={formData.name}
+                      onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setErrors(prev => ({ ...prev, name: '' })); }}
+                      onBlur={() => validateField('name', formData.name)}
+                      className="w-full input-field"
+                    />
+                  )}
+                </FormField>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                     {formData.customer_type === 'PJ' ? 'CNPJ' : 'CPF'}
                   </label>
                   <input
@@ -416,11 +483,11 @@ export default function ClientesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Segmento</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Segmento</label>
                   <select
                     value={formData.segment}
                     onChange={(e) => setFormData({ ...formData, segment: e.target.value })}
-                    className="w-full input-field bg-white"
+                    className="w-full input-field bg-white dark:bg-gray-800"
                   >
                     <option value="">Selecione</option>
                     {Object.entries(segmentLabels).map(([k, v]) => (
@@ -431,29 +498,32 @@ export default function ClientesPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Telefone</label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
+                <FormField label="Email" required error={errors.email}>
+                  {(props) => (
+                    <input
+                      type="email" {...props}
+                      value={formData.email}
+                      onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setErrors(prev => ({ ...prev, email: '' })); }}
+                      onBlur={() => validateField('email', formData.email)}
+                      className="w-full input-field"
+                    />
+                  )}
+                </FormField>
+                <FormField label="Telefone">
+                  {(props) => (
+                    <input
+                      type="text" {...props}
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      className="w-full input-field"
+                    />
+                  )}
+                </FormField>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Cidade</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cidade</label>
                   <input
                     type="text"
                     value={formData.city}
@@ -462,7 +532,7 @@ export default function ClientesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Estado</label>
                   <input
                     type="text"
                     maxLength={2}
@@ -477,8 +547,8 @@ export default function ClientesPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={handleCloseModal}
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -492,6 +562,7 @@ export default function ClientesPage() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
@@ -503,6 +574,21 @@ export default function ClientesPage() {
         danger
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        title="Descartar alterações?"
+        description="Você tem alterações não salvas. Deseja descartá-las?"
+        confirmLabel="Descartar"
+        danger
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          setShowModal(false);
+          setFormData({ ...EMPTY_FORM });
+          setEditTarget(null);
+        }}
+        onCancel={() => setShowDiscardConfirm(false)}
       />
     </div>
   );

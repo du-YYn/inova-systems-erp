@@ -27,6 +27,8 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import FocusTrap from '@/components/ui/FocusTrap';
+import api from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -259,24 +261,16 @@ export default function FinancePage() {
     name: '', bank: '', account_type: 'checking', agency: '', account_number: '', pix_key: '',
   });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const getHeaders = () => ({ 'Content-Type': 'application/json' });
-
   // ── Overview fetch ────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, receivablesRes, payablesRes, bankRes] = await Promise.all([
-        fetch(`${apiUrl}/finance/invoices/dashboard/`, { headers: getHeaders(), credentials: 'include' }),
-        fetch(`${apiUrl}/finance/invoices/?invoice_type=receivable&status=pending`, { headers: getHeaders(), credentials: 'include' }),
-        fetch(`${apiUrl}/finance/invoices/?invoice_type=payable&status=pending`, { headers: getHeaders(), credentials: 'include' }),
-        fetch(`${apiUrl}/finance/bank-accounts/`, { headers: getHeaders(), credentials: 'include' }),
-      ]);
-
-      if (!statsRes.ok || !receivablesRes.ok || !payablesRes.ok || !bankRes.ok) throw new Error('Unauthorized');
       const [statsData, receivablesData, payablesData, bankData] = await Promise.all([
-        statsRes.json(), receivablesRes.json(), payablesRes.json(), bankRes.json(),
+        api.get<DashboardStats>('/finance/invoices/dashboard/'),
+        api.get<{ results?: Invoice[] }>('/finance/invoices/', { invoice_type: 'receivable', status: 'pending' }),
+        api.get<{ results?: Invoice[] }>('/finance/invoices/', { invoice_type: 'payable', status: 'pending' }),
+        api.get<{ results?: BankAccount[] }>('/finance/bank-accounts/'),
       ]);
 
       setStats(statsData);
@@ -284,7 +278,7 @@ export default function FinancePage() {
       const payList = payablesData.results || payablesData;
       setReceivables(Array.isArray(recList) ? recList.slice(0, 5) : []);
       setPayables(Array.isArray(payList) ? payList.slice(0, 5) : []);
-      const accounts: BankAccount[] = Array.isArray(bankData.results || bankData) ? (bankData.results || bankData) : [];
+      const accounts: BankAccount[] = Array.isArray(bankData.results || bankData) ? (bankData.results || bankData) as BankAccount[] : [];
       setBankAccounts(accounts);
       if (accounts.length > 0) {
         const defaultId = String(accounts[0].id);
@@ -305,9 +299,7 @@ export default function FinancePage() {
   const fetchCategories = useCallback(async () => {
     setLoadingCategories(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/categories/`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error('Unauthorized');
-      const data = await res.json();
+      const data = await api.get<{ results?: Category[] }>('/finance/categories/');
       const list = data.results || data;
       setCategories(Array.isArray(list) ? list : []);
     } catch {
@@ -322,9 +314,7 @@ export default function FinancePage() {
   const fetchBudgets = useCallback(async () => {
     setLoadingBudgets(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/budgets/`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error('Unauthorized');
-      const data = await res.json();
+      const data = await api.get<{ results?: Budget[] }>('/finance/budgets/');
       const list = data.results || data;
       setBudgets(Array.isArray(list) ? list : []);
     } catch {
@@ -339,9 +329,7 @@ export default function FinancePage() {
   const fetchCostCenters = useCallback(async () => {
     setLoadingCostCenters(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/cost-centers/`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error('Unauthorized');
-      const data = await res.json();
+      const data = await api.get<{ results?: CostCenter[] }>('/finance/cost-centers/');
       const list = data.results || data;
       setCostCenters(Array.isArray(list) ? list : []);
     } catch {
@@ -356,12 +344,10 @@ export default function FinancePage() {
   const fetchInvoices = useCallback(async (typeF = invoiceTypeFilter, statusF = invoiceStatusFilter) => {
     setLoadingInvoices(true);
     try {
-      const params = new URLSearchParams();
-      if (typeF) params.set('invoice_type', typeF);
-      if (statusF) params.set('status', statusF);
-      const res = await fetch(`${apiUrl}/finance/invoices/?${params}`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const params: Record<string, string> = {};
+      if (typeF) params.invoice_type = typeF;
+      if (statusF) params.status = statusF;
+      const data = await api.get<{ results?: FullInvoice[] }>('/finance/invoices/', params);
       const list = data.results || data;
       setInvoices(Array.isArray(list) ? list : []);
     } catch {
@@ -376,14 +362,12 @@ export default function FinancePage() {
   const fetchTransactions = useCallback(async (typeF = txTypeFilter, bankF = txBankFilter, fromF = txFromDate, toF = txToDate) => {
     setLoadingTransactions(true);
     try {
-      const params = new URLSearchParams();
-      if (typeF) params.set('type', typeF);
-      if (bankF) params.set('bank', bankF);
-      if (fromF) params.set('from', fromF);
-      if (toF) params.set('to', toF);
-      const res = await fetch(`${apiUrl}/finance/transactions/?${params}`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const params: Record<string, string> = {};
+      if (typeF) params.type = typeF;
+      if (bankF) params.bank = bankF;
+      if (fromF) params.from = fromF;
+      if (toF) params.to = toF;
+      const data = await api.get<{ results?: FullTransaction[] }>('/finance/transactions/', params);
       const list = data.results || data;
       setTransactions(Array.isArray(list) ? list : []);
     } catch {
@@ -398,9 +382,7 @@ export default function FinancePage() {
   const fetchFullBankAccounts = useCallback(async () => {
     setLoadingFullBankAccounts(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/bank-accounts/`, { headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await api.get<{ results?: FullBankAccount[] }>('/finance/bank-accounts/');
       const list = data.results || data;
       setFullBankAccounts(Array.isArray(list) ? list : []);
     } catch {
@@ -431,15 +413,11 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingRevenue(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/transactions/`, {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify({
-          transaction_type: 'income', doc_type: 'manual',
-          description: revenueForm.description, amount: revenueForm.amount,
-          date: revenueForm.date, bank_account: Number(revenueForm.bank_account),
-        }),
+      await api.post('/finance/transactions/', {
+        transaction_type: 'income', doc_type: 'manual',
+        description: revenueForm.description, amount: revenueForm.amount,
+        date: revenueForm.date, bank_account: Number(revenueForm.bank_account),
       });
-      if (!res.ok) throw new Error();
       toast.success('Receita criada com sucesso!');
       setShowRevenueModal(false);
       setRevenueForm({ ...EMPTY_REVENUE, date: today, bank_account: revenueForm.bank_account });
@@ -455,15 +433,11 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingExpense(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/transactions/`, {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify({
-          transaction_type: 'expense', doc_type: 'manual',
-          description: expenseForm.description, amount: expenseForm.amount,
-          date: expenseForm.date, bank_account: Number(expenseForm.bank_account),
-        }),
+      await api.post('/finance/transactions/', {
+        transaction_type: 'expense', doc_type: 'manual',
+        description: expenseForm.description, amount: expenseForm.amount,
+        date: expenseForm.date, bank_account: Number(expenseForm.bank_account),
       });
-      if (!res.ok) throw new Error();
       toast.success('Despesa criada com sucesso!');
       setShowExpenseModal(false);
       setExpenseForm({ ...EMPTY_EXPENSE, date: today, bank_account: expenseForm.bank_account });
@@ -493,12 +467,11 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingCategory(true);
     try {
-      const url = editingCategory
-        ? `${apiUrl}/finance/categories/${editingCategory.id}/`
-        : `${apiUrl}/finance/categories/`;
-      const method = editingCategory ? 'PATCH' : 'POST';
-      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(categoryForm) });
-      if (!res.ok) throw new Error();
+      if (editingCategory) {
+        await api.patch(`/finance/categories/${editingCategory.id}/`, categoryForm);
+      } else {
+        await api.post('/finance/categories/', categoryForm);
+      }
       toast.success(editingCategory ? 'Categoria atualizada!' : 'Categoria criada!');
       setShowCategoryModal(false);
       fetchCategories();
@@ -512,9 +485,7 @@ export default function FinancePage() {
   const handleDeleteCategory = async () => {
     if (!confirmDeleteCategory) return;
     try {
-      await fetch(`${apiUrl}/finance/categories/${confirmDeleteCategory.id}/`, {
-        method: 'DELETE', credentials: 'include',
-      });
+      await api.delete(`/finance/categories/${confirmDeleteCategory.id}/`);
       toast.success('Categoria removida.');
       setConfirmDeleteCategory(null);
       fetchCategories();
@@ -529,11 +500,7 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingBudget(true);
     try {
-      const res = await fetch(`${apiUrl}/finance/budgets/`, {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-        body: JSON.stringify({ ...budgetForm, category: Number(budgetForm.category), planned: budgetForm.planned }),
-      });
-      if (!res.ok) throw new Error();
+      await api.post('/finance/budgets/', { ...budgetForm, category: Number(budgetForm.category), planned: budgetForm.planned });
       toast.success('Orçamento criado!');
       setShowBudgetModal(false);
       setBudgetForm({ name: '', period: 'monthly', start_date: today, end_date: '', category: '', planned: '' });
@@ -548,7 +515,7 @@ export default function FinancePage() {
   const handleDeleteBudget = async () => {
     if (!confirmDeleteBudget) return;
     try {
-      await fetch(`${apiUrl}/finance/budgets/${confirmDeleteBudget.id}/`, { method: 'DELETE', credentials: 'include' });
+      await api.delete(`/finance/budgets/${confirmDeleteBudget.id}/`);
       toast.success('Orçamento removido.');
       setConfirmDeleteBudget(null);
       fetchBudgets();
@@ -575,12 +542,11 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingCostCenter(true);
     try {
-      const url = editingCostCenter
-        ? `${apiUrl}/finance/cost-centers/${editingCostCenter.id}/`
-        : `${apiUrl}/finance/cost-centers/`;
-      const method = editingCostCenter ? 'PATCH' : 'POST';
-      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(costCenterForm) });
-      if (!res.ok) throw new Error();
+      if (editingCostCenter) {
+        await api.patch(`/finance/cost-centers/${editingCostCenter.id}/`, costCenterForm);
+      } else {
+        await api.post('/finance/cost-centers/', costCenterForm);
+      }
       toast.success(editingCostCenter ? 'Centro de custo atualizado!' : 'Centro de custo criado!');
       setShowCostCenterModal(false);
       fetchCostCenters();
@@ -594,7 +560,7 @@ export default function FinancePage() {
   const handleDeleteCostCenter = async () => {
     if (!confirmDeleteCostCenter) return;
     try {
-      await fetch(`${apiUrl}/finance/cost-centers/${confirmDeleteCostCenter.id}/`, { method: 'DELETE', credentials: 'include' });
+      await api.delete(`/finance/cost-centers/${confirmDeleteCostCenter.id}/`);
       toast.success('Centro de custo removido.');
       setConfirmDeleteCostCenter(null);
       fetchCostCenters();
@@ -626,16 +592,17 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingInvoice(true);
     try {
-      const url = editingInvoice ? `${apiUrl}/finance/invoices/${editingInvoice.id}/` : `${apiUrl}/finance/invoices/`;
-      const method = editingInvoice ? 'PATCH' : 'POST';
       const body: Record<string, unknown> = {
         invoice_type: invoiceForm.invoice_type, description: invoiceForm.description,
         value: invoiceForm.value, due_date: invoiceForm.due_date, issue_date: invoiceForm.issue_date,
       };
       if (invoiceForm.bank_account) body.bank_account = Number(invoiceForm.bank_account);
       if (invoiceForm.category) body.category = Number(invoiceForm.category);
-      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error();
+      if (editingInvoice) {
+        await api.patch(`/finance/invoices/${editingInvoice.id}/`, body);
+      } else {
+        await api.post('/finance/invoices/', body);
+      }
       toast.success(editingInvoice ? 'Fatura atualizada!' : 'Fatura criada!');
       setShowInvoiceModal(false);
       fetchInvoices();
@@ -649,8 +616,7 @@ export default function FinancePage() {
   const handleMarkPaid = async (inv: FullInvoice) => {
     setMarkingPaid(inv.id);
     try {
-      const res = await fetch(`${apiUrl}/finance/invoices/${inv.id}/mark_paid/`, { method: 'POST', headers: getHeaders(), credentials: 'include' });
-      if (!res.ok) throw new Error();
+      await api.post(`/finance/invoices/${inv.id}/mark_paid/`);
       toast.success(`Fatura ${inv.number} marcada como paga!`);
       fetchInvoices();
       fetchData();
@@ -664,7 +630,7 @@ export default function FinancePage() {
   const handleDeleteInvoice = async () => {
     if (!confirmDeleteInvoice) return;
     try {
-      await fetch(`${apiUrl}/finance/invoices/${confirmDeleteInvoice.id}/`, { method: 'DELETE', credentials: 'include' });
+      await api.delete(`/finance/invoices/${confirmDeleteInvoice.id}/`);
       toast.success('Fatura removida.');
       setConfirmDeleteInvoice(null);
       fetchInvoices();
@@ -685,8 +651,7 @@ export default function FinancePage() {
       };
       if (transactionForm.bank_account) body.bank_account = Number(transactionForm.bank_account);
       if (transactionForm.category) body.category = Number(transactionForm.category);
-      const res = await fetch(`${apiUrl}/finance/transactions/`, { method: 'POST', headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error();
+      await api.post('/finance/transactions/', body);
       toast.success('Transação criada!');
       setShowTransactionModal(false);
       setTransactionForm({ transaction_type: 'income', description: '', amount: '', date: today, bank_account: '', category: '' });
@@ -701,7 +666,7 @@ export default function FinancePage() {
   const handleDeleteTransaction = async () => {
     if (!confirmDeleteTransaction) return;
     try {
-      await fetch(`${apiUrl}/finance/transactions/${confirmDeleteTransaction.id}/`, { method: 'DELETE', credentials: 'include' });
+      await api.delete(`/finance/transactions/${confirmDeleteTransaction.id}/`);
       toast.success('Transação removida.');
       setConfirmDeleteTransaction(null);
       fetchTransactions();
@@ -728,10 +693,11 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingBankAccount(true);
     try {
-      const url = editingBankAccount ? `${apiUrl}/finance/bank-accounts/${editingBankAccount.id}/` : `${apiUrl}/finance/bank-accounts/`;
-      const method = editingBankAccount ? 'PATCH' : 'POST';
-      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(bankAccountForm) });
-      if (!res.ok) throw new Error();
+      if (editingBankAccount) {
+        await api.patch(`/finance/bank-accounts/${editingBankAccount.id}/`, bankAccountForm);
+      } else {
+        await api.post('/finance/bank-accounts/', bankAccountForm);
+      }
       toast.success(editingBankAccount ? 'Conta atualizada!' : 'Conta criada!');
       setShowBankAccountModal(false);
       fetchFullBankAccounts();
@@ -746,7 +712,7 @@ export default function FinancePage() {
   const handleDeleteBankAccount = async () => {
     if (!confirmDeleteBankAccount) return;
     try {
-      await fetch(`${apiUrl}/finance/bank-accounts/${confirmDeleteBankAccount.id}/`, { method: 'DELETE', credentials: 'include' });
+      await api.delete(`/finance/bank-accounts/${confirmDeleteBankAccount.id}/`);
       toast.success('Conta removida.');
       setConfirmDeleteBankAccount(null);
       fetchFullBankAccounts();
@@ -758,9 +724,9 @@ export default function FinancePage() {
   // ── Budget progress color ─────────────────────────────────────────────────
 
   const budgetColor = (progress: number) => {
-    if (progress >= 100) return 'bg-red-500';
+    if (progress >= 100) return 'bg-red-50 dark:bg-red-900/300';
     if (progress >= 80) return 'bg-orange-400';
-    return 'bg-[#A6864A]';
+    return 'bg-accent-gold';
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -780,8 +746,8 @@ export default function FinancePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
-          <p className="text-sm text-gray-500 mt-1">Controle de receitas, despesas e orçamentos</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Financeiro</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Controle de receitas, despesas e orçamentos</p>
         </div>
         {activeTab === 'overview' && (
           <div className="flex items-center gap-3">
@@ -797,50 +763,50 @@ export default function FinancePage() {
         )}
         {activeTab === 'invoices' && (
           <button onClick={openNewInvoice}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Fatura
           </button>
         )}
         {activeTab === 'transactions' && (
           <button onClick={() => setShowTransactionModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Transação
           </button>
         )}
         {activeTab === 'bank_accounts' && (
           <button onClick={openNewBankAccount}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Conta
           </button>
         )}
         {activeTab === 'categories' && (
           <button onClick={openNewCategory}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Categoria
           </button>
         )}
         {activeTab === 'budgets' && (
           <button onClick={() => setShowBudgetModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Novo Orçamento
           </button>
         )}
         {activeTab === 'cost_centers' && (
           <button onClick={openNewCostCenter}
-            className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors">
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Novo Centro de Custo
           </button>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white border border-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg p-1 w-fit">
         {tabs.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? 'bg-[#A6864A] text-white'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-accent-gold text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700/50'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -856,40 +822,40 @@ export default function FinancePage() {
               Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
             ) : (
               <>
-                <div className="bg-white p-6 rounded-lg border border-gray-100">
-                  <div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center mb-4">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
+                  <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-lg flex items-center justify-center mb-4">
                     <ArrowUpRight className="w-6 h-6 text-green-600" />
                   </div>
-                  <p className="text-gray-500 text-sm">Receitas do Mês</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.received_this_month)}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">Receitas do Mês</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.received_this_month)}</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg border border-gray-100">
-                  <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center mb-4">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
+                  <div className="w-12 h-12 bg-red-50 dark:bg-red-900/30 rounded-lg flex items-center justify-center mb-4">
                     <ArrowDownRight className="w-6 h-6 text-red-600" />
                   </div>
-                  <p className="text-gray-500 text-sm">Despesas do Mês</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.paid_this_month)}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">Despesas do Mês</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.paid_this_month)}</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg border border-gray-100">
-                  <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
+                  <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
                     <DollarSign className="w-6 h-6 text-blue-600" />
                   </div>
-                  <p className="text-gray-500 text-sm">A Receber</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.pending_receivables)}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">A Receber</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.pending_receivables)}</p>
                 </div>
-                <div className="bg-white p-6 rounded-lg border border-gray-100">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-100 dark:border-gray-700">
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 bg-orange-50 rounded-lg flex items-center justify-center">
+                    <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
                       <CreditCard className="w-6 h-6 text-orange-600" />
                     </div>
                     {stats.overdue_invoices > 0 && (
-                      <span className="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full flex items-center gap-1">
+                      <span className="px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-800 text-xs rounded-full flex items-center gap-1">
                         <AlertCircle className="w-3 h-3" /> {stats.overdue_invoices} vencidas
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-500 text-sm">A Pagar</p>
-                  <p className="text-2xl font-semibold text-gray-900 mt-1">{formatCurrency(stats.pending_payables)}</p>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">A Pagar</p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-1">{formatCurrency(stats.pending_payables)}</p>
                 </div>
               </>
             )}
@@ -898,24 +864,24 @@ export default function FinancePage() {
           {/* Receivables and Payables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div className="card p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Contas a Receber</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contas a Receber</h2>
               {loading ? (
                 <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
                 </div>
               ) : receivables.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">Nenhuma conta pendente</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Nenhuma conta pendente</p>
               ) : (
                 <div className="space-y-3">
                   {receivables.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={inv.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 bg-green-100 dark:bg-green-900/40 rounded-full flex items-center justify-center flex-shrink-0">
                           <DollarSign className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{inv.number || inv.description || `Fatura #${inv.id}`}</p>
-                          <p className="text-xs text-gray-500">{inv.customer_name || '—'}{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.number || inv.description || `Fatura #${inv.id}`}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{inv.customer_name || '—'}{inv.due_date ? ` · Vence ${formatDate(inv.due_date)}` : ''}</p>
                         </div>
                       </div>
                       <span className="text-sm font-medium text-green-600 ml-4">{formatCurrency(inv.total)}</span>
@@ -926,24 +892,24 @@ export default function FinancePage() {
             </div>
 
             <div className="card p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Contas a Pagar</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Contas a Pagar</h2>
               {loading ? (
                 <div className="space-y-3">
-                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+                  {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
                 </div>
               ) : payables.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">Nenhuma conta pendente</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">Nenhuma conta pendente</p>
               ) : (
                 <div className="space-y-3">
                   {payables.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div key={inv.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 bg-red-100 dark:bg-red-900/40 rounded-full flex items-center justify-center flex-shrink-0">
                           <CreditCard className="w-5 h-5 text-red-600" />
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{inv.number || inv.description || `Despesa #${inv.id}`}</p>
-                          <p className="text-xs text-gray-500">{inv.due_date ? `Vence ${formatDate(inv.due_date)}` : '—'}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.number || inv.description || `Despesa #${inv.id}`}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{inv.due_date ? `Vence ${formatDate(inv.due_date)}` : '—'}</p>
                         </div>
                       </div>
                       <span className="text-sm font-medium text-red-600 ml-4">{formatCurrency(inv.total)}</span>
@@ -956,25 +922,25 @@ export default function FinancePage() {
 
           {/* Quick Actions */}
           <div className="card p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Ações Rápidas</h2>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Ações Rápidas</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <button onClick={() => setShowRevenueModal(true)}
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left">
+                className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left">
                 <FileText className="w-5 h-5 text-accent-gold mb-2" />
                 <span className="text-sm font-medium">Nova Fatura</span>
               </button>
               <button onClick={() => setActiveTab('budgets')}
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left">
+                className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left">
                 <TrendingUp className="w-5 h-5 text-accent-gold mb-2" />
                 <span className="text-sm font-medium">Orçamentos</span>
               </button>
               <button onClick={() => setActiveTab('cost_centers')}
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left">
+                className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left">
                 <DollarSign className="w-5 h-5 text-accent-gold mb-2" />
                 <span className="text-sm font-medium">Centros de Custo</span>
               </button>
               <button onClick={() => setActiveTab('categories')}
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors text-left">
+                className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left">
                 <Tag className="w-5 h-5 text-accent-gold mb-2" />
                 <span className="text-sm font-medium">Categorias</span>
               </button>
@@ -988,17 +954,17 @@ export default function FinancePage() {
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
-            <Filter className="w-4 h-4 text-gray-500" />
+            <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <select value={invoiceTypeFilter}
               onChange={e => { setInvoiceTypeFilter(e.target.value); fetchInvoices(e.target.value, invoiceStatusFilter); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900">
               <option value="">Todos os tipos</option>
               <option value="receivable">A Receber</option>
               <option value="payable">A Pagar</option>
             </select>
             <select value={invoiceStatusFilter}
               onChange={e => { setInvoiceStatusFilter(e.target.value); fetchInvoices(invoiceTypeFilter, e.target.value); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900">
               <option value="">Todos os status</option>
               <option value="pending">Pendente</option>
               <option value="sent">Enviada</option>
@@ -1008,7 +974,7 @@ export default function FinancePage() {
             </select>
             {(invoiceTypeFilter || invoiceStatusFilter) && (
               <button onClick={() => { setInvoiceTypeFilter(''); setInvoiceStatusFilter(''); fetchInvoices('', ''); }}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+                className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700">
                 <XCircle className="w-4 h-4" /> Limpar
               </button>
             )}
@@ -1018,47 +984,47 @@ export default function FinancePage() {
           <div className="card">
             {loadingInvoices ? (
               <div className="p-6 space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
               </div>
             ) : invoices.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
                 <Receipt className="w-12 h-12 mb-3 opacity-30" />
                 <p className="font-medium">Nenhuma fatura encontrada</p>
               </div>
             ) : (
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Número</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Vencimento</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                  <tr className="border-b border-gray-100 dark:border-gray-700">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Número</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descrição</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Vencimento</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                   {invoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 text-sm font-mono text-gray-900">{inv.number}</td>
+                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="py-3 px-4 text-sm font-mono text-gray-900 dark:text-gray-100">{inv.number}</td>
                       <td className="py-3 px-4">
-                        <p className="text-sm font-medium text-gray-900">{inv.description || '—'}</p>
-                        {inv.customer_name && <p className="text-xs text-gray-500">{inv.customer_name}</p>}
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.description || '—'}</p>
+                        {inv.customer_name && <p className="text-xs text-gray-500 dark:text-gray-400">{inv.customer_name}</p>}
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${inv.invoice_type === 'receivable' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${inv.invoice_type === 'receivable' ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-red-100 dark:bg-red-900/40 text-red-800'}`}>
                           {inv.invoice_type === 'receivable' ? 'A Receber' : 'A Pagar'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
-                      <td className="py-3 px-4 text-right text-sm font-medium text-gray-900">{formatCurrency(inv.total)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{inv.due_date ? formatDate(inv.due_date) : '—'}</td>
+                      <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(inv.total)}</td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                          inv.status === 'paid' ? 'bg-green-100 text-green-800' :
-                          inv.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                          inv.status === 'cancelled' ? 'bg-gray-100 text-gray-600' :
-                          'bg-orange-100 text-orange-800'
+                          inv.status === 'paid' ? 'bg-green-100 dark:bg-green-900/40 text-green-800' :
+                          inv.status === 'overdue' ? 'bg-red-100 dark:bg-red-900/40 text-red-800' :
+                          inv.status === 'cancelled' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600' :
+                          'bg-orange-100 dark:bg-orange-900/40 text-orange-800'
                         }`}>
                           {inv.status === 'paid' ? <CheckCircle2 className="w-3 h-3" /> :
                            inv.status === 'overdue' ? <AlertCircle className="w-3 h-3" /> :
@@ -1072,16 +1038,19 @@ export default function FinancePage() {
                           {inv.status !== 'paid' && inv.status !== 'cancelled' && (
                             <button onClick={() => handleMarkPaid(inv)} disabled={markingPaid === inv.id}
                               title="Marcar como paga"
-                              className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-500 hover:text-green-600 disabled:opacity-50">
+                              aria-label="Marcar como paga"
+                              className="p-1.5 hover:bg-green-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-green-600 disabled:opacity-50">
                               <CheckCircle2 className="w-4 h-4" />
                             </button>
                           )}
                           <button onClick={() => openEditInvoice(inv)}
-                            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
+                            aria-label="Editar"
+                            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900">
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button onClick={() => setConfirmDeleteInvoice(inv)}
-                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                            aria-label="Excluir"
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -1100,29 +1069,29 @@ export default function FinancePage() {
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
-            <Filter className="w-4 h-4 text-gray-500" />
+            <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <select value={txTypeFilter}
               onChange={e => { setTxTypeFilter(e.target.value); fetchTransactions(e.target.value, txBankFilter, txFromDate, txToDate); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900">
               <option value="">Todos os tipos</option>
               <option value="income">Receita</option>
               <option value="expense">Despesa</option>
             </select>
             <select value={txBankFilter}
               onChange={e => { setTxBankFilter(e.target.value); fetchTransactions(txTypeFilter, e.target.value, txFromDate, txToDate); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white text-gray-900">
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900">
               <option value="">Todas as contas</option>
               {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
             <input type="date" value={txFromDate} placeholder="De"
               onChange={e => { setTxFromDate(e.target.value); fetchTransactions(txTypeFilter, txBankFilter, e.target.value, txToDate); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm" />
             <input type="date" value={txToDate} placeholder="Até"
               onChange={e => { setTxToDate(e.target.value); fetchTransactions(txTypeFilter, txBankFilter, txFromDate, e.target.value); }}
-              className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm" />
+              className="px-3 py-1.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm" />
             {(txTypeFilter || txBankFilter || txFromDate || txToDate) && (
               <button onClick={() => { setTxTypeFilter(''); setTxBankFilter(''); setTxFromDate(''); setTxToDate(''); fetchTransactions('', '', '', ''); }}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+                className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700">
                 <XCircle className="w-4 h-4" /> Limpar
               </button>
             )}
@@ -1132,32 +1101,32 @@ export default function FinancePage() {
           <div className="card">
             {loadingTransactions ? (
               <div className="p-6 space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
               </div>
             ) : transactions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
                 <ArrowLeftRight className="w-12 h-12 mb-3 opacity-30" />
                 <p className="font-medium">Nenhuma transação encontrada</p>
               </div>
             ) : (
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Data</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoria</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Conta</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                  <tr className="border-b border-gray-100 dark:border-gray-700">
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descrição</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Categoria</th>
+                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Conta</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Valor</th>
+                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                   {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-3 px-4 text-sm text-gray-500 whitespace-nowrap">{formatDate(tx.date)}</td>
-                      <td className="py-3 px-4 text-sm font-medium text-gray-900">{tx.description || '—'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-500">{tx.category_name || '—'}</td>
-                      <td className="py-3 px-4 text-sm text-gray-500">{tx.bank_account_name || '—'}</td>
+                    <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
+                      <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{tx.description || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{tx.category_name || '—'}</td>
+                      <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{tx.bank_account_name || '—'}</td>
                       <td className="py-3 px-4 text-right">
                         <span className={`text-sm font-semibold ${tx.transaction_type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                           {tx.transaction_type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
@@ -1165,7 +1134,8 @@ export default function FinancePage() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button onClick={() => setConfirmDeleteTransaction(tx)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                          aria-label="Excluir"
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
@@ -1183,10 +1153,10 @@ export default function FinancePage() {
         <div className="card">
           {loadingFullBankAccounts ? (
             <div className="p-6 space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
             </div>
           ) : fullBankAccounts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
               <Landmark className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhuma conta bancária cadastrada</p>
               <p className="text-sm mt-1">Cadastre contas para gerenciar seu fluxo de caixa</p>
@@ -1194,32 +1164,32 @@ export default function FinancePage() {
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Banco</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Agência / Conta</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Saldo</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Banco</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Agência / Conta</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saldo</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                 {fullBankAccounts.map((ba) => (
-                  <tr key={ba.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={ba.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-900">{ba.name}</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{ba.name}</span>
                         {ba.is_default && (
-                          <span className="px-1.5 py-0.5 bg-[#A6864A]/10 text-[#A6864A] text-xs rounded">Padrão</span>
+                          <span className="px-1.5 py-0.5 bg-accent-gold/10 text-accent-gold text-xs rounded">Padrão</span>
                         )}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-500">{ba.bank || '—'}</td>
-                    <td className="py-3 px-4 text-sm text-gray-500">
+                    <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{ba.bank || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">
                       {ba.agency ? `Ag. ${ba.agency}` : ''}{ba.agency && ba.account_number ? ' / ' : ''}{ba.account_number || '—'}
                     </td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded capitalize">
+                      <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 text-xs rounded capitalize">
                         {ba.account_type === 'checking' ? 'Corrente' : ba.account_type === 'savings' ? 'Poupança' : ba.account_type || '—'}
                       </span>
                     </td>
@@ -1231,11 +1201,13 @@ export default function FinancePage() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditBankAccount(ba)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
+                          aria-label="Editar"
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteBankAccount(ba)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                          aria-label="Excluir"
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1253,10 +1225,10 @@ export default function FinancePage() {
         <div className="card">
           {loadingCategories ? (
             <div className="p-6 space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
             </div>
           ) : categories.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
               <Tag className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhuma categoria cadastrada</p>
               <p className="text-sm mt-1">Crie categorias para organizar receitas e despesas</p>
@@ -1264,39 +1236,41 @@ export default function FinancePage() {
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Cor</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cor</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                 {categories.map((cat) => (
-                  <tr key={cat.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={cat.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td className="py-3 px-4">
-                      <span className="text-sm font-medium text-gray-900">{cat.full_name || cat.name}</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{cat.full_name || cat.name}</span>
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        cat.category_type === 'income' ? 'bg-green-100 text-green-800' :
-                        cat.category_type === 'expense' ? 'bg-red-100 text-red-800' :
-                        'bg-blue-100 text-blue-800'
+                        cat.category_type === 'income' ? 'bg-green-100 dark:bg-green-900/40 text-green-800' :
+                        cat.category_type === 'expense' ? 'bg-red-100 dark:bg-red-900/40 text-red-800' :
+                        'bg-blue-100 dark:bg-blue-900/40 text-blue-800'
                       }`}>
                         {cat.category_type === 'income' ? 'Receita' : cat.category_type === 'expense' ? 'Despesa' : 'Ambos'}
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="w-6 h-6 rounded-full border border-gray-200" style={{ backgroundColor: cat.color || '#A6864A' }} />
+                      <div className="w-6 h-6 rounded-full border border-gray-200 dark:border-gray-700" style={{ backgroundColor: cat.color || '#A6864A' }} />
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditCategory(cat)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
+                          aria-label="Editar"
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteCategory(cat)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                          aria-label="Excluir"
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1315,7 +1289,7 @@ export default function FinancePage() {
           {loadingBudgets ? (
             Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
           ) : budgets.length === 0 ? (
-            <div className="card flex flex-col items-center justify-center py-20 text-gray-500">
+            <div className="card flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
               <PieChart className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhum orçamento cadastrado</p>
               <p className="text-sm mt-1">Crie orçamentos para monitorar seus gastos por categoria</p>
@@ -1327,32 +1301,33 @@ export default function FinancePage() {
                 <div key={budget.id} className="card p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{budget.name}</h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100">{budget.name}</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                         {budget.category_name} · {formatDate(budget.start_date)} – {formatDate(budget.end_date)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        budget.progress >= 100 ? 'bg-red-100 text-red-800' :
-                        budget.progress >= 80 ? 'bg-orange-100 text-orange-800' :
-                        'bg-green-100 text-green-800'
+                        budget.progress >= 100 ? 'bg-red-100 dark:bg-red-900/40 text-red-800' :
+                        budget.progress >= 80 ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-800' :
+                        'bg-green-100 dark:bg-green-900/40 text-green-800'
                       }`}>
                         {budget.progress.toFixed(0)}%
                       </span>
                       <button onClick={() => setConfirmDeleteBudget(budget)}
-                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                        aria-label="Excluir"
+                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2 mb-3">
+                  <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 mb-3">
                     <div className={`h-2 rounded-full transition-all ${budgetColor(budget.progress)}`}
                       style={{ width: `${progress}%` }} />
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-500">Realizado: <span className="font-medium text-gray-900">{formatCurrency(budget.actual)}</span></span>
-                    <span className="text-gray-500">Planejado: <span className="font-medium text-gray-900">{formatCurrency(budget.planned)}</span></span>
+                    <span className="text-gray-500 dark:text-gray-400">Realizado: <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(budget.actual)}</span></span>
+                    <span className="text-gray-500 dark:text-gray-400">Planejado: <span className="font-medium text-gray-900 dark:text-gray-100">{formatCurrency(budget.planned)}</span></span>
                   </div>
                 </div>
               );
@@ -1366,39 +1341,41 @@ export default function FinancePage() {
         <div className="card">
           {loadingCostCenters ? (
             <div className="p-6 space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 rounded-lg animate-pulse" />)}
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
             </div>
           ) : costCenters.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+            <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
               <Building className="w-12 h-12 mb-3 opacity-30" />
               <p className="font-medium">Nenhum centro de custo cadastrado</p>
             </div>
           ) : (
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Nome</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Código</th>
-                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Descrição</th>
-                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Nome</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Código</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descrição</th>
+                  <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                 {costCenters.map((cc) => (
-                  <tr key={cc.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="py-3 px-4 text-sm font-medium text-gray-900">{cc.name}</td>
+                  <tr key={cc.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{cc.name}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded font-mono">{cc.code || '—'}</span>
+                      <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 text-xs rounded font-mono">{cc.code || '—'}</span>
                     </td>
-                    <td className="py-3 px-4 text-sm text-gray-500">{cc.description || '—'}</td>
+                    <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{cc.description || '—'}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={() => openEditCostCenter(cc)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-900">
+                          aria-label="Editar"
+                          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900">
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDeleteCostCenter(cc)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 hover:text-red-600">
+                          aria-label="Excluir"
+                          className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-red-600">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
@@ -1416,55 +1393,56 @@ export default function FinancePage() {
       {/* Invoice Modal */}
       {showInvoiceModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowInvoiceModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">{editingInvoice ? 'Editar Fatura' : 'Nova Fatura'}</h2>
-              <button onClick={() => setShowInvoiceModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{editingInvoice ? 'Editar Fatura' : 'Nova Fatura'}</h2>
+              <button onClick={() => setShowInvoiceModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveInvoice} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo *</label>
                 <select required value={invoiceForm.invoice_type}
                   onChange={e => setInvoiceForm({ ...invoiceForm, invoice_type: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   <option value="receivable">A Receber</option>
                   <option value="payable">A Pagar</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={invoiceForm.description}
                   onChange={e => setInvoiceForm({ ...invoiceForm, description: e.target.value })}
                   className="input-field" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={invoiceForm.value}
                     onChange={e => setInvoiceForm({ ...invoiceForm, value: e.target.value })}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Emissão *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Emissão *</label>
                   <input type="date" required value={invoiceForm.issue_date}
                     onChange={e => setInvoiceForm({ ...invoiceForm, issue_date: e.target.value })}
                     className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Vencimento *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Vencimento *</label>
                 <input type="date" required value={invoiceForm.due_date}
                   onChange={e => setInvoiceForm({ ...invoiceForm, due_date: e.target.value })}
                   className="input-field" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Conta Bancária</label>
                   <select value={invoiceForm.bank_account}
                     onChange={e => setInvoiceForm({ ...invoiceForm, bank_account: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1472,10 +1450,10 @@ export default function FinancePage() {
               )}
               {categories.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Categoria</label>
                   <select value={invoiceForm.category}
                     onChange={e => setInvoiceForm({ ...invoiceForm, category: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="">Sem categoria</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
                   </select>
@@ -1483,54 +1461,56 @@ export default function FinancePage() {
               )}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowInvoiceModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingInvoice}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingInvoice ? 'Salvando...' : editingInvoice ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Transaction Modal */}
       {showTransactionModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowTransactionModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Nova Transação</h2>
-              <button onClick={() => setShowTransactionModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Nova Transação</h2>
+              <button onClick={() => setShowTransactionModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveTransaction} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo *</label>
                 <select required value={transactionForm.transaction_type}
                   onChange={e => setTransactionForm({ ...transactionForm, transaction_type: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   <option value="income">Receita</option>
                   <option value="expense">Despesa</option>
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={transactionForm.description}
                   onChange={e => setTransactionForm({ ...transactionForm, description: e.target.value })}
                   className="input-field" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                   <input type="number" step="0.01" required value={transactionForm.amount}
                     onChange={e => setTransactionForm({ ...transactionForm, amount: e.target.value })}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
                   <input type="date" required value={transactionForm.date}
                     onChange={e => setTransactionForm({ ...transactionForm, date: e.target.value })}
                     className="input-field" />
@@ -1538,10 +1518,10 @@ export default function FinancePage() {
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Conta Bancária</label>
                   <select value={transactionForm.bank_account}
                     onChange={e => setTransactionForm({ ...transactionForm, bank_account: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1549,10 +1529,10 @@ export default function FinancePage() {
               )}
               {categories.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Categoria</label>
                   <select value={transactionForm.category}
                     onChange={e => setTransactionForm({ ...transactionForm, category: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="">Sem categoria</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.full_name || c.name}</option>)}
                   </select>
@@ -1560,49 +1540,51 @@ export default function FinancePage() {
               )}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowTransactionModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingTransaction}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingTransaction ? 'Salvando...' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Bank Account Modal */}
       {showBankAccountModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowBankAccountModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">{editingBankAccount ? 'Editar Conta' : 'Nova Conta Bancária'}</h2>
-              <button onClick={() => setShowBankAccountModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{editingBankAccount ? 'Editar Conta' : 'Nova Conta Bancária'}</h2>
+              <button onClick={() => setShowBankAccountModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveBankAccount} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome da Conta *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome da Conta *</label>
                 <input type="text" required value={bankAccountForm.name}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, name: e.target.value })}
                   placeholder="Ex: Conta Principal"
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Banco</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Banco</label>
                 <input type="text" value={bankAccountForm.bank}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, bank: e.target.value })}
                   placeholder="Ex: Itaú, Nubank..."
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Conta</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo de Conta</label>
                 <select value={bankAccountForm.account_type}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, account_type: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   <option value="checking">Conta Corrente</option>
                   <option value="savings">Poupança</option>
                   <option value="investment">Investimento</option>
@@ -1611,14 +1593,14 @@ export default function FinancePage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Agência</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Agência</label>
                   <input type="text" value={bankAccountForm.agency}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, agency: e.target.value })}
                     placeholder="0001"
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Número da Conta</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Número da Conta</label>
                   <input type="text" value={bankAccountForm.account_number}
                     onChange={e => setBankAccountForm({ ...bankAccountForm, account_number: e.target.value })}
                     placeholder="12345-6"
@@ -1626,7 +1608,7 @@ export default function FinancePage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Chave Pix</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Chave Pix</label>
                 <input type="text" value={bankAccountForm.pix_key}
                   onChange={e => setBankAccountForm({ ...bankAccountForm, pix_key: e.target.value })}
                   placeholder="CPF, CNPJ, e-mail ou telefone"
@@ -1634,54 +1616,56 @@ export default function FinancePage() {
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBankAccountModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingBankAccount}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingBankAccount ? 'Salvando...' : editingBankAccount ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Revenue Modal */}
       {showRevenueModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowRevenueModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Nova Receita</h2>
-              <button onClick={() => setShowRevenueModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Nova Receita</h2>
+              <button onClick={() => setShowRevenueModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleCreateRevenue} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={revenueForm.description}
                   onChange={(e) => setRevenueForm({ ...revenueForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={revenueForm.amount}
                   onChange={(e) => setRevenueForm({ ...revenueForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
                 <input type="date" required value={revenueForm.date}
                   onChange={(e) => setRevenueForm({ ...revenueForm, date: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Conta Bancária *</label>
                   <select required value={revenueForm.bank_account}
                     onChange={(e) => setRevenueForm({ ...revenueForm, bank_account: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500 bg-white">
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-500 bg-white dark:bg-gray-800">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1689,7 +1673,7 @@ export default function FinancePage() {
               )}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowRevenueModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingRevenue}
@@ -1699,44 +1683,46 @@ export default function FinancePage() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Expense Modal */}
       {showExpenseModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowExpenseModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Nova Despesa</h2>
-              <button onClick={() => setShowExpenseModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Nova Despesa</h2>
+              <button onClick={() => setShowExpenseModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleCreateExpense} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição *</label>
                 <input type="text" required value={expenseForm.description}
                   onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor (R$) *</label>
                 <input type="number" step="0.01" required value={expenseForm.amount}
                   onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Data *</label>
                 <input type="date" required value={expenseForm.date}
                   onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500" />
               </div>
               {bankAccounts.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Conta Bancária *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Conta Bancária *</label>
                   <select required value={expenseForm.bank_account}
                     onChange={(e) => setExpenseForm({ ...expenseForm, bank_account: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 bg-white">
+                    className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/30 focus:border-red-500 bg-white dark:bg-gray-800">
                     <option value="">Selecione uma conta</option>
                     {bankAccounts.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -1744,7 +1730,7 @@ export default function FinancePage() {
               )}
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowExpenseModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingExpense}
@@ -1754,80 +1740,84 @@ export default function FinancePage() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Category Modal */}
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowCategoryModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</h2>
-              <button onClick={() => setShowCategoryModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{editingCategory ? 'Editar Categoria' : 'Nova Categoria'}</h2>
+              <button onClick={() => setShowCategoryModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo *</label>
                 <select value={categoryForm.category_type}
                   onChange={(e) => setCategoryForm({ ...categoryForm, category_type: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   {CATEGORY_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cor</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Cor</label>
                 <div className="flex items-center gap-3">
                   <input type="color" value={categoryForm.color}
                     onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
-                    className="w-12 h-10 border border-gray-200 rounded-lg cursor-pointer" />
-                  <span className="text-sm text-gray-500">{categoryForm.color}</span>
+                    className="w-12 h-10 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer" />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">{categoryForm.color}</span>
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowCategoryModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingCategory}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingCategory ? 'Salvando...' : editingCategory ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Budget Modal */}
       {showBudgetModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowBudgetModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-2xl mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Novo Orçamento</h2>
-              <button onClick={() => setShowBudgetModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Orçamento</h2>
+              <button onClick={() => setShowBudgetModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveBudget} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={budgetForm.name}
                   onChange={(e) => setBudgetForm({ ...budgetForm, name: e.target.value })}
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoria *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Categoria *</label>
                 <select required value={budgetForm.category}
                   onChange={(e) => setBudgetForm({ ...budgetForm, category: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   <option value="">Selecione uma categoria</option>
                   {categories.filter(c => c.category_type !== 'income').map(c => (
                     <option key={c.id} value={c.id}>{c.full_name || c.name}</option>
@@ -1835,90 +1825,93 @@ export default function FinancePage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Período *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Período *</label>
                 <select value={budgetForm.period}
                   onChange={(e) => setBudgetForm({ ...budgetForm, period: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   {BUDGET_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Início *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Início *</label>
                   <input type="date" required value={budgetForm.start_date}
                     onChange={(e) => setBudgetForm({ ...budgetForm, start_date: e.target.value })}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fim *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Fim *</label>
                   <input type="date" required value={budgetForm.end_date}
                     onChange={(e) => setBudgetForm({ ...budgetForm, end_date: e.target.value })}
                     className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor Planejado (R$) *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor Planejado (R$) *</label>
                 <input type="number" step="0.01" required value={budgetForm.planned}
                   onChange={(e) => setBudgetForm({ ...budgetForm, planned: e.target.value })}
                   className="input-field" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowBudgetModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingBudget}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingBudget ? 'Salvando...' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* Cost Center Modal */}
       {showCostCenterModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowCostCenterModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">{editingCostCenter ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}</h2>
-              <button onClick={() => setShowCostCenterModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{editingCostCenter ? 'Editar Centro de Custo' : 'Novo Centro de Custo'}</h2>
+              <button onClick={() => setShowCostCenterModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleSaveCostCenter} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome *</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
                 <input type="text" required value={costCenterForm.name}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, name: e.target.value })}
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Código</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Código</label>
                 <input type="text" value={costCenterForm.code}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, code: e.target.value })}
                   placeholder="Ex: CC-001"
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Descrição</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Descrição</label>
                 <textarea value={costCenterForm.description} rows={3}
                   onChange={(e) => setCostCenterForm({ ...costCenterForm, description: e.target.value })}
                   className="input-field resize-none" />
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowCostCenterModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" disabled={savingCostCenter}
-                  className="flex-1 px-4 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   {savingCostCenter ? 'Salvando...' : editingCostCenter ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 

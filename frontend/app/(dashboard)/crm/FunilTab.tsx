@@ -13,7 +13,9 @@ import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
+import FocusTrap from '@/components/ui/FocusTrap';
 import { Badge } from '@/components/ui/Badge';
+import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -128,7 +130,7 @@ const statusColors: Record<string, string> = {
   proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
   not_closed: 'bg-orange-100 text-orange-800',
-  lost: 'bg-gray-100 text-gray-700',
+  lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   follow_up: 'bg-orange-100 text-orange-800',
 };
 
@@ -266,7 +268,7 @@ function TriCheckbox({
       ? 'bg-green-100 border-green-400 text-green-700'
       : value === false
       ? 'bg-red-100 border-red-400 text-red-700'
-      : 'bg-gray-100 border-gray-300 text-gray-400';
+      : 'bg-gray-100 dark:bg-gray-700 border-gray-300 text-gray-400 dark:text-gray-500';
 
   return (
     <button
@@ -325,7 +327,7 @@ function DroppableColumn({ id, children }: { id: string; children: React.ReactNo
     <div
       ref={setNodeRef}
       className={`w-60 flex flex-col gap-2 transition-all duration-200 rounded-xl ${
-        isOver ? 'ring-2 ring-[#A6864A]/30 bg-[#A6864A]/5' : ''
+        isOver ? 'ring-2 ring-accent-gold/30 bg-accent-gold/5' : ''
       }`}
     >
       {children}
@@ -412,12 +414,7 @@ export default function FunilTab() {
     try {
       await Promise.all(
         Array.from(selectedIds).map(id =>
-          fetch(`${apiUrl}/sales/prospects/${id}/`, {
-            method: 'PATCH',
-            headers: getHeaders(),
-            credentials: 'include',
-            body: JSON.stringify({ status: newStatus }),
-          })
+          api.patch(`/sales/prospects/${id}/`, { status: newStatus })
         )
       );
       toast.success(`${selectedIds.size} leads atualizados.`);
@@ -438,24 +435,16 @@ export default function FunilTab() {
   });
   const [savingFollowUp, setSavingFollowUp] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const getHeaders = () => ({ 'Content-Type': 'application/json' });
-
   // ─── Data fetching ────────────────────────────────────────────────────────
 
   const fetchProspects = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
-      if (search) params.set('search', search);
-      const res = await fetch(`${apiUrl}/sales/prospects/?${params}`, {
-        headers: getHeaders(),
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setProspects(Array.isArray(data.results ?? data) ? (data.results ?? data) : []);
-      setTotal(data.count ?? (data.results ?? data).length);
+      const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
+      if (search) params.search = search;
+      const data = await api.get<{ results?: Prospect[]; count?: number }>('/sales/prospects/', params);
+      setProspects(Array.isArray(data.results ?? data) ? (data.results ?? data) as Prospect[] : []);
+      setTotal(data.count ?? (data.results ?? data as unknown as Prospect[]).length);
     } catch {
       toast.error('Erro ao carregar prospects');
     } finally {
@@ -465,13 +454,8 @@ export default function FunilTab() {
 
   const fetchAllProspects = useCallback(async () => {
     try {
-      const res = await fetch(`${apiUrl}/sales/prospects/?page_size=500`, {
-        headers: getHeaders(),
-        credentials: 'include',
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setAllProspects(Array.isArray(data.results ?? data) ? (data.results ?? data) : []);
+      const data = await api.get<{ results?: Prospect[] }>('/sales/prospects/', { page_size: '500' });
+      setAllProspects(Array.isArray(data.results ?? data) ? (data.results ?? data) as Prospect[] : []);
     } catch { /* silent */ }
   }, []);
 
@@ -600,11 +584,6 @@ export default function FunilTab() {
     e.preventDefault();
     setSaving(true);
     try {
-      const url = editingProspect
-        ? `${apiUrl}/sales/prospects/${editingProspect.id}/`
-        : `${apiUrl}/sales/prospects/`;
-      const method = editingProspect ? 'PATCH' : 'POST';
-
       // Build payload — strip empty strings for optional fields
       const payload: Record<string, unknown> = {
         // Seção 1
@@ -636,13 +615,11 @@ export default function FunilTab() {
         meeting_transcript: formData.meeting_transcript,
       };
 
-      const res = await fetch(url, {
-        method,
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error();
+      if (editingProspect) {
+        await api.patch(`/sales/prospects/${editingProspect.id}/`, payload);
+      } else {
+        await api.post('/sales/prospects/', payload);
+      }
       toast.success(editingProspect ? 'Prospect atualizado!' : 'Prospect criado!');
       setShowModal(false);
       fetchProspects();
@@ -673,13 +650,7 @@ export default function FunilTab() {
     setProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: newStatus } : p));
     setUpdatingStatus(prospect.id);
     try {
-      const res = await fetch(`${apiUrl}/sales/prospects/${prospect.id}/`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error();
+      await api.patch(`/sales/prospects/${prospect.id}/`, { status: newStatus });
       toast.success(`Status atualizado para "${statusLabels[newStatus]}"`);
       fetchProspects();
       fetchAllProspects();
@@ -698,25 +669,14 @@ export default function FunilTab() {
     setSavingLoss(true);
     try {
       // Atualizar status para perdido
-      const res = await fetch(`${apiUrl}/sales/prospects/${lossModalProspect.id}/`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({ status: 'lost' }),
-      });
-      if (!res.ok) throw new Error();
+      await api.patch(`/sales/prospects/${lossModalProspect.id}/`, { status: 'lost' });
 
       // Registrar motivo de perda via win-loss
-      await fetch(`${apiUrl}/sales/win-loss/`, {
-        method: 'POST',
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          prospect: lossModalProspect.id,
-          result: 'lost',
-          reason: lossForm.reason,
-          notes: `${lossForm.remarketing === 'sim' ? '[REMARKETING] ' : ''}${lossForm.notes}`,
-        }),
+      await api.post('/sales/win-loss/', {
+        prospect: lossModalProspect.id,
+        result: 'lost',
+        reason: lossForm.reason,
+        notes: `${lossForm.remarketing === 'sim' ? '[REMARKETING] ' : ''}${lossForm.notes}`,
       });
 
       toast.success('Lead movido para Perdido.');
@@ -735,32 +695,21 @@ export default function FunilTab() {
     setSavingFollowUp(true);
     try {
       const followUpLabel = FOLLOW_UP_REASONS.find(r => r.value === followUpForm.reason)?.label || followUpForm.reason;
-      const res = await fetch(`${apiUrl}/sales/prospects/${followUpModalProspect.id}/`, {
-        method: 'PATCH',
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          status: 'follow_up',
-          follow_up_reason: followUpForm.reason,
-          next_action: `[${followUpLabel}] ${followUpForm.notes}`.trim(),
-          next_action_date: followUpForm.next_contact_date,
-        }),
+      await api.patch(`/sales/prospects/${followUpModalProspect.id}/`, {
+        status: 'follow_up',
+        follow_up_reason: followUpForm.reason,
+        next_action: `[${followUpLabel}] ${followUpForm.notes}`.trim(),
+        next_action_date: followUpForm.next_contact_date,
       });
-      if (!res.ok) throw new Error();
 
       // Registrar atividade de follow-up
-      await fetch(`${apiUrl}/sales/prospect-activities/`, {
-        method: 'POST',
-        headers: getHeaders(),
-        credentials: 'include',
-        body: JSON.stringify({
-          prospect: followUpModalProspect.id,
-          activity_type: 'other',
-          subject: `Follow-Up: ${followUpLabel}`,
-          description: followUpForm.notes || '',
-          next_action: `Retomar contato em ${followUpForm.next_contact_date}`,
-          next_action_date: followUpForm.next_contact_date,
-        }),
+      await api.post('/sales/prospect-activities/', {
+        prospect: followUpModalProspect.id,
+        activity_type: 'other',
+        subject: `Follow-Up: ${followUpLabel}`,
+        description: followUpForm.notes || '',
+        next_action: `Retomar contato em ${followUpForm.next_contact_date}`,
+        next_action_date: followUpForm.next_contact_date,
       });
 
       toast.success('Lead movido para Follow-Up.');
@@ -777,12 +726,7 @@ export default function FunilTab() {
   const handleDelete = async () => {
     if (!confirmDelete) return;
     try {
-      const res = await fetch(`${apiUrl}/sales/prospects/${confirmDelete.id}/`, {
-        method: 'DELETE',
-        headers: getHeaders(),
-        credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.delete(`/sales/prospects/${confirmDelete.id}/`);
       toast.success(`"${confirmDelete.company_name}" removido.`);
       setConfirmDelete(null);
       fetchProspects();
@@ -795,7 +739,7 @@ export default function FunilTab() {
   // ─── Misc ─────────────────────────────────────────────────────────────────
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const labelInput = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5';
+  const labelInput = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5';
 
   const qualScoreBadgeColor = (score: number) => {
     if (score >= 4) return 'bg-green-100 text-green-700';
@@ -812,17 +756,17 @@ export default function FunilTab() {
         <div />
         <div className="flex items-center gap-3">
           {/* View toggle */}
-          <div className="flex gap-1 bg-white border border-gray-200 rounded-xl p-1 shadow-card">
+          <div className="flex gap-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-1 shadow-card">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-lg transition-all duration-150 ${viewMode === 'list' ? 'bg-[#A6864A] text-white shadow-sm' : 'text-gray-400 hover:text-gray-700'}`}
+              className={`p-2 rounded-lg transition-all duration-150 ${viewMode === 'list' ? 'bg-accent-gold text-white shadow-sm' : 'text-gray-400 dark:text-gray-500 hover:text-gray-700'}`}
               title="Lista"
             >
               <LayoutList className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('pipeline')}
-              className={`p-2 rounded-lg transition-all duration-150 ${viewMode === 'pipeline' ? 'bg-[#A6864A] text-white shadow-sm' : 'text-gray-400 hover:text-gray-700'}`}
+              className={`p-2 rounded-lg transition-all duration-150 ${viewMode === 'pipeline' ? 'bg-accent-gold text-white shadow-sm' : 'text-gray-400 dark:text-gray-500 hover:text-gray-700'}`}
               title="Pipeline"
             >
               <Kanban className="w-4 h-4" />
@@ -855,22 +799,22 @@ export default function FunilTab() {
                       <Icon className={`w-5 h-5 ${color}`} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide truncate">{label}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide truncate">{label}</p>
                       <div className="flex items-baseline gap-2">
-                        <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
-                        {extra && <p className="text-xs text-[#A6864A] font-semibold tabular-nums">{extra}</p>}
+                        <p className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{value}</p>
+                        {extra && <p className="text-xs text-accent-gold font-semibold tabular-nums">{extra}</p>}
                       </div>
                     </div>
                   </div>
                   {/* Funnel progress bar */}
-                  <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="w-full h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
                       className={`h-full ${barColor} rounded-full transition-all duration-700 ease-out`}
                       style={{ width: kpiTotal > 0 ? `${(value / kpiTotal) * 100}%` : '0%' }}
                     />
                   </div>
                   {kpiTotal > 0 && (
-                    <p className="text-[10px] text-gray-400 mt-1 tabular-nums">{((value / kpiTotal) * 100).toFixed(0)}% do funil</p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 tabular-nums">{((value / kpiTotal) * 100).toFixed(0)}% do funil</p>
                   )}
                 </div>
               ))
@@ -882,10 +826,10 @@ export default function FunilTab() {
       {/* ─── List View ─────────────────────────────────────────────────────── */}
       {viewMode === 'list' && (
         <div className="card overflow-hidden">
-          <div className="p-4 border-b border-gray-100 space-y-3">
+          <div className="p-4 border-b border-gray-100 dark:border-gray-700 space-y-3">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   placeholder="Buscar leads..."
@@ -898,14 +842,14 @@ export default function FunilTab() {
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
                   showFilters || filterStatus || filterTemp
-                    ? 'bg-[#A6864A]/10 border-[#A6864A]/30 text-[#A6864A]'
-                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                    ? 'bg-accent-gold/10 border-accent-gold/30 text-accent-gold'
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
                 }`}
               >
                 <Target className="w-3.5 h-3.5" />
                 Filtros
                 {(filterStatus || filterTemp) && (
-                  <span className="w-4 h-4 bg-[#A6864A] text-white rounded-full text-[10px] flex items-center justify-center">
+                  <span className="w-4 h-4 bg-accent-gold text-white rounded-full text-[10px] flex items-center justify-center">
                     {[filterStatus, filterTemp].filter(Boolean).length}
                   </span>
                 )}
@@ -918,7 +862,7 @@ export default function FunilTab() {
                 <select
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
-                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:ring-1 focus:ring-[#A6864A]/30"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 focus:ring-1 focus:ring-accent-gold/30"
                 >
                   <option value="">Todos os status</option>
                   {Object.entries(statusLabels).map(([val, label]) => (
@@ -928,7 +872,7 @@ export default function FunilTab() {
                 <select
                   value={filterTemp}
                   onChange={(e) => setFilterTemp(e.target.value)}
-                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-600 focus:ring-1 focus:ring-[#A6864A]/30"
+                  className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 focus:ring-1 focus:ring-accent-gold/30"
                 >
                   <option value="">Todas as temperaturas</option>
                   <option value="hot">Quente</option>
@@ -938,7 +882,7 @@ export default function FunilTab() {
                 {(filterStatus || filterTemp) && (
                   <button
                     onClick={() => { setFilterStatus(''); setFilterTemp(''); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 transition-colors"
                   >
                     Limpar filtros
                   </button>
@@ -948,11 +892,11 @@ export default function FunilTab() {
 
             {/* Bulk actions bar */}
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 bg-[#A6864A]/5 border border-[#A6864A]/20 rounded-lg px-3 py-2 animate-fade-in">
-                <span className="text-xs font-medium text-[#A6864A]">{selectedIds.size} selecionado(s)</span>
+              <div className="flex items-center gap-3 bg-accent-gold/5 border border-accent-gold/20 rounded-lg px-3 py-2 animate-fade-in">
+                <span className="text-xs font-medium text-accent-gold">{selectedIds.size} selecionado(s)</span>
                 <select
                   onChange={(e) => { if (e.target.value) handleBulkStatusChange(e.target.value); e.target.value = ''; }}
-                  className="text-xs px-2 py-1 rounded border border-[#A6864A]/30 bg-white text-gray-600"
+                  className="text-xs px-2 py-1 rounded border border-accent-gold/30 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300"
                   defaultValue=""
                 >
                   <option value="" disabled>Mover para...</option>
@@ -962,7 +906,7 @@ export default function FunilTab() {
                 </select>
                 <button
                   onClick={() => setSelectedIds(new Set())}
-                  className="text-xs text-gray-400 hover:text-gray-600 ml-auto"
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 ml-auto"
                 >
                   Cancelar
                 </button>
@@ -976,20 +920,20 @@ export default function FunilTab() {
               <div className="p-4"><TableSkeleton rows={4} cols={2} /></div>
             ) : prospects.length === 0 ? (
               <div className="p-8 text-center">
-                <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <div className="w-14 h-14 bg-gray-50 dark:bg-gray-700/50 rounded-2xl flex items-center justify-center mx-auto mb-3">
                   <Target className="w-7 h-7 text-gray-300" />
                 </div>
-                <p className="text-sm text-gray-500">Nenhum prospect encontrado</p>
-                <button onClick={openNewModal} className="mt-2 text-xs font-semibold text-[#A6864A]">+ Novo Lead</button>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum prospect encontrado</p>
+                <button onClick={openNewModal} className="mt-2 text-xs font-semibold text-accent-gold">+ Novo Lead</button>
               </div>
             ) : (
-              <div className="divide-y divide-gray-50">
+              <div className="divide-y divide-gray-50 dark:divide-gray-700">
                 {prospects.map(prospect => (
-                  <div key={prospect.id} className="p-4 hover:bg-gray-50/60 transition-colors">
+                  <div key={prospect.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors">
                     <div className="flex items-start justify-between mb-1">
                       <div>
-                        <p className="font-semibold text-gray-900 text-sm">{prospect.company_name}</p>
-                        <p className="text-xs text-gray-400">{prospect.contact_name} · {prospect.contact_email}</p>
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{prospect.company_name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">{prospect.contact_name} · {prospect.contact_email}</p>
                       </div>
                       {prospect.temperature && (
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
@@ -998,17 +942,17 @@ export default function FunilTab() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusColors[prospect.status] || 'bg-gray-100'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${statusColors[prospect.status] || 'bg-gray-100 dark:bg-gray-700'}`}>
                         {statusLabels[prospect.status]}
                       </span>
-                      <span className="text-xs font-semibold text-[#A6864A] tabular-nums">{formatCurrency(prospect.estimated_value)}</span>
+                      <span className="text-xs font-semibold text-accent-gold tabular-nums">{formatCurrency(prospect.estimated_value)}</span>
                       {prospect.days_since_created > 0 && (
-                        <span className={`text-[10px] ${prospect.days_since_created > 14 ? 'text-red-400' : 'text-gray-400'}`}>{prospect.days_since_created}d</span>
+                        <span className={`text-[10px] ${prospect.days_since_created > 14 ? 'text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>{prospect.days_since_created}d</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 mt-2 justify-end">
-                      <button onClick={() => openEditModal(prospect)} className="p-1.5 text-gray-300 hover:text-[#A6864A] rounded-lg"><Edit className="w-4 h-4" /></button>
-                      <button onClick={() => setConfirmDelete(prospect)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={() => openEditModal(prospect)} className="p-1.5 text-gray-300 hover:text-accent-gold rounded-lg" aria-label="Editar"><Edit className="w-4 h-4" /></button>
+                      <button onClick={() => setConfirmDelete(prospect)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg" aria-label="Excluir"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
                 ))}
@@ -1023,30 +967,30 @@ export default function FunilTab() {
             ) : (
               <table className="w-full">
                 <thead>
-                  <tr className="bg-gray-50/80 border-b border-gray-100">
+                  <tr className="bg-gray-50/80 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
                     <th className="px-3 py-3 w-8">
                       <input type="checkbox" checked={selectedIds.size === prospects.length && prospects.length > 0}
-                        onChange={toggleSelectAll} className="w-3.5 h-3.5 rounded text-[#A6864A] focus:ring-[#A6864A]/30" />
+                        onChange={toggleSelectAll} className="w-3.5 h-3.5 rounded text-accent-gold focus:ring-accent-gold/30" />
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Contato</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Origem</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor Est.</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Empresa</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Contato</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Origem</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Valor Est.</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                   {prospects.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-16 text-center">
                         <div className="flex flex-col items-center">
-                          <div className="w-14 h-14 bg-gray-50 rounded-2xl flex items-center justify-center mb-3">
+                          <div className="w-14 h-14 bg-gray-50 dark:bg-gray-700/50 rounded-2xl flex items-center justify-center mb-3">
                             <Target className="w-7 h-7 text-gray-300" />
                           </div>
-                          <p className="text-sm text-gray-500 font-medium">Nenhum prospect encontrado</p>
-                          <p className="text-xs text-gray-400 mt-1">Tente ajustar a busca ou adicione um novo lead</p>
-                          <button onClick={openNewModal} className="mt-3 text-xs font-semibold text-[#A6864A] hover:text-[#8B6F3D] transition-colors">
+                          <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Nenhum prospect encontrado</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Tente ajustar a busca ou adicione um novo lead</p>
+                          <button onClick={openNewModal} className="mt-3 text-xs font-semibold text-accent-gold hover:text-accent-gold-dark transition-colors">
                             + Novo Lead
                           </button>
                         </div>
@@ -1054,14 +998,14 @@ export default function FunilTab() {
                     </tr>
                   ) : (
                     prospects.map((prospect) => (
-                      <tr key={prospect.id} className={`hover:bg-gray-50/60 transition-colors ${selectedIds.has(prospect.id) ? 'bg-[#A6864A]/5' : ''}`}>
+                      <tr key={prospect.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors ${selectedIds.has(prospect.id) ? 'bg-accent-gold/5' : ''}`}>
                         <td className="px-3 py-3 w-8">
                           <input type="checkbox" checked={selectedIds.has(prospect.id)}
-                            onChange={() => toggleSelect(prospect.id)} className="w-3.5 h-3.5 rounded text-[#A6864A] focus:ring-[#A6864A]/30" />
+                            onChange={() => toggleSelect(prospect.id)} className="w-3.5 h-3.5 rounded text-accent-gold focus:ring-accent-gold/30" />
                         </td>
                         {/* Empresa + qualif badges */}
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-gray-900 text-sm">{prospect.company_name}</p>
+                          <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{prospect.company_name}</p>
                           <div className="flex items-center gap-1 mt-1 flex-wrap">
                             {prospect.qualification_level && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
@@ -1082,20 +1026,20 @@ export default function FunilTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <p className="text-sm text-gray-800">{prospect.contact_name}</p>
-                          <p className="text-xs text-gray-400">{prospect.contact_email}</p>
+                          <p className="text-sm text-gray-800 dark:text-gray-100">{prospect.contact_name}</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">{prospect.contact_email}</p>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500 capitalize">
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 capitalize">
                           {sourceOptions.find(s => s.value === prospect.source)?.label ?? prospect.source}
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 tabular-nums">
+                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                           {formatCurrency(prospect.estimated_value)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="relative inline-block group">
                             <button
                               disabled={updatingStatus === prospect.id}
-                              className={`flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-sm hover:ring-1 hover:ring-black/5 disabled:opacity-50 ${statusColors[prospect.status] || 'bg-gray-100 text-gray-800'}`}
+                              className={`flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all hover:shadow-sm hover:ring-1 hover:ring-black/5 disabled:opacity-50 ${statusColors[prospect.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100'}`}
                             >
                               {updatingStatus === prospect.id ? (
                                 <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1106,18 +1050,18 @@ export default function FunilTab() {
                                 </>
                               )}
                             </button>
-                            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-20 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
+                            <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 py-1 z-20 min-w-[160px] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
                               {Object.entries(statusLabels).map(([val, label]) => (
                                 <button
                                   key={val}
                                   onClick={() => handleStatusChange(prospect, val)}
                                   className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center gap-2 ${
                                     prospect.status === val
-                                      ? 'bg-gray-50 font-semibold text-gray-900'
-                                      : 'text-gray-600 hover:bg-gray-50'
+                                      ? 'bg-gray-50 dark:bg-gray-700/50 font-semibold text-gray-900 dark:text-gray-100'
+                                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
                                   }`}
                                 >
-                                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[val]?.split(' ')[0] || 'bg-gray-200'}`} />
+                                  <span aria-hidden="true" className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColors[val]?.split(' ')[0] || 'bg-gray-200'}`} />
                                   {label}
                                 </button>
                               ))}
@@ -1128,13 +1072,15 @@ export default function FunilTab() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => openEditModal(prospect)}
-                              className="p-1.5 text-gray-300 hover:text-[#A6864A] transition-colors rounded-lg hover:bg-[#A6864A]/5"
+                              className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5"
+                              aria-label="Editar"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => setConfirmDelete(prospect)}
                               className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                              aria-label="Excluir"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -1169,14 +1115,14 @@ export default function FunilTab() {
               return (
                 <DroppableColumn key={status} id={status}>
                   {/* Column header */}
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-white rounded-xl border border-gray-100 shadow-card">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 shadow-card">
                     <Badge variant={statusBadgeVariant[status] || 'neutral'} dot>
                       {statusLabels[status]}
                     </Badge>
-                    <span className="text-xs text-gray-400 font-semibold">{col.length}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-semibold">{col.length}</span>
                   </div>
                   {col.length > 0 && (
-                    <p className="text-xs text-gray-400 px-1 font-medium tabular-nums">{formatCurrency(colValue)}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 px-1 font-medium tabular-nums">{formatCurrency(colValue)}</p>
                   )}
                   {/* Cards */}
                   <div className="flex flex-col gap-2 min-h-[60px]">
@@ -1184,14 +1130,14 @@ export default function FunilTab() {
                       <DraggableCard key={prospect.id} prospect={prospect}>
                       <div className="card card-hover p-3 cursor-grab active:cursor-grabbing animate-stagger-in">
                         <div className="flex items-center justify-between mb-0.5">
-                          <p className="text-sm font-semibold text-gray-900">{prospect.company_name}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{prospect.company_name}</p>
                           {prospect.temperature && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${temperatureColors[prospect.temperature] || ''}`}>
                               {temperatureLabels[prospect.temperature] || prospect.temperature}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mb-1">{prospect.contact_name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{prospect.contact_name}</p>
                         {/* Badges */}
                         <div className="flex items-center gap-1 flex-wrap mb-2">
                           {prospect.service_interest && (
@@ -1225,7 +1171,7 @@ export default function FunilTab() {
                               return null;
                             })}
                             {prospect.next_action_date && (
-                              <p className="text-[10px] text-gray-500 mt-1">
+                              <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
                                 Retomar: {new Date(prospect.next_action_date + 'T00:00:00').toLocaleDateString('pt-BR')}
                               </p>
                             )}
@@ -1235,10 +1181,10 @@ export default function FunilTab() {
                         {prospect.qualification_score > 0 && (
                           <div className="mb-2">
                             <div className="flex items-center justify-between mb-0.5">
-                              <span className="text-[10px] text-gray-400">Score</span>
-                              <span className="text-[10px] font-bold text-gray-500">{prospect.qualification_score}/4</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500">Score</span>
+                              <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400">{prospect.qualification_score}/4</span>
                             </div>
-                            <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="w-full h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
                                   prospect.qualification_score >= 4 ? 'bg-green-500' :
@@ -1251,11 +1197,11 @@ export default function FunilTab() {
                         )}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-[#A6864A] tabular-nums">
+                            <span className="text-xs font-bold text-accent-gold tabular-nums">
                               {formatCurrency(prospect.estimated_value)}
                             </span>
                             {prospect.days_since_created > 0 && (
-                              <span className={`text-[10px] tabular-nums ${prospect.days_since_created > 14 ? 'text-red-400' : prospect.days_since_created > 7 ? 'text-yellow-500' : 'text-gray-400'}`}>
+                              <span className={`text-[10px] tabular-nums ${prospect.days_since_created > 14 ? 'text-red-400' : prospect.days_since_created > 7 ? 'text-yellow-500' : 'text-gray-400 dark:text-gray-500'}`}>
                                 {prospect.days_since_created}d
                               </span>
                             )}
@@ -1263,13 +1209,15 @@ export default function FunilTab() {
                           <div className="flex items-center gap-0.5">
                             <button
                               onClick={() => openEditModal(prospect)}
-                              className="p-1 text-gray-300 hover:text-[#A6864A] transition-colors rounded"
+                              className="p-1 text-gray-300 hover:text-accent-gold transition-colors rounded"
+                              aria-label="Editar"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => setConfirmDelete(prospect)}
                               className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded"
+                              aria-label="Excluir"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1280,13 +1228,13 @@ export default function FunilTab() {
                     ))}
                   </div>
                   {col.length === 0 && (
-                    <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
-                      <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
+                      <div className="w-10 h-10 bg-gray-50 dark:bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-2">
                         <Target className="w-5 h-5 text-gray-300" />
                       </div>
-                      <p className="text-xs text-gray-400 font-medium">Nenhum lead nesta etapa</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">Nenhum lead nesta etapa</p>
                       {status === 'new' && (
-                        <button onClick={openNewModal} className="text-[10px] text-[#A6864A] font-semibold mt-2 hover:underline">
+                        <button onClick={openNewModal} className="text-[10px] text-accent-gold font-semibold mt-2 hover:underline">
                           + Adicionar lead
                         </button>
                       )}
@@ -1300,10 +1248,10 @@ export default function FunilTab() {
         {/* Drag overlay — ghost card while dragging */}
         <DragOverlay>
           {draggedProspect && (
-            <div className="card p-3 w-60 shadow-xl ring-2 ring-[#A6864A]/20 rotate-2 opacity-90">
-              <p className="text-sm font-semibold text-gray-900">{draggedProspect.company_name}</p>
-              <p className="text-xs text-gray-400">{draggedProspect.contact_name}</p>
-              <p className="text-xs font-bold text-[#A6864A] mt-1">{formatCurrency(draggedProspect.estimated_value)}</p>
+            <div className="card p-3 w-60 shadow-xl ring-2 ring-accent-gold/20 rotate-2 opacity-90">
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{draggedProspect.company_name}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{draggedProspect.contact_name}</p>
+              <p className="text-xs font-bold text-accent-gold mt-1">{formatCurrency(draggedProspect.estimated_value)}</p>
             </div>
           )}
         </DragOverlay>
@@ -1313,17 +1261,19 @@ export default function FunilTab() {
       {/* ─── Modal (create / edit) ─────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             {/* Modal header */}
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                 {editingProspect ? 'Editar Prospect' : 'Novo Prospect'}
               </h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
+                aria-label="Fechar"
               >
-                <X className="w-4 h-4 text-gray-400" />
+                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               </button>
             </div>
 
@@ -1364,7 +1314,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Tipo de Projeto</label>
                     <select value={formData.service_interest}
                       onChange={(e) => setField('service_interest', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       <option value="">Selecionar</option>
                       {serviceInterestOptions.map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
@@ -1375,7 +1325,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Canal de Origem</label>
                     <select value={formData.source}
                       onChange={(e) => setField('source', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       {sourceOptions.map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
@@ -1387,7 +1337,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Status</label>
                     <select value={formData.status}
                       onChange={(e) => setField('status', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       {Object.entries(statusLabels).map(([val, label]) => (
                         <option key={val} value={val}>{label}</option>
                       ))}
@@ -1403,7 +1353,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Nº de Funcionários</label>
                     <select value={formData.company_size}
                       onChange={(e) => setField('company_size', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       <option value="">Selecionar</option>
                       <option value="small">1-10</option>
                       <option value="medium">11-50</option>
@@ -1424,7 +1374,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Nível de Consciência</label>
                     <select value={formData.qualification_level}
                       onChange={(e) => setField('qualification_level', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       <option value="">Selecionar</option>
                       <option value="2">Nível 2 — Consciente do Problema</option>
                       <option value="3">Nível 3 — Consciente da Solução</option>
@@ -1436,7 +1386,7 @@ export default function FunilTab() {
                       <label className={labelInput}>Tipo de Uso</label>
                       <select value={formData.usage_type}
                         onChange={(e) => setField('usage_type', e.target.value)}
-                        className="input-field bg-white">
+                        className="input-field bg-white dark:bg-gray-800">
                         <option value="">Selecionar</option>
                         <option value="internal">Uso Interno</option>
                         <option value="commercial">Uso Comercial</option>
@@ -1452,7 +1402,7 @@ export default function FunilTab() {
                     <TriCheckbox label="Urgência alta (+1)" value={formData.has_urgency} onChange={(v) => setField('has_urgency', v)} />
                     <TriCheckbox label="Já tentou antes (+1)" value={formData.has_operation} onChange={(v) => setField('has_operation', v)} />
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1">Clique para alternar: — não definido · ✓ sim · ✗ não</p>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Clique para alternar: — não definido · ✓ sim · ✗ não</p>
                 </div>
               </Section>
 
@@ -1470,7 +1420,7 @@ export default function FunilTab() {
                     <label className={labelInput}>Urgência Percebida</label>
                     <select value={formData.temperature}
                       onChange={(e) => setField('temperature', e.target.value)}
-                      className="input-field bg-white">
+                      className="input-field bg-white dark:bg-gray-800">
                       <option value="hot">Alta</option>
                       <option value="warm">Média</option>
                       <option value="cold">Baixa</option>
@@ -1551,6 +1501,7 @@ export default function FunilTab() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 
@@ -1567,14 +1518,15 @@ export default function FunilTab() {
       {/* ─── Modal Obrigatório — Motivo de Perda ─────────────────────────── */}
       {lossModalProspect && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setLossModalProspect(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Mover para Perdido</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Mover para Perdido</h2>
               <button
                 onClick={() => setLossModalProspect(null)}
-                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
               >
-                <X className="w-4 h-4 text-gray-400" />
+                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               </button>
             </div>
 
@@ -1584,8 +1536,8 @@ export default function FunilTab() {
               </p>
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
-              Lead: <span className="font-semibold text-gray-900">{lossModalProspect.company_name}</span>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Lead: <span className="font-semibold text-gray-900 dark:text-gray-100">{lossModalProspect.company_name}</span>
             </p>
 
             <div className="space-y-4">
@@ -1594,7 +1546,7 @@ export default function FunilTab() {
                 <select
                   value={lossForm.reason}
                   onChange={(e) => setLossForm({ ...lossForm, reason: e.target.value })}
-                  className="input-field bg-white"
+                  className="input-field bg-white dark:bg-gray-800"
                   required
                 >
                   <option value="">Selecione o motivo</option>
@@ -1619,7 +1571,7 @@ export default function FunilTab() {
                         value={val}
                         checked={lossForm.remarketing === val}
                         onChange={(e) => setLossForm({ ...lossForm, remarketing: e.target.value })}
-                        className="text-[#A6864A]"
+                        className="text-accent-gold"
                       />
                       <span className="text-sm">{label}</span>
                     </label>
@@ -1659,20 +1611,22 @@ export default function FunilTab() {
               </div>
             </div>
           </div>
+          </FocusTrap>
         </div>
       )}
 
       {/* ─── Modal Obrigatório — Follow-Up ───────────────────────────────── */}
       {followUpModalProspect && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setFollowUpModalProspect(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Mover para Follow-Up</h2>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Mover para Follow-Up</h2>
               <button
                 onClick={() => setFollowUpModalProspect(null)}
-                className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors"
               >
-                <X className="w-4 h-4 text-gray-400" />
+                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               </button>
             </div>
 
@@ -1682,8 +1636,8 @@ export default function FunilTab() {
               </p>
             </div>
 
-            <p className="text-sm text-gray-500 mb-4">
-              Lead: <span className="font-semibold text-gray-900">{followUpModalProspect.company_name}</span>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Lead: <span className="font-semibold text-gray-900 dark:text-gray-100">{followUpModalProspect.company_name}</span>
             </p>
 
             <div className="space-y-4">
@@ -1695,8 +1649,8 @@ export default function FunilTab() {
                       key={r.value}
                       className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all ${
                         followUpForm.reason === r.value
-                          ? 'border-[#A6864A] bg-[#A6864A]/5 ring-1 ring-[#A6864A]/20'
-                          : 'border-gray-200 hover:border-gray-300'
+                          ? 'border-accent-gold bg-accent-gold/5 ring-1 ring-accent-gold/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                       }`}
                     >
                       <input
@@ -1705,11 +1659,11 @@ export default function FunilTab() {
                         value={r.value}
                         checked={followUpForm.reason === r.value}
                         onChange={(e) => setFollowUpForm({ ...followUpForm, reason: e.target.value })}
-                        className="text-[#A6864A]"
+                        className="text-accent-gold"
                       />
                       <div>
-                        <span className="text-sm font-medium text-gray-900">{r.label}</span>
-                        <p className="text-xs text-gray-400">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.label}</span>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
                           {r.value === 'nao_agendou' && 'Qualificou mas não marcou reunião'}
                           {r.value === 'nao_compareceu' && 'Agendou mas não compareceu'}
                           {r.value === 'nao_fechou' && 'Reunião realizada mas não fechou'}
@@ -1762,6 +1716,7 @@ export default function FunilTab() {
               </div>
             </div>
           </div>
+          </FocusTrap>
         </div>
       )}
     </div>

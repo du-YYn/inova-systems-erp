@@ -11,6 +11,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import FocusTrap from '@/components/ui/FocusTrap';
+import api from '@/lib/api';
 
 interface Proposal {
   id: number;
@@ -77,20 +79,15 @@ export default function PropostasTab() {
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const getHeaders = () => ({ 'Content-Type': 'application/json' });
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
-      if (search) params.set('search', search);
-      const [propRes, custRes] = await Promise.all([
-        fetch(`${apiUrl}/sales/proposals/?${params}`, { headers: getHeaders(), credentials: 'include' }),
-        fetch(`${apiUrl}/sales/customers/`, { headers: getHeaders(), credentials: 'include' }),
+      const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
+      if (search) params.search = search;
+      const [propData, custData] = await Promise.all([
+        api.get<{ results: Proposal[]; count: number }>('/sales/proposals/', params),
+        api.get<{ results: Customer[] }>('/sales/customers/'),
       ]);
-      if (!propRes.ok || !custRes.ok) throw new Error('Unauthorized');
-      const [propData, custData] = await Promise.all([propRes.json(), custRes.json()]);
       const pList = propData.results || propData;
       const cList = custData.results || custData;
       setProposals(Array.isArray(pList) ? pList : []);
@@ -131,8 +128,6 @@ export default function PropostasTab() {
     e.preventDefault();
     setSaving(true);
     try {
-      const url = editingProposal ? `${apiUrl}/sales/proposals/${editingProposal.id}/` : `${apiUrl}/sales/proposals/`;
-      const method = editingProposal ? 'PATCH' : 'POST';
       const body: Record<string, unknown> = {
         title: formData.title, proposal_type: formData.proposal_type,
         billing_type: formData.billing_type, notes: formData.notes,
@@ -142,8 +137,11 @@ export default function PropostasTab() {
       if (formData.hours_estimated) body.hours_estimated = formData.hours_estimated;
       if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
       if (formData.valid_until) body.valid_until = formData.valid_until;
-      const res = await fetch(url, { method, headers: getHeaders(), credentials: 'include', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error();
+      if (editingProposal) {
+        await api.patch(`/sales/proposals/${editingProposal.id}/`, body);
+      } else {
+        await api.post('/sales/proposals/', body);
+      }
       toast.success(editingProposal ? 'Proposta atualizada!' : 'Proposta criada!');
       setShowModal(false);
       fetchData();
@@ -158,10 +156,7 @@ export default function PropostasTab() {
     const actionKey = `${proposal.id}-${action}`;
     setPerformingAction(actionKey);
     try {
-      const res = await fetch(`${apiUrl}/sales/proposals/${proposal.id}/${action}/`, {
-        method: 'POST', headers: getHeaders(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.post(`/sales/proposals/${proposal.id}/${action}/`);
       const labels: Record<string, string> = {
         send: 'Proposta enviada!', approve: 'Proposta aprovada!',
         reject: 'Proposta rejeitada.', convert_to_contract: 'Contrato criado!',
@@ -178,10 +173,7 @@ export default function PropostasTab() {
   const handleDelete = async () => {
     if (!confirmDelete) return;
     try {
-      const res = await fetch(`${apiUrl}/sales/proposals/${confirmDelete.id}/`, {
-        method: 'DELETE', headers: getHeaders(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.delete(`/sales/proposals/${confirmDelete.id}/`);
       toast.success(`Proposta "${confirmDelete.number || confirmDelete.title}" excluída.`);
       setConfirmDelete(null);
       fetchData();
@@ -190,7 +182,7 @@ export default function PropostasTab() {
     }
   };
 
-  const labelInput = 'block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5';
+  const labelInput = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5';
 
   return (
     <div>
@@ -216,8 +208,8 @@ export default function PropostasTab() {
                     <Icon className={`w-5 h-5 ${color}`} />
                   </div>
                   <div>
-                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
-                    <p className="text-xl font-bold text-gray-900 tabular-nums">{value}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{label}</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-gray-100 tabular-nums">{value}</p>
                   </div>
                 </div>
               </div>
@@ -228,9 +220,9 @@ export default function PropostasTab() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        <div className="p-4 border-b border-gray-100">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700">
           <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input type="text" placeholder="Buscar propostas..."
               value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
               className="input-field pl-9" />
@@ -241,30 +233,30 @@ export default function PropostasTab() {
           {loading ? <TableSkeleton rows={6} cols={8} /> : (
             <table className="w-full">
               <thead>
-                <tr className="bg-gray-50/80 border-b border-gray-100">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Número</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Título</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Cliente</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Valor</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                <tr className="bg-gray-50/80 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Número</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Título</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cliente</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Valor</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                 {proposals.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-16 text-center text-gray-400 text-sm">
+                    <td colSpan={7} className="px-4 py-16 text-center text-gray-400 dark:text-gray-500 text-sm">
                       Nenhuma proposta encontrada
                     </td>
                   </tr>
                 ) : proposals.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50/60 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.number}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.title}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{p.customer_name || p.prospect_company || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 tabular-nums">
+                  <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">{p.number}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100">{p.title}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{p.customer_name || p.prospect_company || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
+                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                       {p.total_value ? formatCurrency(p.total_value) : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -279,6 +271,7 @@ export default function PropostasTab() {
                             onClick={() => handleAction(p, 'send')}
                             disabled={performingAction === `${p.id}-send`}
                             title="Enviar proposta"
+                            aria-label="Enviar proposta"
                             className="p-1.5 text-gray-300 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50 disabled:opacity-50">
                             <Send className="w-4 h-4" />
                           </button>
@@ -287,11 +280,13 @@ export default function PropostasTab() {
                           <>
                             <button onClick={() => handleAction(p, 'approve')} disabled={!!performingAction}
                               title="Aprovar"
+                              aria-label="Aprovar"
                               className="p-1.5 text-gray-300 hover:text-emerald-600 transition-colors rounded-lg hover:bg-emerald-50 disabled:opacity-50">
                               <ThumbsUp className="w-4 h-4" />
                             </button>
                             <button onClick={() => handleAction(p, 'reject')} disabled={!!performingAction}
                               title="Rejeitar"
+                              aria-label="Rejeitar"
                               className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 disabled:opacity-50">
                               <ThumbsDown className="w-4 h-4" />
                             </button>
@@ -300,15 +295,18 @@ export default function PropostasTab() {
                         {p.status === 'approved' && (
                           <button onClick={() => handleAction(p, 'convert_to_contract')} disabled={!!performingAction}
                             title="Converter em Contrato"
-                            className="p-1.5 text-gray-300 hover:text-[#A6864A] transition-colors rounded-lg hover:bg-[#A6864A]/5 disabled:opacity-50">
+                            aria-label="Converter em Contrato"
+                            className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5 disabled:opacity-50">
                             <ArrowRight className="w-4 h-4" />
                           </button>
                         )}
                         <button onClick={() => openEditModal(p)}
-                          className="p-1.5 text-gray-300 hover:text-[#A6864A] transition-colors rounded-lg hover:bg-[#A6864A]/5">
+                          aria-label="Editar"
+                          className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5">
                           <Edit className="w-4 h-4" />
                         </button>
                         <button onClick={() => setConfirmDelete(p)}
+                          aria-label="Excluir"
                           className="p-1.5 text-gray-300 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -325,23 +323,24 @@ export default function PropostasTab() {
       </div>
 
       {/* Legend */}
-      <div className="mt-3 flex items-center gap-4 text-xs text-gray-400">
+      <div className="mt-3 flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
         <div className="flex items-center gap-1"><Send className="w-3.5 h-3.5 text-blue-400" /> Enviar</div>
         <div className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5 text-emerald-500" /> Aprovar</div>
         <div className="flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5 text-red-400" /> Rejeitar</div>
-        <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-[#A6864A]" /> Converter em Contrato</div>
+        <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-accent-gold" /> Converter em Contrato</div>
       </div>
 
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                 {editingProposal ? 'Editar Proposta' : 'Nova Proposta'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
-                <X className="w-4 h-4 text-gray-400" />
+              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors" aria-label="Fechar">
+                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSave} className="space-y-4">
@@ -354,7 +353,7 @@ export default function PropostasTab() {
               <div>
                 <label className={labelInput}>Cliente</label>
                 <select value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                  className="input-field bg-white">
+                  className="input-field bg-white dark:bg-gray-800">
                   <option value="">Selecione um cliente</option>
                   {customers.map((c) => <option key={c.id} value={c.id}>{c.company_name || c.name}</option>)}
                 </select>
@@ -363,7 +362,7 @@ export default function PropostasTab() {
                 <div>
                   <label className={labelInput}>Tipo</label>
                   <select value={formData.proposal_type} onChange={(e) => setFormData({ ...formData, proposal_type: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="software_dev">Desenvolvimento</option>
                     <option value="automation">Automação</option>
                     <option value="ai">Inteligência Artificial</option>
@@ -376,7 +375,7 @@ export default function PropostasTab() {
                 <div>
                   <label className={labelInput}>Cobrança</label>
                   <select value={formData.billing_type} onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="input-field bg-white">
+                    className="input-field bg-white dark:bg-gray-800">
                     <option value="fixed">Valor Fixo</option>
                     <option value="hourly">Por Hora</option>
                     <option value="monthly">Mensal</option>
@@ -413,6 +412,7 @@ export default function PropostasTab() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 

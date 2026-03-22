@@ -6,6 +6,8 @@ import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
+import FocusTrap from '@/components/ui/FocusTrap';
+import api, { ApiError } from '@/lib/api';
 
 interface Contract {
   id: number;
@@ -37,12 +39,12 @@ interface DashboardStats {
 const PAGE_SIZE = 10;
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700',
+  draft: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   pending_signature: 'bg-yellow-100 text-yellow-800',
   active: 'bg-green-100 text-green-800',
   suspended: 'bg-orange-100 text-orange-800',
   cancelled: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-100 text-gray-500',
+  expired: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
 };
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', pending_signature: 'Aguard. Assinatura',
@@ -85,31 +87,24 @@ export default function ContratosTab() {
   const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const h = () => ({ 'Content-Type': 'application/json' });
-
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
-      if (search) params.set('search', search);
-      if (filterStatus) params.set('status', filterStatus);
+      const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
+      if (search) params.search = search;
+      if (filterStatus) params.status = filterStatus;
 
-      const [contractsRes, customersRes, statsRes] = await Promise.all([
-        fetch(`${apiUrl}/sales/contracts/?${params}`, { headers: h(), credentials: 'include' }),
-        fetch(`${apiUrl}/sales/customers/?page_size=200`, { headers: h(), credentials: 'include' }),
-        fetch(`${apiUrl}/sales/contracts/dashboard/`, { headers: h(), credentials: 'include' }),
-      ]);
-      if (!contractsRes.ok || !customersRes.ok) throw new Error('Unauthorized');
       const [contractsData, customersData, statsData] = await Promise.all([
-        contractsRes.json(), customersRes.json(), statsRes.ok ? statsRes.json() : Promise.resolve({}),
+        api.get<{ results: Contract[]; count: number }>('/sales/contracts/', params),
+        api.get<{ results: Customer[] }>('/sales/customers/', { page_size: '200' }),
+        api.get<DashboardStats>('/sales/contracts/dashboard/').catch(() => ({} as DashboardStats)),
       ]);
       const cList = contractsData.results || contractsData;
       const kList = customersData.results || customersData;
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
       setCustomers(Array.isArray(kList) ? kList : []);
-      if (statsData && !statsData.detail) setStats(statsData);
+      if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
     } finally {
@@ -145,21 +140,14 @@ export default function ContratosTab() {
       if (formData.notes) body.notes = formData.notes;
       if (formData.terms) body.terms = formData.terms;
 
-      const res = await fetch(`${apiUrl}/sales/contracts/`, {
-        method: 'POST', headers: h(), credentials: 'include', body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const msg = Object.values(err).flat().join(' ') || 'Erro ao criar contrato.';
-        toast.error(msg as string);
-        return;
-      }
+      await api.post('/sales/contracts/', body);
       toast.success('Contrato criado com sucesso!');
       setShowModal(false);
       setFormData({ ...EMPTY_FORM });
       fetchData();
-    } catch {
-      toast.error('Erro ao criar contrato.');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao criar contrato.';
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -167,10 +155,7 @@ export default function ContratosTab() {
 
   const handleStatusAction = async (contract: Contract, action: 'activate' | 'cancel') => {
     try {
-      const res = await fetch(`${apiUrl}/sales/contracts/${contract.id}/${action}/`, {
-        method: 'POST', headers: h(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.post(`/sales/contracts/${contract.id}/${action}/`);
       toast.success(action === 'activate' ? 'Contrato ativado!' : 'Contrato cancelado.');
       fetchData();
     } catch {
@@ -182,10 +167,7 @@ export default function ContratosTab() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await fetch(`${apiUrl}/sales/contracts/${deleteTarget.id}/`, {
-        method: 'DELETE', headers: h(), credentials: 'include',
-      });
-      if (!res.ok) throw new Error();
+      await api.delete(`/sales/contracts/${deleteTarget.id}/`);
       toast.success(`Contrato "${deleteTarget.number}" removido.`);
       setDeleteTarget(null);
       fetchData();
@@ -220,33 +202,33 @@ export default function ContratosTab() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {loading || !stats ? Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />) : (
           <>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
-                <ScrollText className="w-4 h-4 text-gray-400" />
-                <p className="text-gray-500 text-sm">Total</p>
+                <ScrollText className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Total</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{stats.total_contracts}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{stats.total_contracts}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
-                <p className="text-gray-500 text-sm">Ativos</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Ativos</p>
               </div>
               <p className="text-2xl font-semibold text-green-600">{stats.active_contracts}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <TrendingUp className="w-4 h-4 text-accent-gold" />
-                <p className="text-gray-500 text-sm">MRR</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">MRR</p>
               </div>
-              <p className="text-2xl font-semibold text-gray-900">{formatCurrency(stats.mrr)}</p>
+              <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{formatCurrency(stats.mrr)}</p>
             </div>
-            <div className="bg-white p-5 rounded-lg border border-gray-100">
+            <div className="bg-white dark:bg-gray-800 p-5 rounded-lg border border-gray-100 dark:border-gray-700">
               <div className="flex items-center gap-2 mb-2">
                 <AlertTriangle className="w-4 h-4 text-orange-400" />
-                <p className="text-gray-500 text-sm">Vencendo (30d)</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">Vencendo (30d)</p>
               </div>
-              <p className={`text-2xl font-semibold ${stats.expiring_contracts > 0 ? 'text-orange-500' : 'text-gray-900'}`}>
+              <p className={`text-2xl font-semibold ${stats.expiring_contracts > 0 ? 'text-orange-500' : 'text-gray-900 dark:text-gray-100'}`}>
                 {stats.expiring_contracts}
               </p>
             </div>
@@ -257,13 +239,13 @@ export default function ContratosTab() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-48 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Buscar contrato..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
           />
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -274,7 +256,7 @@ export default function ContratosTab() {
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filterStatus === val
                   ? 'bg-accent-gold text-white'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
               }`}
             >
               {label}
@@ -288,50 +270,50 @@ export default function ContratosTab() {
         {loading ? (
           <div className="p-4"><TableSkeleton rows={8} cols={6} /></div>
         ) : contracts.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">
+          <div className="text-center py-16 text-gray-500 dark:text-gray-400">
             <ScrollText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Nenhum contrato encontrado</p>
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Contrato</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Tipo / Cobrança</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Valor</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Vigência</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Contrato</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Cliente</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Tipo / Cobrança</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Valor</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Vigência</th>
+                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
               {contracts.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   <td className="px-6 py-4">
-                    <p className="text-sm font-medium text-gray-900">{c.title}</p>
-                    <p className="text-xs text-gray-500 font-mono">{c.number}</p>
-                    {c.proposal_title && <p className="text-xs text-gray-500">Prop: {c.proposal_title}</p>}
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{c.title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{c.number}</p>
+                    {c.proposal_title && <p className="text-xs text-gray-500 dark:text-gray-400">Prop: {c.proposal_title}</p>}
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-900">{c.customer_name || '—'}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">{c.customer_name || '—'}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-900">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
-                    <p className="text-xs text-gray-500">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
                   </td>
                   <td className="px-6 py-4">
-                    {c.monthly_value && <p className="text-sm font-medium text-gray-900">{formatCurrency(c.monthly_value)}/mês</p>}
-                    {c.hourly_rate && <p className="text-xs text-gray-500">{formatCurrency(c.hourly_rate)}/h</p>}
-                    {!c.monthly_value && !c.hourly_rate && <p className="text-sm text-gray-500">—</p>}
+                    {c.monthly_value && <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatCurrency(c.monthly_value)}/mês</p>}
+                    {c.hourly_rate && <p className="text-xs text-gray-500 dark:text-gray-400">{formatCurrency(c.hourly_rate)}/h</p>}
+                    {!c.monthly_value && !c.hourly_rate && <p className="text-sm text-gray-500 dark:text-gray-400">—</p>}
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-xs text-gray-500">{formatDate(c.start_date)} →</p>
-                    <p className="text-xs text-gray-500">{formatDate(c.end_date)}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(c.start_date)} →</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(c.end_date)}</p>
                     {c.auto_renew && <span className="text-xs text-green-600">↻ Renovação auto.</span>}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-gray-100 text-gray-700'}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
                       {statusLabels[c.status] || c.status}
                     </span>
                   </td>
@@ -355,7 +337,8 @@ export default function ContratosTab() {
                       )}
                       <button
                         onClick={() => setDeleteTarget(c)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
+                        aria-label="Excluir"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -377,16 +360,17 @@ export default function ContratosTab() {
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+          <FocusTrap onClose={() => setShowModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Novo Contrato</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-500" />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Contrato</h2>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Título *</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título *</label>
                 <input
                   type="text" required value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -395,11 +379,11 @@ export default function ContratosTab() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Cliente</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente</label>
                 <select
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                  className="w-full input-field bg-white"
+                  className="w-full input-field bg-white dark:bg-gray-800"
                 >
                   <option value="">Selecione um cliente</option>
                   {customers.map((c) => (
@@ -410,21 +394,21 @@ export default function ContratosTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo</label>
                   <select
                     value={formData.contract_type}
                     onChange={(e) => setFormData({ ...formData, contract_type: e.target.value })}
-                    className="w-full input-field bg-white"
+                    className="w-full input-field bg-white dark:bg-gray-800"
                   >
                     {Object.entries(contractTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Cobrança</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cobrança</label>
                   <select
                     value={formData.billing_type}
                     onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="w-full input-field bg-white"
+                    className="w-full input-field bg-white dark:bg-gray-800"
                   >
                     {Object.entries(billingTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                   </select>
@@ -433,7 +417,7 @@ export default function ContratosTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Início</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Início</label>
                   <input
                     type="date" value={formData.start_date}
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
@@ -441,7 +425,7 @@ export default function ContratosTab() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Término</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Término</label>
                   <input
                     type="date" value={formData.end_date}
                     onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
@@ -452,7 +436,7 @@ export default function ContratosTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Valor Mensal (R$)</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Valor Mensal (R$)</label>
                   <input
                     type="number" step="0.01" value={formData.monthly_value}
                     onChange={(e) => setFormData({ ...formData, monthly_value: e.target.value })}
@@ -460,7 +444,7 @@ export default function ContratosTab() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Valor/Hora (R$)</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Valor/Hora (R$)</label>
                   <input
                     type="number" step="0.01" value={formData.hourly_rate}
                     onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
@@ -476,13 +460,13 @@ export default function ContratosTab() {
                   onChange={(e) => setFormData({ ...formData, auto_renew: e.target.checked })}
                   className="w-4 h-4 rounded text-accent-gold"
                 />
-                <span className="text-sm text-gray-500">Renovação automática</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Renovação automática</span>
               </label>
 
               <div className="flex gap-3 pt-4">
                 <button
                   type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 >
                   Cancelar
                 </button>
@@ -495,6 +479,7 @@ export default function ContratosTab() {
               </div>
             </form>
           </div>
+          </FocusTrap>
         </div>
       )}
 

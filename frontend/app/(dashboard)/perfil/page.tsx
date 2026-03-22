@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import api, { ApiError } from '@/lib/api';
 
 interface UserProfile {
   id: number;
@@ -73,15 +74,10 @@ export default function PerfilPage() {
   const [showDisable2FA, setShowDisable2FA] = useState(false);
   const [disable2FAPassword, setDisable2FAPassword] = useState('');
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  const headers = { 'Content-Type': 'application/json' };
-
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const res = await fetch(`${apiUrl}/accounts/profile/`, { headers, credentials: 'include' });
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+        const data = await api.get<UserProfile>('/accounts/profile/');
         setProfile(data);
         setProfileForm({ first_name: data.first_name || '', last_name: data.last_name || '', email: data.email || '' });
       } catch {
@@ -99,10 +95,7 @@ export default function PerfilPage() {
     const fetchEmployee = async () => {
       setLoadingEmployee(true);
       try {
-        const res = await fetch(`${apiUrl}/accounts/employee-profiles/me/`, { headers, credentials: 'include' });
-        if (res.status === 404) return; // profile doesn't exist yet
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+        const data = await api.get<EmployeeProfile & { id: number }>('/accounts/employee-profiles/me/');
         setEmployeeProfile({
           id: data.id,
           position: data.position || '',
@@ -116,7 +109,9 @@ export default function PerfilPage() {
           is_billable: data.is_billable ?? true,
           start_date: data.start_date || '',
         });
-      } catch {
+      } catch (err) {
+        // 404 means profile doesn't exist yet — that's OK
+        if (err instanceof ApiError && err.status === 404) return;
         toast.error('Erro ao carregar perfil profissional.');
       } finally {
         setLoadingEmployee(false);
@@ -141,18 +136,12 @@ export default function PerfilPage() {
         is_billable: employeeProfile.is_billable,
         start_date: employeeProfile.start_date || null,
       };
-      let res: Response;
+      let data: { id: number };
       if (employeeProfile.id) {
-        res = await fetch(`${apiUrl}/accounts/employee-profiles/${employeeProfile.id}/`, {
-          method: 'PATCH', headers, credentials: 'include', body: JSON.stringify(payload),
-        });
+        data = await api.patch<{ id: number }>(`/accounts/employee-profiles/${employeeProfile.id}/`, payload);
       } else {
-        res = await fetch(`${apiUrl}/accounts/employee-profiles/`, {
-          method: 'POST', headers, credentials: 'include', body: JSON.stringify(payload),
-        });
+        data = await api.post<{ id: number }>('/accounts/employee-profiles/', payload);
       }
-      if (!res.ok) throw new Error();
-      const data = await res.json();
       setEmployeeProfile(prev => ({ ...prev, id: data.id }));
       toast.success('Perfil profissional salvo com sucesso!');
     } catch {
@@ -181,9 +170,7 @@ export default function PerfilPage() {
   const handle2FASetup = async () => {
     setSetting2FA(true);
     try {
-      const res = await fetch(`${apiUrl}/accounts/2fa/setup/`, { headers, credentials: 'include' });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await api.get<{ qr_url?: string; secret?: string }>('/accounts/2fa/setup/');
       setTwoFASetup(data);
     } catch {
       toast.error('Erro ao iniciar configuração do 2FA.');
@@ -196,10 +183,7 @@ export default function PerfilPage() {
     if (!twoFACode.trim()) { toast.error('Digite o código de verificação.'); return; }
     setSetting2FA(true);
     try {
-      const res = await fetch(`${apiUrl}/accounts/2fa/verify/`, {
-        method: 'POST', headers, credentials: 'include', body: JSON.stringify({ token: twoFACode }),
-      });
-      if (!res.ok) throw new Error();
+      await api.post('/accounts/2fa/verify/', { token: twoFACode });
       setProfile(prev => prev ? { ...prev, is_2fa_enabled: true } : prev);
       setTwoFASetup(null);
       setTwoFACode('');
@@ -215,11 +199,7 @@ export default function PerfilPage() {
     if (!disable2FAPassword.trim()) { toast.error('Digite sua senha para confirmar.'); return; }
     setDisabling2FA(true);
     try {
-      const res = await fetch(`${apiUrl}/accounts/2fa/setup/`, {
-        method: 'POST', headers, credentials: 'include',
-        body: JSON.stringify({ disable: true, password: disable2FAPassword }),
-      });
-      if (!res.ok) throw new Error();
+      await api.post('/accounts/2fa/setup/', { disable: true, password: disable2FAPassword });
       setProfile(prev => prev ? { ...prev, is_2fa_enabled: false } : prev);
       setShowDisable2FA(false);
       setDisable2FAPassword('');
@@ -235,11 +215,7 @@ export default function PerfilPage() {
     e.preventDefault();
     setSavingProfile(true);
     try {
-      const res = await fetch(`${apiUrl}/accounts/profile/`, {
-        method: 'PATCH', headers, credentials: 'include', body: JSON.stringify(profileForm),
-      });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      const data = await api.patch<UserProfile>('/accounts/profile/', profileForm);
       setProfile(data);
       toast.success('Perfil atualizado com sucesso!');
     } catch {
@@ -261,14 +237,7 @@ export default function PerfilPage() {
     }
     setSavingPassword(true);
     try {
-      const res = await fetch(`${apiUrl}/accounts/change-password/`, {
-        method: 'POST', headers, credentials: 'include',
-        body: JSON.stringify({ old_password: passwordForm.old_password, new_password: passwordForm.new_password }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || err.detail || 'Erro');
-      }
+      await api.post('/accounts/change-password/', { old_password: passwordForm.old_password, new_password: passwordForm.new_password });
       toast.success('Senha alterada com sucesso!');
       setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
     } catch (err: unknown) {
@@ -288,27 +257,27 @@ export default function PerfilPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Meu Perfil</h1>
-        <p className="text-gray-500 mt-1">Gerencie suas informações pessoais e segurança</p>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Meu Perfil</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-1">Gerencie suas informações pessoais e segurança</p>
       </div>
 
       {/* Profile header card */}
       {!loading && profile && (
         <div className="card p-6 mb-6 flex items-center gap-4">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#A6864A] to-[#8B6F3D] rounded-full flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
+          <div className="w-16 h-16 bg-gradient-to-br from-accent-gold to-accent-gold-dark rounded-full flex items-center justify-center text-white text-2xl font-bold flex-shrink-0">
             {profile.first_name?.charAt(0) || profile.username?.charAt(0) || 'U'}
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               {[profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.username}
             </h2>
-            <p className="text-gray-500 text-sm">{profile.email}</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">{profile.email}</p>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                 profile.role === 'admin' ? 'bg-purple-100 text-purple-800' :
                 profile.role === 'manager' ? 'bg-blue-100 text-blue-800' :
                 profile.role === 'operator' ? 'bg-green-100 text-green-800' :
-                'bg-gray-100 text-gray-700'
+                'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
               }`}>
                 {roleLabels[profile.role] || profile.role}
               </span>
@@ -320,8 +289,8 @@ export default function PerfilPage() {
             </div>
           </div>
           <div className="ml-auto text-right">
-            <p className="text-xs text-gray-500">Membro desde</p>
-            <p className="text-sm font-medium text-gray-900">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Membro desde</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
               {new Date(profile.date_joined).toLocaleDateString('pt-BR')}
             </p>
           </div>
@@ -329,13 +298,13 @@ export default function PerfilPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white border border-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg p-1 w-fit">
         {tabs.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? 'bg-[#A6864A] text-white'
-                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                ? 'bg-accent-gold text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700/50'
             }`}>
             {tab.icon} {tab.label}
           </button>
@@ -347,39 +316,39 @@ export default function PerfilPage() {
         <div className="card p-6 max-w-lg">
           {loading ? (
             <div className="space-y-4">
-              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />)}
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}
             </div>
           ) : (
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Nome</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Nome</label>
                   <input type="text" value={profileForm.first_name}
                     onChange={e => setProfileForm({ ...profileForm, first_name: e.target.value })}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Sobrenome</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Sobrenome</label>
                   <input type="text" value={profileForm.last_name}
                     onChange={e => setProfileForm({ ...profileForm, last_name: e.target.value })}
                     className="input-field" />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">E-mail</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">E-mail</label>
                 <input type="email" value={profileForm.email}
                   onChange={e => setProfileForm({ ...profileForm, email: e.target.value })}
                   className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Usuário</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Usuário</label>
                 <input type="text" value={profile?.username || ''} disabled
-                  className="w-full px-4 py-2 border border-gray-100 bg-gray-50 rounded-lg text-gray-500 cursor-not-allowed" />
-                <p className="text-xs text-gray-500 mt-1">O nome de usuário não pode ser alterado.</p>
+                  className="w-full px-4 py-2 border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50 rounded-lg text-gray-500 dark:text-gray-400 cursor-not-allowed" />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">O nome de usuário não pode ser alterado.</p>
               </div>
               <div className="pt-2">
                 <button type="submit" disabled={savingProfile}
-                  className="flex items-center gap-2 px-6 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                  className="flex items-center gap-2 px-6 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                   <Save className="w-4 h-4" />
                   {savingProfile ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
@@ -394,42 +363,42 @@ export default function PerfilPage() {
         <div className="card p-6 max-w-lg">
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Senha Atual *</label>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Senha Atual *</label>
               <div className="relative">
                 <input type={showOld ? 'text' : 'password'} required value={passwordForm.old_password}
                   onChange={e => setPasswordForm({ ...passwordForm, old_password: e.target.value })}
-                  className="w-full px-4 py-2 pr-10 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="w-full px-4 py-2 pr-10 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 <button type="button" onClick={() => setShowOld(!showOld)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600">
                   {showOld ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Nova Senha *</label>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Nova Senha *</label>
               <div className="relative">
                 <input type={showNew ? 'text' : 'password'} required minLength={8} value={passwordForm.new_password}
                   onChange={e => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                  className="w-full px-4 py-2 pr-10 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A]" />
+                  className="w-full px-4 py-2 pr-10 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold" />
                 <button type="button" onClick={() => setShowNew(!showNew)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600">
                   {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">Mínimo 8 caracteres.</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Mínimo 8 caracteres.</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Confirmar Nova Senha *</label>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Confirmar Nova Senha *</label>
               <div className="relative">
                 <input type={showConfirm ? 'text' : 'password'} required value={passwordForm.confirm_password}
                   onChange={e => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
                   className={`w-full px-4 py-2 pr-10 border rounded-lg focus:outline-none focus:ring-2 ${
                     passwordForm.confirm_password && passwordForm.new_password !== passwordForm.confirm_password
                       ? 'border-red-300 focus:ring-red-300/30 focus:border-red-400'
-                      : 'border-gray-200 focus:ring-[#A6864A]/30 focus:border-[#A6864A]'
+                      : 'border-gray-200 dark:border-gray-700 focus:ring-accent-gold/30 focus:border-accent-gold'
                   }`} />
                 <button type="button" onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600">
                   {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
@@ -439,7 +408,7 @@ export default function PerfilPage() {
             </div>
             <div className="pt-2">
               <button type="submit" disabled={savingPassword}
-                className="flex items-center gap-2 px-6 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60">
+                className="flex items-center gap-2 px-6 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
                 <Lock className="w-4 h-4" />
                 {savingPassword ? 'Alterando...' : 'Alterar Senha'}
               </button>
@@ -455,13 +424,13 @@ export default function PerfilPage() {
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  profile?.is_2fa_enabled ? 'bg-green-50' : 'bg-gray-50'
+                  profile?.is_2fa_enabled ? 'bg-green-50' : 'bg-gray-50 dark:bg-gray-700/50'
                 }`}>
-                  <Shield className={`w-5 h-5 ${profile?.is_2fa_enabled ? 'text-green-600' : 'text-gray-400'}`} />
+                  <Shield className={`w-5 h-5 ${profile?.is_2fa_enabled ? 'text-green-600' : 'text-gray-400 dark:text-gray-500'}`} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-900">Autenticação em dois fatores (2FA)</h3>
-                  <p className="text-sm text-gray-500 mt-0.5">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Autenticação em dois fatores (2FA)</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                     {profile?.is_2fa_enabled
                       ? 'O 2FA está ativado. Sua conta está protegida.'
                       : 'O 2FA não está ativado. Recomendamos ativar para maior segurança.'}
@@ -469,7 +438,7 @@ export default function PerfilPage() {
                 </div>
               </div>
               <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                profile?.is_2fa_enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                profile?.is_2fa_enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}>
                 {profile?.is_2fa_enabled ? 'Ativo' : 'Inativo'}
               </span>
@@ -482,7 +451,7 @@ export default function PerfilPage() {
                   <button
                     onClick={handle2FASetup}
                     disabled={setting2FA}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#A6864A] text-white text-sm rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60"
+                    className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
                   >
                     <Shield className="w-4 h-4" />
                     {setting2FA ? 'Aguarde...' : 'Configurar 2FA'}
@@ -497,20 +466,20 @@ export default function PerfilPage() {
                         <img
                           src={twoFASetup.qr_url}
                           alt="QR Code 2FA"
-                          className="w-40 h-40 border border-blue-200 rounded-lg bg-white p-1"
+                          className="w-40 h-40 border border-blue-200 rounded-lg bg-white dark:bg-gray-800 p-1"
                         />
                       )}
                       {twoFASetup.secret && (
                         <div className="mt-2">
                           <p className="text-xs text-blue-600 mb-1">Ou insira a chave manualmente:</p>
-                          <code className="block text-xs font-mono bg-white border border-blue-200 rounded px-2 py-1 text-blue-900 break-all">
+                          <code className="block text-xs font-mono bg-white dark:bg-gray-800 border border-blue-200 rounded px-2 py-1 text-blue-900 break-all">
                             {twoFASetup.secret}
                           </code>
                         </div>
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-500 mb-1">Código de verificação *</label>
+                      <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Código de verificação *</label>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -532,7 +501,7 @@ export default function PerfilPage() {
                       </button>
                       <button
                         onClick={() => { setTwoFASetup(null); setTwoFACode(''); }}
-                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                        className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 transition-colors"
                       >
                         Cancelar
                       </button>
@@ -574,7 +543,7 @@ export default function PerfilPage() {
                       </button>
                       <button
                         onClick={() => { setShowDisable2FA(false); setDisable2FAPassword(''); }}
-                        className="px-4 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors"
+                        className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 transition-colors"
                       >
                         Cancelar
                       </button>
@@ -586,15 +555,15 @@ export default function PerfilPage() {
           </div>
 
           <div className="card p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Informações da Conta</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">Informações da Conta</h3>
             <div className="space-y-2 mt-3">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Nível de acesso</span>
-                <span className="font-medium text-gray-900">{profile ? (roleLabels[profile.role] || profile.role) : '—'}</span>
+                <span className="text-gray-500 dark:text-gray-400">Nível de acesso</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">{profile ? (roleLabels[profile.role] || profile.role) : '—'}</span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Membro desde</span>
-                <span className="font-medium text-gray-900">
+                <span className="text-gray-500 dark:text-gray-400">Membro desde</span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
                   {profile ? new Date(profile.date_joined).toLocaleDateString('pt-BR') : '—'}
                 </span>
               </div>
@@ -609,7 +578,7 @@ export default function PerfilPage() {
           {loadingEmployee ? (
             <div className="space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-10 bg-gray-100 rounded-lg animate-pulse" />
+                <div key={i} className="h-10 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />
               ))}
             </div>
           ) : (
@@ -617,7 +586,7 @@ export default function PerfilPage() {
               {/* Cargo + Contrato */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Cargo</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cargo</label>
                   <input
                     type="text"
                     placeholder="Ex: Desenvolvedor Full Stack"
@@ -627,7 +596,7 @@ export default function PerfilPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Tipo de Contrato</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo de Contrato</label>
                   <select
                     value={employeeProfile.contract_type}
                     onChange={e => setEmployeeProfile(prev => ({ ...prev, contract_type: e.target.value }))}
@@ -644,7 +613,7 @@ export default function PerfilPage() {
               {/* Custo/hora + Horas/semana */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Custo por hora (R$)</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Custo por hora (R$)</label>
                   <input
                     type="number"
                     min="0"
@@ -655,7 +624,7 @@ export default function PerfilPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Horas disponíveis/semana</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Horas disponíveis/semana</label>
                   <input
                     type="number"
                     min="0"
@@ -670,7 +639,7 @@ export default function PerfilPage() {
               {/* Faturável + Data de início */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">Data de início</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Data de início</label>
                   <input
                     type="date"
                     value={employeeProfile.start_date}
@@ -683,30 +652,30 @@ export default function PerfilPage() {
                     type="button"
                     onClick={() => setEmployeeProfile(prev => ({ ...prev, is_billable: !prev.is_billable }))}
                     className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                      employeeProfile.is_billable ? 'bg-[#A6864A]' : 'bg-gray-200'
+                      employeeProfile.is_billable ? 'bg-accent-gold' : 'bg-gray-200'
                     }`}
                     role="switch"
                     aria-checked={employeeProfile.is_billable}
                   >
-                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-800 shadow transition-transform duration-200 ${
                       employeeProfile.is_billable ? 'translate-x-5' : 'translate-x-0'
                     }`} />
                   </button>
-                  <span className="text-sm font-medium text-gray-700">Faturável</span>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Faturável</span>
                 </div>
               </div>
 
               {/* Tecnologias (tag input) */}
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Tecnologias</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tecnologias</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {employeeProfile.technologies.map(tech => (
-                    <span key={tech} className="flex items-center gap-1 px-2 py-0.5 bg-[#A6864A]/10 text-[#8a6e3c] border border-[#A6864A]/20 rounded-full text-xs font-medium">
+                    <span key={tech} className="flex items-center gap-1 px-2 py-0.5 bg-accent-gold/10 text-accent-gold-dark border border-accent-gold/20 rounded-full text-xs font-medium">
                       {tech}
                       <button
                         type="button"
                         onClick={() => handleRemoveTech(tech)}
-                        className="text-[#A6864A] hover:text-red-600 transition-colors leading-none"
+                        className="text-accent-gold hover:text-red-600 transition-colors leading-none"
                         aria-label={`Remover ${tech}`}
                       >
                         ×
@@ -722,25 +691,25 @@ export default function PerfilPage() {
                   onKeyDown={handleAddTech}
                   className="input-field"
                 />
-                <p className="text-xs text-gray-400 mt-1">Pressione Enter para adicionar cada tecnologia.</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Pressione Enter para adicionar cada tecnologia.</p>
               </div>
 
               {/* Bio */}
               <div>
-                <label className="block text-sm font-medium text-gray-500 mb-1">Bio</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Bio</label>
                 <textarea
                   rows={3}
                   placeholder="Breve descrição profissional..."
                   value={employeeProfile.bio}
                   onChange={e => setEmployeeProfile(prev => ({ ...prev, bio: e.target.value }))}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#A6864A]/30 focus:border-[#A6864A] resize-none"
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold resize-none"
                 />
               </div>
 
               {/* LinkedIn + GitHub */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">LinkedIn URL</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">LinkedIn URL</label>
                   <input
                     type="url"
                     placeholder="https://linkedin.com/in/usuario"
@@ -750,7 +719,7 @@ export default function PerfilPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 mb-1">GitHub URL</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">GitHub URL</label>
                   <input
                     type="url"
                     placeholder="https://github.com/usuario"
@@ -765,7 +734,7 @@ export default function PerfilPage() {
                 <button
                   type="submit"
                   disabled={savingEmployee}
-                  className="flex items-center gap-2 px-6 py-2 bg-[#A6864A] text-white rounded-lg hover:bg-[#8a6e3c] transition-colors disabled:opacity-60"
+                  className="flex items-center gap-2 px-6 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
                 >
                   <Save className="w-4 h-4" />
                   {savingEmployee ? 'Salvando...' : 'Salvar Perfil Profissional'}

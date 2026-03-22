@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import api, { ApiError } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,8 +16,6 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [isFocused, setIsFocused] = useState({ username: false, password: false });
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -24,55 +23,44 @@ export default function LoginPage() {
 
     try {
       if (requires2FA) {
-        const res = await fetch(`${apiUrl}/accounts/2fa/verify/`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ temp_token: tempToken, code: twoFactorCode }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.error || 'Código inválido');
+        try {
+          const data = await api.post<{ user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/2fa/verify/', { temp_token: tempToken, code: twoFactorCode });
+          if (data.user && typeof data.user.username === 'string') {
+            const { id, username, email, first_name, last_name, role } = data.user;
+            localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
+          }
+          window.location.replace('/dashboard');
+          return;
+        } catch (err) {
+          const message = err instanceof ApiError ? (err.data as { error?: string })?.error || err.message : 'Código inválido';
+          setError(message);
           setLoading(false);
           return;
         }
+      }
+
+      try {
+        const data = await api.post<{ requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/login/', formData);
+
+        if (data.requires_2fa) {
+          setRequires2FA(true);
+          setTempToken(data.temp_token || '');
+          setLoading(false);
+          return;
+        }
+
         // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
         if (data.user && typeof data.user.username === 'string') {
           const { id, username, email, first_name, last_name, role } = data.user;
           localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
         }
         window.location.replace('/dashboard');
-        return;
-      }
-
-      const res = await fetch(`${apiUrl}/accounts/login/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || 'Credenciais inválidas');
+      } catch (err) {
+        const message = err instanceof ApiError ? (err.data as { error?: string })?.error || err.message : 'Credenciais inválidas';
+        setError(message);
         setLoading(false);
         return;
       }
-
-      if (data.requires_2fa) {
-        setRequires2FA(true);
-        setTempToken(data.temp_token);
-        setLoading(false);
-        return;
-      }
-
-      // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
-      if (data.user && typeof data.user.username === 'string') {
-        const { id, username, email, first_name, last_name, role } = data.user;
-        localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
-      }
-      window.location.replace('/dashboard');
     } catch {
       setError('Erro de conexão. Tente novamente.');
     }
@@ -94,13 +82,13 @@ export default function LoginPage() {
         
         {/* Binary code rain effect - very transparent */}
         <div className="absolute inset-0 overflow-hidden opacity-10">
-          <div className="absolute top-0 left-10 text-xs font-mono text-[#A6864A] whitespace-nowrap" style={{ animationDuration: '3s' }}>
+          <div className="absolute top-0 left-10 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '3s' }}>
             10101010101010101010<br/>01101001011010100101<br/>10110100110101011010
           </div>
-          <div className="absolute top-20 right-20 text-xs font-mono text-[#A6864A] whitespace-nowrap" style={{ animationDuration: '4s', animationDelay: '1s' }}>
+          <div className="absolute top-20 right-20 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '4s', animationDelay: '1s' }}>
             01011010110101101010<br/>10100110101101010011<br/>01101011010110101101
           </div>
-          <div className="absolute bottom-40 left-20 text-xs font-mono text-[#A6864A] whitespace-nowrap" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }}>
+          <div className="absolute bottom-40 left-20 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }}>
             11010110010101101001<br/>01101011010110100101<br/>10101010110101101010
           </div>
         </div>
@@ -108,10 +96,10 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-center items-center w-full p-12 text-white">
           <div className="mb-8 group text-left">
             <div>
-              <span className="text-5xl font-bold text-[#A6864A] tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
+              <span className="text-5xl font-bold text-accent-gold tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
             </div>
             <div className="-mt-1">
-              <span className="text-sm font-light text-gray-400 tracking-[0.15em] uppercase">Systems Solutions</span>
+              <span className="text-sm font-light text-gray-400 dark:text-gray-500 tracking-[0.15em] uppercase">Systems Solutions</span>
             </div>
           </div>
           <div className="text-center">
@@ -121,15 +109,15 @@ export default function LoginPage() {
           </div>
           <div className="mt-12 flex flex-wrap justify-center items-center gap-6 text-center">
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-[#A6864A] rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
               <span className="text-sm">Gestão Comercial e Vendas</span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-[#A6864A] rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
               <span className="text-sm">Controle Financeiro</span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-[#A6864A] rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
               <span className="text-sm">Gestão de Projetos</span>
             </div>
           </div>
@@ -143,19 +131,19 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8 group text-left">
             <div>
-              <span className="text-4xl font-bold text-[#A6864A] tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
+              <span className="text-4xl font-bold text-accent-gold tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
             </div>
             <div className="-mt-1">
-              <span className="text-[10px] font-light text-gray-400 tracking-[0.15em] uppercase">Systems Solutions</span>
+              <span className="text-[10px] font-light text-gray-400 dark:text-gray-500 tracking-[0.15em] uppercase">Systems Solutions</span>
             </div>
           </div>
 
           <div className="hidden lg:mb-8 group text-left">
             <div>
-              <span className="text-4xl font-bold text-[#A6864A] tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
+              <span className="text-4xl font-bold text-accent-gold tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
             </div>
             <div className="-mt-1">
-              <span className="text-[10px] font-light text-gray-400 tracking-[0.15em] uppercase">Systems Solutions</span>
+              <span className="text-[10px] font-light text-gray-400 dark:text-gray-500 tracking-[0.15em] uppercase">Systems Solutions</span>
             </div>
           </div>
 
@@ -179,7 +167,7 @@ export default function LoginPage() {
                     Usuário ou Email
                   </label>
                   <div className={`relative transition-all duration-200 ${isFocused.username ? 'scale-[1.02]' : ''}`}>
-                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isFocused.username ? 'text-[#A6864A]' : 'text-slate-400'}`}>
+                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isFocused.username ? 'text-accent-gold' : 'text-slate-400'}`}>
                       <Mail className="w-5 h-5" />
                     </div>
                     <input
@@ -190,7 +178,7 @@ export default function LoginPage() {
                       onBlur={() => setIsFocused({ ...isFocused, username: false })}
                       className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
                         isFocused.username 
-                          ? 'border-[#A6864A] bg-white shadow-lg shadow-[#A6864A]/10' 
+                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                       placeholder="seu@email.com"
@@ -204,7 +192,7 @@ export default function LoginPage() {
                     Senha
                   </label>
                   <div className={`relative transition-all duration-200 ${isFocused.password ? 'scale-[1.02]' : ''}`}>
-                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isFocused.password ? 'text-[#A6864A]' : 'text-slate-400'}`}>
+                    <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${isFocused.password ? 'text-accent-gold' : 'text-slate-400'}`}>
                       <Lock className="w-5 h-5" />
                     </div>
                     <input
@@ -215,7 +203,7 @@ export default function LoginPage() {
                       onBlur={() => setIsFocused({ ...isFocused, password: false })}
                       className={`w-full pl-12 pr-14 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
                         isFocused.password 
-                          ? 'border-[#A6864A] bg-white shadow-lg shadow-[#A6864A]/10' 
+                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                       placeholder="••••••••"
@@ -240,7 +228,7 @@ export default function LoginPage() {
                   type="text"
                   value={twoFactorCode}
                   onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="w-full px-4 py-3.5 bg-slate-50 border-2 border-[#A6864A] rounded-xl focus:outline-none focus:shadow-lg focus:shadow-[#A6864A]/10 font-mono text-center text-2xl tracking-widest"
+                  className="w-full px-4 py-3.5 bg-slate-50 border-2 border-accent-gold rounded-xl focus:outline-none focus:shadow-lg focus:shadow-accent-gold/10 font-mono text-center text-2xl tracking-widest"
                   placeholder="000000"
                   maxLength={6}
                   required
@@ -253,10 +241,10 @@ export default function LoginPage() {
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#A6864A] focus:ring-[#A6864A]" />
+                <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-accent-gold focus:ring-accent-gold" />
                 <span className="text-sm text-slate-600">Lembrar-me</span>
               </label>
-              <a href="#" className="text-[#A6864A] hover:text-[#A6864A] font-medium">
+              <a href="#" className="text-accent-gold hover:text-accent-gold font-medium">
                 Esqueceu a senha?
               </a>
             </div>
@@ -264,7 +252,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-[#A6864A] hover:bg-[#8B6F3D] text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-[#A6864A]/30 hover:shadow-[#A6864A]/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full py-3.5 bg-accent-gold hover:bg-accent-gold-dark text-white font-semibold rounded-xl transition-all duration-200 shadow-lg shadow-accent-gold/30 hover:shadow-accent-gold/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -284,7 +272,7 @@ export default function LoginPage() {
                 setTwoFactorCode('');
                 setTempToken('');
               }}
-              className="w-full mt-4 text-sm text-slate-500 hover:text-[#A6864A] font-medium transition-colors"
+              className="w-full mt-4 text-sm text-slate-500 hover:text-accent-gold font-medium transition-colors"
             >
               ← Voltar para login
             </button>

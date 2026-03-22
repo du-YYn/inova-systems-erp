@@ -19,7 +19,7 @@ export function Pagination({ page, totalPages, totalItems, pageSize, onChange }:
   const pages = buildPageList(page, totalPages);
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+    <nav role="navigation" aria-label="Paginação" className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
       <p className="text-sm text-gray-500">
         Mostrando <span className="font-medium">{from}–{to}</span> de{' '}
         <span className="font-medium">{totalItems}</span>
@@ -28,20 +28,23 @@ export function Pagination({ page, totalPages, totalItems, pageSize, onChange }:
         <button
           onClick={() => onChange(page - 1)}
           disabled={page === 1}
-          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          aria-label="Página anterior"
+          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-ring"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
         {pages.map((p, i) =>
           p === '...' ? (
-            <span key={`dots-${i}`} className="px-2 text-gray-400 text-sm">…</span>
+            <span key={`dots-${i}`} className="px-2 text-gray-400 text-sm" aria-hidden="true">…</span>
           ) : (
             <button
               key={p}
               onClick={() => onChange(Number(p))}
-              className={`w-8 h-8 rounded text-sm font-medium transition-colors ${
+              aria-label={`Página ${p}`}
+              aria-current={p === page ? 'page' : undefined}
+              className={`w-8 h-8 rounded text-sm font-medium transition-colors focus-ring ${
                 p === page
-                  ? 'bg-[#A6864A] text-white'
+                  ? 'bg-accent-gold text-white'
                   : 'hover:bg-gray-100 text-gray-600'
               }`}
             >
@@ -52,12 +55,13 @@ export function Pagination({ page, totalPages, totalItems, pageSize, onChange }:
         <button
           onClick={() => onChange(page + 1)}
           disabled={page === totalPages}
-          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          aria-label="Próxima página"
+          className="p-1.5 rounded hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus-ring"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-    </div>
+    </nav>
   );
 }
 
