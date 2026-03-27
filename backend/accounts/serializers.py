@@ -37,6 +37,33 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+class AdminUserSerializer(serializers.ModelSerializer):
+    """UserSerializer com role editável — usado apenas por admins."""
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
+                  'role', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at', 'is_2fa_enabled']
+
+
+class AdminUserCreateSerializer(serializers.ModelSerializer):
+    """RegisterSerializer com role editável — usado apenas por admins."""
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'first_name', 'last_name', 'role', 'is_active']
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField(write_only=True)

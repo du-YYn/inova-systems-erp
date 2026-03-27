@@ -41,7 +41,7 @@ interface HoursByProject {
 interface ProjectBudget {
   name: string;
   status: string;
-  total_budget: number;
+  budget_value: number;
   spent: number;
   remaining: number;
 }
@@ -75,9 +75,8 @@ interface AgingBucket {
 
 interface ForecastMonth {
   month: string;
-  contracted_mrr: number;
-  pipeline_mrr: number;
-  total: number;
+  mrr: number;
+  active_contracts: number;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -139,6 +138,7 @@ export default function RelatoriosPage() {
 
   // Forecast state
   const [forecastData, setForecastData] = useState<ForecastMonth[]>([]);
+  const [forecastSummary, setForecastSummary] = useState({ current_mrr: 0, pipeline_value: 0 });
   const [loadingForecast, setLoadingForecast] = useState(false);
 
   // ── Cash Flow ─────────────────────────────────────────────────────────────
@@ -170,8 +170,8 @@ export default function RelatoriosPage() {
   const fetchHours = useCallback(async () => {
     setLoadingHours(true);
     try {
-      const data = await api.get<{ results?: Array<{ id: number; name: string; total_hours?: number; total_budget?: number; status: string }> }>('/projects/projects/', { page_size: '100' });
-      const projects = (data.results || []) as Array<{ id: number; name: string; total_hours?: number; total_budget?: number; status: string }>;
+      const data = await api.get<{ results?: Array<{ id: number; name: string; total_hours?: number; budget_value?: number; status: string }> }>('/projects/projects/', { page_size: '100' });
+      const projects = (data.results || []) as Array<{ id: number; name: string; total_hours?: number; budget_value?: number; status: string }>;
 
       const hoursMap: HoursByProject[] = projects
         .filter(p => (p.total_hours || 0) > 0)
@@ -185,9 +185,9 @@ export default function RelatoriosPage() {
       const budgets: ProjectBudget[] = projects.map(p => ({
         name: p.name,
         status: p.status,
-        total_budget: Number(p.total_budget) || 0,
+        budget_value: Number(p.budget_value) || 0,
         spent: 0,
-        remaining: Number(p.total_budget) || 0,
+        remaining: Number(p.budget_value) || 0,
       }));
 
       setHoursByProject(hoursMap);
@@ -232,11 +232,11 @@ export default function RelatoriosPage() {
   const fetchProfitability = useCallback(async () => {
     setLoadingProfitability(true);
     try {
-      const data = await api.get<{ results?: Array<{ id: number; name: string; total_budget?: number; total_hours?: number }> }>('/projects/projects/', { page_size: '100' });
-      const projects = (data.results || []) as Array<{ id: number; name: string; total_budget?: number; total_hours?: number }>;
+      const data = await api.get<{ results?: Array<{ id: number; name: string; budget_value?: number; total_hours?: number }> }>('/projects/projects/', { page_size: '100' });
+      const projects = (data.results || []) as Array<{ id: number; name: string; budget_value?: number; total_hours?: number }>;
 
       const candidates = projects
-        .filter(p => (p.total_budget || 0) > 0 || (p.total_hours || 0) > 0)
+        .filter(p => (p.budget_value || 0) > 0 || (p.total_hours || 0) > 0)
         .slice(0, 10);
 
       const results: ProjectProfitability[] = [];
@@ -297,8 +297,25 @@ export default function RelatoriosPage() {
   const fetchAging = useCallback(async () => {
     setLoadingAging(true);
     try {
-      const d = await api.get<AgingBucket[] | { buckets: AgingBucket[] }>('/finance/invoices/aging/');
-      setAgingData(Array.isArray(d) ? d : (d as { buckets: AgingBucket[] }).buckets || []);
+      const d = await api.get<{
+        summary: Array<{ bucket: string; count: number; total: number }>;
+        details: Record<string, Array<{ id: number; number: string; customer: string; due_date: string; total: number; days_overdue: number }>>;
+        grand_total: number;
+      }>('/finance/invoices/aging/');
+      const buckets: AgingBucket[] = (d.summary || []).map(s => ({
+        bucket: s.bucket,
+        count: s.count,
+        total: s.total,
+        invoices: (d.details?.[s.bucket] || []).map(inv => ({
+          id: inv.id,
+          number: inv.number,
+          customer_name: inv.customer,
+          due_date: inv.due_date,
+          total: inv.total,
+          days_overdue: inv.days_overdue,
+        })),
+      }));
+      setAgingData(buckets);
     } catch {
       // silent
     } finally {
@@ -311,15 +328,21 @@ export default function RelatoriosPage() {
   const fetchForecast = useCallback(async () => {
     setLoadingForecast(true);
     try {
-      const d = await api.get<ForecastMonth[] | { months: ForecastMonth[] }>('/finance/transactions/forecast/');
-      const months: ForecastMonth[] = (Array.isArray(d) ? d : (d as { months: ForecastMonth[] }).months || []).map(
-        (m: { month: string; contracted_mrr: number; pipeline_mrr: number; total: number }) => ({
-          month: m.month,
-          contracted_mrr: Number(m.contracted_mrr) || 0,
-          pipeline_mrr: Number(m.pipeline_mrr) || 0,
-          total: Number(m.total) || 0,
-        })
-      );
+      const d = await api.get<{
+        current_mrr: number;
+        active_contracts: number;
+        pipeline_value: number;
+        forecast: ForecastMonth[];
+      }>('/finance/transactions/forecast/');
+      setForecastSummary({
+        current_mrr: Number(d.current_mrr) || 0,
+        pipeline_value: Number(d.pipeline_value) || 0,
+      });
+      const months: ForecastMonth[] = (d.forecast || []).map((m: ForecastMonth) => ({
+        month: m.month,
+        mrr: Number(m.mrr) || 0,
+        active_contracts: Number(m.active_contracts) || 0,
+      }));
       setForecastData(months);
     } catch {
       // silent
@@ -494,7 +517,7 @@ export default function RelatoriosPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right text-sm font-medium text-gray-900 dark:text-gray-100">
-                            <Sensitive>{p.total_budget > 0 ? formatCurrency(p.total_budget) : '—'}</Sensitive>
+                            <Sensitive>{p.budget_value > 0 ? formatCurrency(p.budget_value) : '—'}</Sensitive>
                           </td>
                         </tr>
                       ))}
@@ -856,19 +879,19 @@ export default function RelatoriosPage() {
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">MRR Atual</p>
                   <p className="text-2xl font-bold text-accent-gold">
-                    <Sensitive>{formatCurrency(forecastData[0]?.contracted_mrr || 0)}</Sensitive>
+                    <Sensitive>{formatCurrency(forecastSummary.current_mrr)}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Projeção 6 meses</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    <Sensitive>{formatCurrency(forecastData.slice(0, 6).reduce((s, m) => s + m.total, 0))}</Sensitive>
+                    <Sensitive>{formatCurrency(forecastData.slice(0, 6).reduce((s, m) => s + m.mrr, 0))}</Sensitive>
                   </p>
                 </div>
                 <div className="card p-5">
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Projeção 12 meses</p>
                   <p className="text-2xl font-bold text-green-600">
-                    <Sensitive>{formatCurrency(forecastData.slice(0, 12).reduce((s, m) => s + m.total, 0))}</Sensitive>
+                    <Sensitive>{formatCurrency(forecastData.slice(0, 12).reduce((s, m) => s + m.mrr, 0))}</Sensitive>
                   </p>
                 </div>
               </div>
@@ -883,9 +906,7 @@ export default function RelatoriosPage() {
                     <YAxis tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v: number) => formatCurrency(v)} />
                     <Legend />
-                    <Line type="monotone" dataKey="contracted_mrr" name="MRR Contratado" stroke="#A6864A" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="pipeline_mrr" name="MRR Pipeline" stroke="#60a5fa" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                    <Line type="monotone" dataKey="total" name="Total" stroke="#16a34a" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="mrr" name="MRR Projetado" stroke="#A6864A" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -900,18 +921,16 @@ export default function RelatoriosPage() {
                     <thead>
                       <tr className="border-b border-gray-100 dark:border-gray-700">
                         <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Mês</th>
-                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">MRR Contratado</th>
-                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">MRR Pipeline</th>
-                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">MRR Projetado</th>
+                        <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Contratos Ativos</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                       {forecastData.slice(0, 12).map((row, i) => (
                         <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                           <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{row.month}</td>
-                          <td className="py-3 px-4 text-right text-sm text-accent-gold font-medium"><Sensitive>{formatCurrency(row.contracted_mrr)}</Sensitive></td>
-                          <td className="py-3 px-4 text-right text-sm text-blue-600"><Sensitive>{formatCurrency(row.pipeline_mrr)}</Sensitive></td>
-                          <td className="py-3 px-4 text-right text-sm font-bold text-green-600"><Sensitive>{formatCurrency(row.total)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-accent-gold font-medium"><Sensitive>{formatCurrency(row.mrr)}</Sensitive></td>
+                          <td className="py-3 px-4 text-right text-sm text-gray-700 dark:text-gray-200"><Sensitive>{row.active_contracts}</Sensitive></td>
                         </tr>
                       ))}
                     </tbody>

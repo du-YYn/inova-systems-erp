@@ -15,7 +15,7 @@ interface UserProfile {
   last_name: string;
   role: string;
   is_2fa_enabled: boolean;
-  date_joined: string;
+  created_at: string;
 }
 
 const roleLabels: Record<string, string> = {
@@ -287,7 +287,7 @@ export default function PerfilPage() {
           <div className="ml-auto text-right">
             <p className="text-xs text-gray-500 dark:text-gray-400">Membro desde</p>
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-              {new Date(profile.date_joined).toLocaleDateString('pt-BR')}
+              {new Date(profile.created_at).toLocaleDateString('pt-BR')}
             </p>
           </div>
         </div>
@@ -550,7 +550,7 @@ export default function PerfilPage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">Membro desde</span>
                 <span className="font-medium text-gray-900 dark:text-gray-100">
-                  {profile ? new Date(profile.date_joined).toLocaleDateString('pt-BR') : '—'}
+                  {profile ? new Date(profile.created_at).toLocaleDateString('pt-BR') : '—'}
                 </span>
               </div>
             </div>

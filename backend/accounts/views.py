@@ -23,7 +23,7 @@ import secrets
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     TwoFactorVerifySerializer, PasswordResetRequestSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer, AdminUserSerializer, AdminUserCreateSerializer,
 )
 from .permissions import IsAdmin
 from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle
@@ -339,13 +339,13 @@ class PasswordResetConfirmView(APIView):
 @extend_schema(tags=['auth'], summary='Listar e criar usuários (somente admin)')
 class UserListView(generics.ListCreateAPIView):
     queryset = User.objects.all().order_by('-created_at')
-    serializer_class = UserSerializer
+    serializer_class = AdminUserSerializer
     permission_classes = [IsAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
-            return RegisterSerializer
-        return UserSerializer
+            return AdminUserCreateSerializer
+        return AdminUserSerializer
 
     def perform_create(self, serializer):
         serializer.save()
@@ -354,7 +354,7 @@ class UserListView(generics.ListCreateAPIView):
 @extend_schema(tags=['auth'], summary='Detalhar, atualizar e remover usuário (somente admin)')
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
-    serializer_class = UserSerializer
+    serializer_class = AdminUserSerializer
     permission_classes = [IsAdmin]
 
     def destroy(self, request, *args, **kwargs):
