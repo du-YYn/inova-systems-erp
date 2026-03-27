@@ -32,6 +32,9 @@ interface Stats {
   active_projects: number;
   received_this_month: number;
   paid_this_month: number;
+  proposals_sent_count: number;
+  proposals_sent_value: number;
+  proposals_approved_count: number;
 }
 
 interface CashFlowDay {
@@ -222,6 +225,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     mrr: 0, active_contracts: 0, expiring_contracts: 0,
     total_projects: 0, active_projects: 0, received_this_month: 0, paid_this_month: 0,
+    proposals_sent_count: 0, proposals_sent_value: 0, proposals_approved_count: 0,
   });
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -234,19 +238,23 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [contractsData, projectsData, financeData] = await Promise.all([
+        const [contractsData, projectsData, financeData, proposalsData] = await Promise.all([
           api.get<Record<string, number>>('/sales/contracts/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<Record<string, number>>('/projects/projects/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<Record<string, number>>('/finance/invoices/dashboard/').catch(() => ({} as Record<string, number>)),
+          api.get<Record<string, number>>('/sales/proposals/dashboard/').catch(() => ({} as Record<string, number>)),
         ]);
         setStats({
-          mrr:                  contractsData.mrr || 0,
-          active_contracts:     contractsData.active_contracts || 0,
-          expiring_contracts:   contractsData.expiring_contracts || 0,
-          total_projects:       projectsData.total_projects || 0,
-          active_projects:      projectsData.active_projects || 0,
-          received_this_month:  financeData.received_this_month || 0,
-          paid_this_month:      financeData.paid_this_month || 0,
+          mrr:                      contractsData.mrr || 0,
+          active_contracts:         contractsData.active_contracts || 0,
+          expiring_contracts:       contractsData.expiring_contracts || 0,
+          total_projects:           projectsData.total_projects || 0,
+          active_projects:          projectsData.active_projects || 0,
+          received_this_month:      financeData.received_this_month || 0,
+          paid_this_month:          financeData.paid_this_month || 0,
+          proposals_sent_count:     proposalsData.sent_count || 0,
+          proposals_sent_value:     proposalsData.sent_value || 0,
+          proposals_approved_count: proposalsData.approved_count || 0,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -333,7 +341,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── KPI Cards ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-8">
 
         {/* MRR */}
         <KpiCard
@@ -381,6 +389,24 @@ export default function DashboardPage() {
           }
           progress={{ current: stats.active_projects, total: stats.total_projects }}
           progressColor="bg-violet-500"
+        />
+
+        {/* Propostas Enviadas */}
+        <KpiCard
+          icon={FileText}
+          iconBg="bg-violet-50 dark:bg-violet-900/25"
+          iconColor="text-violet-600"
+          label="Propostas Enviadas"
+          loading={loading}
+          value={<Sensitive>{stats.proposals_sent_count}</Sensitive>}
+          badge={
+            stats.proposals_approved_count > 0 && !loading ? (
+              <span className="text-[11px] text-emerald-600 font-semibold bg-emerald-50 dark:bg-emerald-900/25 px-2 py-0.5 rounded-full">
+                <Sensitive>{stats.proposals_approved_count}</Sensitive> aprovadas
+              </span>
+            ) : undefined
+          }
+          sub={!loading ? formatCurrencyShort(stats.proposals_sent_value) + ' em aberto' : undefined}
         />
 
         {/* Receita do mês */}

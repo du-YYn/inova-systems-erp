@@ -372,6 +372,22 @@ class ProposalViewSet(viewsets.ModelViewSet):
         logger.info(f"Proposta {proposal.id} convertida em contrato {contract.id} por {request.user.username}")
         return Response(ContractSerializer(contract).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=False, methods=['get'])
+    def dashboard(self, request):
+        qs = Proposal.objects.all()
+        stats = qs.aggregate(
+            sent_count=Count('id', filter=Q(status='sent')),
+            sent_value=Sum('total_value', filter=Q(status='sent')),
+            approved_count=Count('id', filter=Q(status='approved')),
+            approved_value=Sum('total_value', filter=Q(status='approved')),
+        )
+        return Response({
+            'sent_count':    stats['sent_count'] or 0,
+            'sent_value':    float(stats['sent_value'] or 0),
+            'approved_count': stats['approved_count'] or 0,
+            'approved_value': float(stats['approved_value'] or 0),
+        })
+
 
 @extend_schema(tags=['sales'])
 class ContractViewSet(viewsets.ModelViewSet):
