@@ -172,6 +172,15 @@
     animation: gradient 3s ease infinite;
   }
 
+  /* Drawer slide-in from right */
+  .animate-slide-right {
+    animation: slideRight 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes slideRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+
   @keyframes gradient {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }

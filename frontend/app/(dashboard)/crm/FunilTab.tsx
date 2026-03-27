@@ -387,6 +387,7 @@ export default function FunilTab() {
   const [updatingStatus, setUpdatingStatus] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Prospect | null>(null);
   const [formData, setFormData] = useState<ProspectForm>(EMPTY_FORM);
+  const [viewingProspect, setViewingProspect] = useState<Prospect | null>(null);
 
   // Modal de motivo de perda
   const [lossModalProspect, setLossModalProspect] = useState<Prospect | null>(null);
@@ -497,6 +498,7 @@ export default function FunilTab() {
         if (lossModalProspect) setLossModalProspect(null);
         else if (followUpModalProspect) setFollowUpModalProspect(null);
         else if (showModal) setShowModal(false);
+        else if (viewingProspect) setViewingProspect(null);
       }
     };
     window.addEventListener('keydown', handler);
@@ -1007,8 +1009,8 @@ export default function FunilTab() {
                     </tr>
                   ) : (
                     prospects.map((prospect) => (
-                      <tr key={prospect.id} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors ${selectedIds.has(prospect.id) ? 'bg-accent-gold/5' : ''}`}>
-                        <td className="px-3 py-3 w-8">
+                      <tr key={prospect.id} onClick={() => setViewingProspect(prospect)} className={`hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors cursor-pointer ${selectedIds.has(prospect.id) ? 'bg-accent-gold/5' : ''}`}>
+                        <td className="px-3 py-3 w-8" onClick={e => e.stopPropagation()}>
                           <input type="checkbox" checked={selectedIds.has(prospect.id)}
                             onChange={() => toggleSelect(prospect.id)} className="w-3.5 h-3.5 rounded text-accent-gold focus:ring-accent-gold/30" />
                         </td>
@@ -1044,7 +1046,7 @@ export default function FunilTab() {
                         <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                           <Sensitive>{formatCurrency(prospect.estimated_value)}</Sensitive>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="relative inline-block group">
                             <button
                               disabled={updatingStatus === prospect.id}
@@ -1077,7 +1079,7 @@ export default function FunilTab() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => openEditModal(prospect)}
@@ -1137,7 +1139,7 @@ export default function FunilTab() {
                   <div className="flex flex-col gap-2 min-h-[60px]">
                     {col.map(prospect => (
                       <DraggableCard key={prospect.id} prospect={prospect}>
-                      <div className="card card-hover p-3 cursor-grab active:cursor-grabbing animate-stagger-in">
+                      <div className="card card-hover p-3 cursor-pointer animate-stagger-in" onClick={() => setViewingProspect(prospect)}>
                         <div className="flex items-center justify-between mb-0.5">
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{prospect.company_name}</Sensitive></p>
                           {prospect.temperature && (
@@ -1220,14 +1222,14 @@ export default function FunilTab() {
                           </div>
                           <div className="flex items-center gap-0.5">
                             <button
-                              onClick={() => openEditModal(prospect)}
+                              onClick={(e) => { e.stopPropagation(); openEditModal(prospect); }}
                               className="p-1 text-gray-300 hover:text-accent-gold transition-colors rounded"
                               aria-label="Editar"
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
-                              onClick={() => setConfirmDelete(prospect)}
+                              onClick={(e) => { e.stopPropagation(); setConfirmDelete(prospect); }}
                               className="p-1 text-gray-300 hover:text-red-500 transition-colors rounded"
                               aria-label="Excluir"
                             >
@@ -1511,6 +1513,259 @@ export default function FunilTab() {
           </div>
           </FocusTrap>
         </div>
+      )}
+
+      {/* ─── Painel de Detalhe do Prospect ─────────────────────────────────── */}
+      {viewingProspect && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-[2px] z-40 animate-fade-in"
+            onClick={() => setViewingProspect(null)}
+          />
+          {/* Drawer */}
+          <div className="fixed right-0 top-0 h-full w-full max-w-[480px] bg-white dark:bg-gray-900 shadow-2xl z-50 flex flex-col animate-slide-right">
+
+            {/* ── Header fixo ──────────────────────────────────────────────── */}
+            <div className="border-b border-gray-100 dark:border-gray-800 p-6 shrink-0">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="min-w-0">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                    <Sensitive>{viewingProspect.company_name}</Sensitive>
+                  </h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    <Sensitive>{viewingProspect.contact_name}</Sensitive>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => { setViewingProspect(null); openEditModal(viewingProspect); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" /> Editar
+                  </button>
+                  <button
+                    onClick={() => setViewingProspect(null)}
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors"
+                    aria-label="Fechar"
+                  >
+                    <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Status + temperatura + valor */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusColors[viewingProspect.status] || 'bg-gray-100 text-gray-700'}`}>
+                  {statusLabels[viewingProspect.status]}
+                </span>
+                {viewingProspect.temperature && (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${temperatureColors[viewingProspect.temperature] || ''}`}>
+                    {temperatureLabels[viewingProspect.temperature]}
+                  </span>
+                )}
+                {viewingProspect.qualification_score > 0 && (
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${qualScoreBadgeColor(viewingProspect.qualification_score)}`}>
+                    Score {viewingProspect.qualification_score}/4
+                  </span>
+                )}
+                <span className="ml-auto text-lg font-bold text-accent-gold tabular-nums">
+                  <Sensitive>{formatCurrency(viewingProspect.estimated_value)}</Sensitive>
+                </span>
+              </div>
+            </div>
+
+            {/* ── Conteúdo rolável ─────────────────────────────────────────── */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* Tipo de Projeto */}
+              {Array.isArray(viewingProspect.service_interest) && viewingProspect.service_interest.length > 0 && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Tipo de Projeto</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {viewingProspect.service_interest.map(s => (
+                      <span key={s} className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+                        {serviceInterestOptions.find(o => o.value === s)?.label || s}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Contato */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Contato</h3>
+                <div className="space-y-2">
+                  {viewingProspect.contact_phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">WhatsApp</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100"><Sensitive>{viewingProspect.contact_phone}</Sensitive></span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">E-mail</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100"><Sensitive>{viewingProspect.contact_email}</Sensitive></span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Canal</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{sourceOptions.find(s => s.value === viewingProspect.source)?.label || viewingProspect.source}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">No funil há</span>
+                    <span className={`font-medium ${viewingProspect.days_since_created > 14 ? 'text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>{viewingProspect.days_since_created} dias</span>
+                  </div>
+                  {viewingProspect.assigned_to_name && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Responsável</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{viewingProspect.assigned_to_name}</span>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* Qualificação */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Qualificação</h3>
+                <div className="space-y-2">
+                  {viewingProspect.qualification_level && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Nível</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {viewingProspect.qualification_level === '2' ? 'N2 — Consciente do Problema' :
+                         viewingProspect.qualification_level === '3' ? 'N3 — Consciente da Solução' :
+                         'N4 — Consciente do Produto'}
+                      </span>
+                    </div>
+                  )}
+                  {viewingProspect.company_size && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Empresa</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {viewingProspect.company_size === 'small' ? '1–10 func.' :
+                         viewingProspect.company_size === 'medium' ? '11–50 func.' :
+                         viewingProspect.company_size === 'large' ? '51–200 func.' : '200+ func.'}
+                      </span>
+                    </div>
+                  )}
+                  {viewingProspect.usage_type && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Uso</span>
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{viewingProspect.usage_type === 'internal' ? 'Uso Interno' : 'Uso Comercial'}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Critérios */}
+                {(viewingProspect.has_budget !== null || viewingProspect.is_decision_maker !== null || viewingProspect.has_urgency !== null || viewingProspect.has_operation !== null) && (
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {[
+                      { label: 'Budget compatível', val: viewingProspect.has_budget },
+                      { label: 'Tomador de decisão', val: viewingProspect.is_decision_maker },
+                      { label: 'Urgência alta', val: viewingProspect.has_urgency },
+                      { label: 'Já tentou antes', val: viewingProspect.has_operation },
+                    ].map(({ label, val }) => val !== null && (
+                      <div key={label} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
+                        val === true ? 'bg-green-50 text-green-700 border border-green-100' :
+                        'bg-red-50 text-red-700 border border-red-100'
+                      }`}>
+                        <span className="font-bold">{val ? '✓' : '✗'}</span>
+                        {label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Briefing SDR */}
+              {viewingProspect.description && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Dor / Briefing</h3>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 rounded-xl p-3">
+                    <Sensitive>{viewingProspect.description}</Sensitive>
+                  </p>
+                </section>
+              )}
+
+              {/* Próxima ação */}
+              {viewingProspect.next_action && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Próxima Ação</h3>
+                  <div className="flex items-start gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-gray-400 dark:text-gray-500 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-gray-900 dark:text-gray-100">{viewingProspect.next_action}</p>
+                      {viewingProspect.next_action_date && (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                          {new Date(viewingProspect.next_action_date + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* Reunião */}
+              {(viewingProspect.closer_name || viewingProspect.meeting_scheduled_at || viewingProspect.meeting_transcript) && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Reunião / Closer</h3>
+                  <div className="space-y-2">
+                    {viewingProspect.closer_name && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Closer</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{viewingProspect.closer_name}</span>
+                      </div>
+                    )}
+                    {viewingProspect.meeting_scheduled_at && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Data</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateShort(viewingProspect.meeting_scheduled_at)}</span>
+                      </div>
+                    )}
+                    {viewingProspect.meeting_link && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Link</span>
+                        <a href={viewingProspect.meeting_link} target="_blank" rel="noopener noreferrer" className="text-accent-gold hover:underline truncate">
+                          Abrir link
+                        </a>
+                      </div>
+                    )}
+                    {viewingProspect.meeting_attended !== null && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Compareceu</span>
+                        <span className={`font-semibold ${viewingProspect.meeting_attended ? 'text-green-600' : 'text-red-500'}`}>
+                          {viewingProspect.meeting_attended ? 'Sim' : 'Não'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {viewingProspect.meeting_transcript && (
+                    <div className="mt-3 text-sm text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded-xl p-3 leading-relaxed">
+                      <Sensitive>{viewingProspect.meeting_transcript}</Sensitive>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Follow-up */}
+              {viewingProspect.follow_up_reason && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Follow-Up</h3>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${FOLLOW_UP_REASONS.find(r => r.value === viewingProspect.follow_up_reason)?.color || 'bg-gray-100 text-gray-600'}`}>
+                    {FOLLOW_UP_REASONS.find(r => r.value === viewingProspect.follow_up_reason)?.label || viewingProspect.follow_up_reason}
+                  </span>
+                </section>
+              )}
+
+              {/* Meta */}
+              <section className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+                  <span>Criado por <strong>{viewingProspect.created_by_name}</strong></span>
+                  <span>{new Date(viewingProspect.created_at).toLocaleDateString('pt-BR')}</span>
+                </div>
+              </section>
+
+            </div>
+          </div>
+        </>
       )}
 
       {/* Confirm delete */}
