@@ -391,12 +391,12 @@ export default function DashboardPage() {
           progressColor="bg-violet-500"
         />
 
-        {/* Propostas Enviadas */}
+        {/* Propostas em Pipeline */}
         <KpiCard
           icon={FileText}
-          iconBg="bg-violet-50 dark:bg-violet-900/25"
-          iconColor="text-violet-600"
-          label="Propostas Enviadas"
+          iconBg="bg-amber-50 dark:bg-amber-900/25"
+          iconColor="text-amber-600"
+          label="Propostas em Pipeline"
           loading={loading}
           value={<Sensitive>{stats.proposals_sent_count}</Sensitive>}
           badge={
@@ -406,7 +406,11 @@ export default function DashboardPage() {
               </span>
             ) : undefined
           }
-          sub={!loading ? formatCurrencyShort(stats.proposals_sent_value) + ' em aberto' : undefined}
+          sub={!loading
+            ? stats.proposals_sent_value > 0
+              ? formatCurrencyShort(stats.proposals_sent_value) + ' em aberto'
+              : 'Nenhuma proposta ativa'
+            : undefined}
         />
 
         {/* Receita do mês */}

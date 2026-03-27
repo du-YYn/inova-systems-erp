@@ -374,16 +374,17 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
+        pipeline_statuses = ['sent', 'viewed', 'negotiation', 'approved']
         qs = Proposal.objects.all()
         stats = qs.aggregate(
-            sent_count=Count('id', filter=Q(status='sent')),
-            sent_value=Sum('total_value', filter=Q(status='sent')),
+            pipeline_count=Count('id', filter=Q(status__in=pipeline_statuses)),
+            pipeline_value=Sum('total_value', filter=Q(status__in=pipeline_statuses)),
             approved_count=Count('id', filter=Q(status='approved')),
             approved_value=Sum('total_value', filter=Q(status='approved')),
         )
         return Response({
-            'sent_count':    stats['sent_count'] or 0,
-            'sent_value':    float(stats['sent_value'] or 0),
+            'sent_count':     stats['pipeline_count'] or 0,
+            'sent_value':     float(stats['pipeline_value'] or 0),
             'approved_count': stats['approved_count'] or 0,
             'approved_value': float(stats['approved_value'] or 0),
         })
