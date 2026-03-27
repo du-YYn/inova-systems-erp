@@ -232,13 +232,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         transaction_filter = {
             k.replace('issue_date', 'date'): v for k, v in base_filter.items()
         }
-        Transaction.objects.filter(
+        custo_pessoal = Transaction.objects.filter(
             transaction_type='expense',
             category__name__icontains='pessoal',
             **transaction_filter
         ).aggregate(total=Sum('amount'))['total'] or 0
 
-        ebitda = receita_liquida - float(despesas_operacionais)
+        ebitda = receita_liquida - float(despesas_operacionais) - float(custo_pessoal)
         lucro_liquido = ebitda
         margem_liquida = (
             lucro_liquido / float(receita_bruta) * 100
@@ -255,6 +255,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             'deducoes': float(deducoes),
             'receita_liquida': receita_liquida,
             'despesas_operacionais': float(despesas_operacionais),
+            'custo_pessoal': float(custo_pessoal),
             'ebitda': ebitda,
             'lucro_liquido': lucro_liquido,
             'margem_liquida': round(margem_liquida, 2),

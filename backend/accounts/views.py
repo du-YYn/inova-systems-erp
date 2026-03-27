@@ -177,6 +177,12 @@ class TwoFactorSetupView(APIView):
         user = request.user
 
         if user.is_2fa_enabled:
+            password = request.data.get('password', '')
+            if not password or not user.check_password(password):
+                return Response(
+                    {'error': 'Senha incorreta. Confirme sua senha para desativar o 2FA.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             user.is_2fa_enabled = False
             user.totp_secret = None
             user.save(update_fields=['is_2fa_enabled', 'totp_secret'])

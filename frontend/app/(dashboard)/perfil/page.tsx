@@ -240,7 +240,7 @@ export default function PerfilPage() {
     }
     setSavingPassword(true);
     try {
-      await api.post('/accounts/change-password/', { old_password: passwordForm.old_password, new_password: passwordForm.new_password });
+      await api.post('/accounts/change-password/', { old_password: passwordForm.old_password, new_password: passwordForm.new_password, new_password_confirm: passwordForm.confirm_password });
       toast.success('Senha alterada com sucesso!');
       setPasswordForm({ old_password: '', new_password: '', confirm_password: '' });
     } catch (err: unknown) {

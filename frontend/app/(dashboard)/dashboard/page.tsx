@@ -67,14 +67,16 @@ const formatCurrencyShort = (v: number) => {
 };
 
 const statusLabels: Record<string, string> = {
-  new: 'Novo', contacted: 'Contatado', qualified: 'Qualificado',
-  meeting: 'Reunião', proposal: 'Proposta', negotiation: 'Negociação',
-  won: 'Fechado', lost: 'Perdido',
+  new: 'Lead Recebido', qualifying: 'Em Qualificação', qualified: 'Qualificado',
+  disqualified: 'Não Qualificado', scheduled: 'Agendado', pre_meeting: 'Pré-Reunião',
+  no_show: 'Não Compareceu', meeting_done: 'Reunião Realizada', proposal: 'Proposta Enviada',
+  won: 'Fechado', not_closed: 'Não Fechou', lost: 'Perdido', follow_up: 'Em Follow-up',
 };
 
 const projectStatusLabels: Record<string, string> = {
-  planning: 'Planejamento', in_progress: 'Em Andamento',
-  on_hold: 'Em Pausa', completed: 'Concluído', cancelled: 'Cancelado',
+  planning: 'Planejamento', kickoff: 'Kickoff', requirements: 'Requisitos',
+  development: 'Desenvolvimento', testing: 'Testes/QA', deployment: 'Implantação',
+  completed: 'Concluído', on_hold: 'Em Espera',
 };
 
 const PIE_COLORS = ['#A6864A', '#3B82F6', '#8B5CF6', '#10B981', '#EF4444'];
@@ -358,7 +360,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { href: '/crm',      Icon: Users,       label: 'Novo Prospect' },
-              { href: '/sales',    Icon: FileText,    label: 'Nova Proposta' },
+              { href: '/crm?tab=propostas', Icon: FileText, label: 'Nova Proposta' },
               { href: '/projects', Icon: FolderKanban, label: 'Novo Projeto' },
               { href: '/finance',  Icon: DollarSign,  label: 'Financeiro'   },
             ].map(({ href, Icon, label }) => (
