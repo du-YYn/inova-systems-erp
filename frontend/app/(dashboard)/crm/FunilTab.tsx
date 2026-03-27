@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
 import { MultiSelect } from '@/components/ui/MultiSelect';
+import { buildProposalDefaults } from '@/lib/proposalDefaults';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1588,7 +1589,7 @@ export default function FunilTab() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => { setProposalForm(EMPTY_PROPOSAL_FORM); setProposalModalProspect(viewingProspect); }}
+                    onClick={() => { setProposalForm(buildProposalDefaults(viewingProspect)); setProposalModalProspect(viewingProspect); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                   >
                     <FileText className="w-3.5 h-3.5" /> Proposta
@@ -1837,6 +1838,10 @@ export default function FunilTab() {
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
               Lead: <strong className="text-gray-700 dark:text-gray-200">{proposalModalProspect.company_name}</strong>
             </p>
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+              <span className="mt-0.5">✦</span>
+              <span>Campos preenchidos automaticamente com os dados do lead — edite se necessário.</span>
+            </div>
             <form onSubmit={handleSaveProposal} className="space-y-4">
               <div>
                 <label className={labelInput}>Título *</label>

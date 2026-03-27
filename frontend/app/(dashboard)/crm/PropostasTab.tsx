@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/Badge';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
+import { buildProposalDefaults } from '@/lib/proposalDefaults';
 import api from '@/lib/api';
 
 interface Proposal {
@@ -35,7 +36,16 @@ interface Proposal {
 }
 
 interface Customer { id: number; company_name: string; name: string; }
-interface ProspectOption { id: number; company_name: string; contact_name: string; }
+interface ProspectOption {
+  id: number;
+  company_name: string;
+  contact_name: string;
+  service_interest: string[];
+  estimated_value: number;
+  description: string;
+  meeting_transcript: string;
+  usage_type: string;
+}
 
 const PAGE_SIZE = 10;
 
@@ -84,6 +94,7 @@ export default function PropostasTab() {
   const [performingAction, setPerformingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [autoFilled, setAutoFilled] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -120,7 +131,7 @@ export default function PropostasTab() {
   const approvedValue = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.total_value || 0), 0);
   const approvedCount = proposals.filter(p => p.status === 'approved').length;
 
-  const openNewModal = () => { setEditingProposal(null); setFormData(EMPTY_FORM); setShowModal(true); };
+  const openNewModal = () => { setEditingProposal(null); setFormData(EMPTY_FORM); setAutoFilled(false); setShowModal(true); };
 
   const openEditModal = (p: Proposal) => {
     setEditingProposal(p);
@@ -399,11 +410,38 @@ export default function PropostasTab() {
                     {customers.map((c) => <option key={c.id} value={c.id}>{c.company_name || c.name}</option>)}
                   </select>
                 ) : (
-                  <select value={formData.prospect} onChange={(e) => setFormData({ ...formData, prospect: e.target.value })}
-                    className="input-field bg-white dark:bg-gray-800">
+                  <select
+                    value={formData.prospect}
+                    onChange={(e) => {
+                      const selected = prospects.find(p => String(p.id) === e.target.value);
+                      if (selected) {
+                        const defaults = buildProposalDefaults(selected);
+                        setFormData(prev => ({
+                          ...prev,
+                          prospect: e.target.value,
+                          title: defaults.title,
+                          proposal_type: defaults.proposal_type,
+                          billing_type: defaults.billing_type,
+                          total_value: defaults.total_value,
+                          valid_until: defaults.valid_until,
+                          notes: defaults.notes,
+                        }));
+                        setAutoFilled(true);
+                      } else {
+                        setFormData(prev => ({ ...prev, prospect: '' }));
+                        setAutoFilled(false);
+                      }
+                    }}
+                    className="input-field bg-white dark:bg-gray-800"
+                  >
                     <option value="">Selecione um lead</option>
                     {prospects.map((p) => <option key={p.id} value={p.id}>{p.company_name} — {p.contact_name}</option>)}
                   </select>
+                )}
+                {autoFilled && (
+                  <p className="mt-2 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                    <span>✦</span> Campos preenchidos automaticamente com os dados do lead — edite se necessário
+                  </p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
