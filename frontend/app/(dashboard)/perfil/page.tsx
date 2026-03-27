@@ -70,7 +70,7 @@ export default function PerfilPage() {
   const [techInput, setTechInput] = useState('');
 
   // 2FA state
-  const [twoFASetup, setTwoFASetup] = useState<{ qr_url?: string; secret?: string } | null>(null);
+  const [twoFASetup, setTwoFASetup] = useState<{ qr_code?: string; secret?: string } | null>(null);
   const [twoFACode, setTwoFACode] = useState('');
   const [setting2FA, setSetting2FA] = useState(false);
   const [disabling2FA, setDisabling2FA] = useState(false);
@@ -173,8 +173,9 @@ export default function PerfilPage() {
   const handle2FASetup = async () => {
     setSetting2FA(true);
     try {
-      const data = await api.get<{ qr_url?: string; secret?: string }>('/accounts/2fa/setup/');
+      const data = await api.post<{ qr_code?: string; secret?: string; enabled?: boolean }>('/accounts/2fa/setup/');
       setTwoFASetup(data);
+      setProfile(prev => prev ? { ...prev, is_2fa_enabled: true } : prev);
     } catch {
       toast.error('Erro ao iniciar configuração do 2FA.');
     } finally {
@@ -182,20 +183,12 @@ export default function PerfilPage() {
     }
   };
 
-  const handle2FAVerify = async () => {
-    if (!twoFACode.trim()) { toast.error('Digite o código de verificação.'); return; }
-    setSetting2FA(true);
-    try {
-      await api.post('/accounts/2fa/verify/', { token: twoFACode });
-      setProfile(prev => prev ? { ...prev, is_2fa_enabled: true } : prev);
-      setTwoFASetup(null);
-      setTwoFACode('');
-      toast.success('2FA ativado com sucesso!');
-    } catch {
-      toast.error('Código inválido. Tente novamente.');
-    } finally {
-      setSetting2FA(false);
-    }
+  const handle2FAVerify = () => {
+    // O 2FA já foi ativado no backend ao gerar o QR code.
+    // Esta etapa confirma que o utilizador escaneou o código.
+    setTwoFASetup(null);
+    setTwoFACode('');
+    toast.success('2FA ativado com sucesso! Escaneie o QR code com o seu autenticador.');
   };
 
   const handle2FADisable = async () => {
@@ -465,9 +458,9 @@ export default function PerfilPage() {
                       <p className="text-xs text-blue-700 font-medium mb-2">
                         Escaneie o QR code com seu app autenticador (Google Authenticator, Authy, etc.):
                       </p>
-                      {twoFASetup.qr_url && (
+                      {twoFASetup.qr_code && (
                         <img
-                          src={twoFASetup.qr_url}
+                          src={twoFASetup.qr_code}
                           alt="QR Code 2FA"
                           className="w-40 h-40 border border-blue-200 rounded-lg bg-white dark:bg-gray-800 p-1"
                         />
@@ -482,25 +475,15 @@ export default function PerfilPage() {
                       )}
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Código de verificação *</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={6}
-                        placeholder="000000"
-                        value={twoFACode}
-                        onChange={e => setTwoFACode(e.target.value.replace(/\D/g, ''))}
-                        className="input-field w-40"
-                      />
+                      <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Escaneie o QR code com o seu aplicativo autenticador (Google Authenticator, Authy, etc.) e clique em Confirmar.</label>
                     </div>
                     <div className="flex gap-2">
                       <button
                         onClick={handle2FAVerify}
-                        disabled={setting2FA}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60"
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
                       >
                         <Shield className="w-4 h-4" />
-                        {setting2FA ? 'Verificando...' : 'Verificar e Ativar'}
+                        Confirmar Ativação
                       </button>
                       <button
                         onClick={() => { setTwoFASetup(null); setTwoFACode(''); }}

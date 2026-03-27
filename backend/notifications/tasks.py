@@ -48,15 +48,17 @@ def check_invoice_overdue():
 
         today = date.today()
 
-        # Faturas que venceram hoje
-        newly_overdue = Invoice.objects.filter(
+        # Faturas que venceram hoje — materializa antes de atualizar
+        newly_overdue = list(Invoice.objects.filter(
             due_date=today,
             status='pending',
             invoice_type='receivable',
-        )
+        ).select_related('customer'))
 
         # Atualiza status para overdue
-        newly_overdue.update(status='overdue')
+        ids = [inv.id for inv in newly_overdue]
+        if ids:
+            Invoice.objects.filter(id__in=ids).update(status='overdue')
 
         for invoice in newly_overdue:
             customer_name = invoice.customer.company_name if invoice.customer else 'Sem cliente'
@@ -68,8 +70,8 @@ def check_invoice_overdue():
                 object_id=invoice.id,
             )
 
-        logger.info(f"Faturas vencidas: {newly_overdue.count()} atualizadas")
-        return newly_overdue.count()
+        logger.info(f"Faturas vencidas: {len(newly_overdue)} atualizadas")
+        return len(newly_overdue)
     except (ImportError, AttributeError, TypeError) as e:
         logger.error(f"Erro em check_invoice_overdue: {e}")
         return 0

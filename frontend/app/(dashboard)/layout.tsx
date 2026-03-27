@@ -160,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleMarkRead = async (id: number) => {
     try {
-      await api.patch(`/notifications/notifications/${id}/mark_read/`);
+      await api.post(`/notifications/notifications/${id}/mark_read/`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
