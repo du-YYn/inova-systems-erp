@@ -34,6 +34,7 @@ interface Prospect {
   service_interest: string[];
   temperature: string;
   estimated_value: number;
+  proposal_value: number | null;
   description: string;
   next_action: string;
   next_action_date: string | null;
@@ -94,6 +95,7 @@ interface ProspectForm {
   next_action_date: string;
   // Seção 4 — Notas do Closer
   closer_name: string;
+  proposal_value: string;
   meeting_scheduled_at: string;
   meeting_link: string;
   meeting_transcript: string;
@@ -236,6 +238,7 @@ const EMPTY_FORM: ProspectForm = {
   next_action_date: '',
   // Seção 4
   closer_name: '',
+  proposal_value: '',
   meeting_scheduled_at: '',
   meeting_link: '',
   meeting_transcript: '',
@@ -611,6 +614,7 @@ export default function FunilTab() {
       next_action: p.next_action || '',
       next_action_date: p.next_action_date || '',
       closer_name: p.closer_name || '',
+      proposal_value: p.proposal_value != null ? String(p.proposal_value) : '',
       meeting_scheduled_at: p.meeting_scheduled_at || '',
       meeting_link: p.meeting_link || '',
       meeting_transcript: p.meeting_transcript || '',
@@ -653,6 +657,7 @@ export default function FunilTab() {
         next_action_date: formData.next_action_date || null,
         // Seção 4
         closer_name: formData.closer_name,
+        proposal_value: formData.proposal_value ? parseFloat(formData.proposal_value) : null,
         meeting_scheduled_at: formData.meeting_scheduled_at || null,
         meeting_link: formData.meeting_link,
         meeting_transcript: formData.meeting_transcript,
@@ -1525,8 +1530,8 @@ export default function FunilTab() {
                     <div>
                       <label className={labelInput}>Valor da Proposta (R$)</label>
                       <input type="number" step="0.01" min="0"
-                        value={formData.estimated_value}
-                        onChange={(e) => setField('estimated_value', e.target.value)}
+                        value={formData.proposal_value}
+                        onChange={(e) => setField('proposal_value', e.target.value)}
                         className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="0,00" />
                     </div>
                   </div>
@@ -1656,6 +1661,27 @@ export default function FunilTab() {
                   </div>
                 </section>
               )}
+
+              {/* Valores */}
+              <section>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">Valores</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-semibold mb-0.5">Budget Declarado</p>
+                    <p className="text-sm font-bold text-gray-700 dark:text-gray-200 tabular-nums">
+                      <Sensitive>{formatCurrency(viewingProspect.estimated_value)}</Sensitive>
+                    </p>
+                  </div>
+                  <div className={`rounded-xl p-3 ${viewingProspect.proposal_value ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-gray-50 dark:bg-gray-800'}`}>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-semibold mb-0.5">Valor da Proposta</p>
+                    <p className={`text-sm font-bold tabular-nums ${viewingProspect.proposal_value ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-600'}`}>
+                      {viewingProspect.proposal_value
+                        ? <Sensitive>{formatCurrency(viewingProspect.proposal_value)}</Sensitive>
+                        : 'Não definido'}
+                    </p>
+                  </div>
+                </div>
+              </section>
 
               {/* Contato */}
               <section>

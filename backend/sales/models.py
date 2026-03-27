@@ -148,6 +148,10 @@ class Prospect(models.Model):
         help_text='Temperatura do lead: quente, morno ou frio'
     )
     estimated_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    proposal_value = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text='Valor definido pelo Closer para a proposta comercial'
+    )
     description = models.TextField(blank=True)
     next_action = models.TextField(blank=True)
     next_action_date = models.DateField(null=True, blank=True)

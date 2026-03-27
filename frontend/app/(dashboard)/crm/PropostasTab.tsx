@@ -41,6 +41,7 @@ interface ProspectOption {
   contact_name: string;
   service_interest: string[];
   estimated_value: number;
+  proposal_value: number | null;
   description: string;
   meeting_transcript: string;
   usage_type: string;

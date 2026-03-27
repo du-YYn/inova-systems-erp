@@ -42,6 +42,7 @@ interface ProspectLike {
   company_name: string;
   service_interest: string[];
   estimated_value?: number;
+  proposal_value?: number | null;
   description?: string;
   meeting_transcript?: string;
   usage_type?: string;
@@ -76,14 +77,15 @@ export function buildProposalDefaults(prospect: ProspectLike): ProposalDefaults 
       : 'Solução';
   const title = `Proposta ${serviceLabel} – ${prospect.company_name}`;
 
-  // total_value: usar estimated_value do prospect
-  const total_value = prospect.estimated_value ? String(prospect.estimated_value) : '';
+  // total_value: valor definido pelo Closer (proposal_value), não o budget declarado
+  const total_value = prospect.proposal_value ? String(prospect.proposal_value) : '';
 
   // valid_until: hoje + 30 dias
   const valid_until = formatDate(addDays(new Date(), 30));
 
-  // notes: meeting_transcript > description > vazio
-  const notes = prospect.meeting_transcript || prospect.description || '';
+  // notes: apenas Notas da Reunião do Closer (meeting_transcript)
+  // description é o briefing do SDR — não vai para a proposta
+  const notes = prospect.meeting_transcript || '';
 
   // billing_type: heurística por usage_type (default fixed)
   const billing_type =

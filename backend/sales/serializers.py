@@ -79,6 +79,7 @@ class ProspectSerializer(serializers.ModelSerializer):
             "service_interest",
             "temperature",
             "estimated_value",
+            "proposal_value",
             "description",
             "next_action",
             "next_action_date",
