@@ -98,7 +98,11 @@ jobs:
         run: pip install pip-audit bandit ruff
 
       - name: pip-audit — verifica CVEs nas dependências Python
-        run: pip-audit -r requirements.txt --progress-spinner off
+        run: |
+          # CVE-2026-4539 (pygments): sem versão de correção disponível ainda;
+          # dependência transitiva de drf-spectacular/sentry-sdk. Ignorado até fix oficial.
+          pip-audit -r requirements.txt --progress-spinner off \
+            --ignore-vuln CVE-2026-4539
 
       - name: bandit — análise estática de segurança
         run: |

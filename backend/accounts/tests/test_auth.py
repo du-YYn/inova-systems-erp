@@ -177,9 +177,25 @@ class TestTwoFactor:
         regular_user.totp_secret = pyotp.random_base32()
         regular_user.save()
 
-        response = auth_client.post(self.setup_url)
+        response = auth_client.post(self.setup_url, {'password': 'operator_pass_123'})
         assert response.status_code == status.HTTP_200_OK
         assert response.data.get('enabled') is False
+
+    def test_2fa_setup_disable_wrong_password(self, auth_client, regular_user):
+        regular_user.is_2fa_enabled = True
+        regular_user.totp_secret = pyotp.random_base32()
+        regular_user.save()
+
+        response = auth_client.post(self.setup_url, {'password': 'wrong_password'})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_2fa_setup_disable_no_password(self, auth_client, regular_user):
+        regular_user.is_2fa_enabled = True
+        regular_user.totp_secret = pyotp.random_base32()
+        regular_user.save()
+
+        response = auth_client.post(self.setup_url)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 # ─── LOGOUT ──────────────────────────────────────────────────────────────────
