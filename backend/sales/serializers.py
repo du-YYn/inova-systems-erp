@@ -173,6 +173,13 @@ class ProposalSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        if not attrs.get('customer') and not attrs.get('prospect'):
+            raise serializers.ValidationError(
+                "É necessário informar um cliente ou um lead do funil."
+            )
+        return attrs
+
 
 class ContractSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(

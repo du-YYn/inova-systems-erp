@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
-  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target, GripVertical,
+  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target, GripVertical, FileText,
 } from 'lucide-react';
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
@@ -408,6 +408,12 @@ export default function FunilTab() {
   const [formData, setFormData] = useState<ProspectForm>(EMPTY_FORM);
   const [viewingProspect, setViewingProspect] = useState<Prospect | null>(null);
 
+  // Modal de proposta vinculada ao lead
+  const [proposalModalProspect, setProposalModalProspect] = useState<Prospect | null>(null);
+  const EMPTY_PROPOSAL_FORM = { title: '', proposal_type: 'software_dev', billing_type: 'fixed', total_value: '', valid_until: '', notes: '' };
+  const [proposalForm, setProposalForm] = useState(EMPTY_PROPOSAL_FORM);
+  const [savingProposal, setSavingProposal] = useState(false);
+
   // Modal de motivo de perda
   const [lossModalProspect, setLossModalProspect] = useState<Prospect | null>(null);
   const [lossForm, setLossForm] = useState({
@@ -750,6 +756,30 @@ export default function FunilTab() {
       toast.error('Erro ao registrar follow-up.');
     } finally {
       setSavingFollowUp(false);
+    }
+  };
+
+  const handleSaveProposal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proposalModalProspect) return;
+    setSavingProposal(true);
+    try {
+      const body: Record<string, unknown> = {
+        prospect: proposalModalProspect.id,
+        title: proposalForm.title,
+        proposal_type: proposalForm.proposal_type,
+        billing_type: proposalForm.billing_type,
+        notes: proposalForm.notes,
+      };
+      if (proposalForm.total_value) body.total_value = proposalForm.total_value;
+      if (proposalForm.valid_until) body.valid_until = proposalForm.valid_until;
+      await api.post('/sales/proposals/', body);
+      toast.success('Proposta criada! Veja na aba Propostas.');
+      setProposalModalProspect(null);
+    } catch {
+      toast.error('Erro ao criar proposta.');
+    } finally {
+      setSavingProposal(false);
     }
   };
 
@@ -1558,6 +1588,12 @@ export default function FunilTab() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
+                    onClick={() => { setProposalForm(EMPTY_PROPOSAL_FORM); setProposalModalProspect(viewingProspect); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Proposta
+                  </button>
+                  <button
                     onClick={() => { setViewingProspect(null); openEditModal(viewingProspect); }}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark transition-colors"
                   >
@@ -1785,6 +1821,88 @@ export default function FunilTab() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Modal de criação de proposta vinculada ao lead */}
+      {proposalModalProspect && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] animate-fade-in">
+          <FocusTrap onClose={() => setProposalModalProspect(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md mx-4 shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Nova Proposta</h2>
+              <button onClick={() => setProposalModalProspect(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors" aria-label="Fechar">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+              Lead: <strong className="text-gray-700 dark:text-gray-200">{proposalModalProspect.company_name}</strong>
+            </p>
+            <form onSubmit={handleSaveProposal} className="space-y-4">
+              <div>
+                <label className={labelInput}>Título *</label>
+                <input type="text" required value={proposalForm.title}
+                  onChange={(e) => setProposalForm({ ...proposalForm, title: e.target.value })}
+                  className="input-field" placeholder="Ex: Proposta Sistema Web – ACME" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelInput}>Tipo</label>
+                  <select value={proposalForm.proposal_type}
+                    onChange={(e) => setProposalForm({ ...proposalForm, proposal_type: e.target.value })}
+                    className="input-field bg-white dark:bg-gray-800">
+                    <option value="software_dev">Desenvolvimento</option>
+                    <option value="automation">Automação</option>
+                    <option value="ai">Inteligência Artificial</option>
+                    <option value="consulting">Consultoria</option>
+                    <option value="maintenance">Manutenção</option>
+                    <option value="support">Suporte</option>
+                    <option value="mixed">Múltiplos Serviços</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelInput}>Cobrança</label>
+                  <select value={proposalForm.billing_type}
+                    onChange={(e) => setProposalForm({ ...proposalForm, billing_type: e.target.value })}
+                    className="input-field bg-white dark:bg-gray-800">
+                    <option value="fixed">Valor Fixo</option>
+                    <option value="hourly">Por Hora</option>
+                    <option value="monthly">Mensal</option>
+                    <option value="milestone">Por Marco</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelInput}>Valor Total (R$)</label>
+                  <input type="number" step="0.01" value={proposalForm.total_value}
+                    onChange={(e) => setProposalForm({ ...proposalForm, total_value: e.target.value })}
+                    className="input-field" placeholder="0,00" />
+                </div>
+                <div>
+                  <label className={labelInput}>Validade</label>
+                  <input type="date" value={proposalForm.valid_until}
+                    onChange={(e) => setProposalForm({ ...proposalForm, valid_until: e.target.value })}
+                    className="input-field" />
+                </div>
+              </div>
+              <div>
+                <label className={labelInput}>Observações</label>
+                <textarea value={proposalForm.notes}
+                  onChange={(e) => setProposalForm({ ...proposalForm, notes: e.target.value })}
+                  rows={2} className="input-field resize-none" placeholder="Observações..." />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button type="button" variant="secondary" className="flex-1" onClick={() => setProposalModalProspect(null)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" loading={savingProposal} className="flex-1">
+                  Criar Proposta
+                </Button>
+              </div>
+            </form>
+          </div>
+          </FocusTrap>
+        </div>
       )}
 
       {/* Confirm delete */}

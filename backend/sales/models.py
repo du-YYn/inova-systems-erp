@@ -245,7 +245,7 @@ class Proposal(models.Model):
     ]
 
     prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='proposals', null=True, blank=True)
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='proposals')
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='proposals', null=True, blank=True)
     number = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=200)
     proposal_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
