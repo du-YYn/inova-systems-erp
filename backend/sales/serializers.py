@@ -50,6 +50,11 @@ class ProspectSerializer(serializers.ModelSerializer):
     )
     meets_qualification = serializers.SerializerMethodField()
     days_since_created = serializers.SerializerMethodField()
+    service_interest = serializers.ListField(
+        child=serializers.ChoiceField(choices=Prospect.VALID_SERVICE_INTERESTS),
+        default=list,
+        allow_empty=True,
+    )
 
     def get_meets_qualification(self, obj):
         return obj.qualification_score >= 3

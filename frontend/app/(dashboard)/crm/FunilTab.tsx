@@ -17,6 +17,7 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { Badge } from '@/components/ui/Badge';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -29,7 +30,7 @@ interface Prospect {
   contact_phone: string;
   source: string;
   status: string;
-  service_interest: string;
+  service_interest: string[];
   temperature: string;
   estimated_value: number;
   description: string;
@@ -75,7 +76,7 @@ interface ProspectForm {
   contact_phone: string;
   source: string;
   status: string;
-  service_interest: string;
+  service_interest: string[];
   // Seção 2 — Qualificação
   company_size: string;
   qualification_level: string;
@@ -184,12 +185,17 @@ const sourceOptions = [
 ];
 
 const serviceInterestOptions = [
-  { value: 'software_dev', label: 'Desenvolvimento Web' },
-  { value: 'mobile', label: 'Aplicativo Mobile' },
-  { value: 'automation', label: 'Automação' },
-  { value: 'ai', label: 'Inteligência Artificial' },
-  { value: 'consulting', label: 'Consultoria' },
-  { value: 'mixed', label: 'Indefinido / Múltiplos' },
+  { value: 'software_dev',  label: 'Sistema Web' },
+  { value: 'mobile',        label: 'Aplicativo Mobile' },
+  { value: 'site',          label: 'Site Institucional' },
+  { value: 'e_commerce',    label: 'E-commerce' },
+  { value: 'landing_page',  label: 'Landing Page' },
+  { value: 'automation',    label: 'Automação de Processos' },
+  { value: 'ai',            label: 'Inteligência Artificial' },
+  { value: 'erp',           label: 'ERP / Sistema de Gestão' },
+  { value: 'integration',   label: 'Integração de Sistemas' },
+  { value: 'consulting',    label: 'Consultoria Técnica' },
+  { value: 'support',       label: 'Suporte e Manutenção' },
 ];
 
 const temperatureLabels: Record<string, string> = {
@@ -212,7 +218,7 @@ const EMPTY_FORM: ProspectForm = {
   contact_phone: '',
   source: 'website',
   status: 'new',
-  service_interest: '',
+  service_interest: [],
   // Seção 2
   company_size: '',
   qualification_level: '',
@@ -557,7 +563,7 @@ export default function FunilTab() {
       contact_phone: p.contact_phone || '',
       source: p.source || 'website',
       status: p.status,
-      service_interest: p.service_interest || '',
+      service_interest: Array.isArray(p.service_interest) ? p.service_interest : (p.service_interest ? [p.service_interest as unknown as string] : []),
       company_size: p.company_size || '',
       qualification_level: p.qualification_level || '',
       usage_type: p.usage_type || '',
@@ -1143,11 +1149,14 @@ export default function FunilTab() {
                         <p className="text-xs text-gray-400 dark:text-gray-500 mb-1"><Sensitive>{prospect.contact_name}</Sensitive></p>
                         {/* Badges */}
                         <div className="flex items-center gap-1 flex-wrap mb-2">
-                          {prospect.service_interest && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              {serviceInterestOptions.find(o => o.value === prospect.service_interest)?.label || prospect.service_interest}
-                            </span>
-                          )}
+                          {Array.isArray(prospect.service_interest) && prospect.service_interest.length > 0
+                            ? prospect.service_interest.map(s => (
+                                <span key={s} className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  {serviceInterestOptions.find(o => o.value === s)?.label || s}
+                                </span>
+                              ))
+                            : null
+                          }
                           {prospect.qualification_score > 0 && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${qualScoreBadgeColor(prospect.qualification_score)}`}>
                               {prospect.qualification_score}/4
@@ -1312,18 +1321,16 @@ export default function FunilTab() {
                       className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="email@empresa.com" />
                   </div>
                 </div>
+                <div>
+                  <label className={labelInput}>Tipo de Projeto (múltipla seleção)</label>
+                  <MultiSelect
+                    options={serviceInterestOptions}
+                    value={formData.service_interest}
+                    onChange={(v) => setField('service_interest', v)}
+                    placeholder="Selecionar tipo(s) de projeto..."
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelInput}>Tipo de Projeto</label>
-                    <select value={formData.service_interest}
-                      onChange={(e) => setField('service_interest', e.target.value)}
-                      className="input-field bg-white dark:bg-gray-800">
-                      <option value="">Selecionar</option>
-                      {serviceInterestOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
                   <div>
                     <label className={labelInput}>Canal de Origem</label>
                     <select value={formData.source}
@@ -1334,10 +1341,8 @@ export default function FunilTab() {
                       ))}
                     </select>
                   </div>
-                </div>
-                {editingProspect && (
                   <div>
-                    <label className={labelInput}>Status</label>
+                    <label className={labelInput}>Etapa do Funil</label>
                     <select value={formData.status}
                       onChange={(e) => setField('status', e.target.value)}
                       className="input-field bg-white dark:bg-gray-800">
@@ -1346,7 +1351,7 @@ export default function FunilTab() {
                       ))}
                     </select>
                   </div>
-                )}
+                </div>
               </Section>
 
               {/* ══════════ SEÇÃO 2 — QUALIFICAÇÃO ══════════ */}

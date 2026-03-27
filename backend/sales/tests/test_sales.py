@@ -194,6 +194,44 @@ class TestProspect:
         assert response.status_code == status.HTTP_200_OK
         assert all(p['status'] == 'won' for p in response.data['results'])
 
+    def test_create_prospect_with_multiple_services(self, manager_client):
+        payload = {
+            'company_name': 'Tech Corp',
+            'contact_name': 'Ana Lima',
+            'contact_email': 'ana@tech.com',
+            'status': 'qualifying',
+            'source': 'referral',
+            'service_interest': ['software_dev', 'mobile', 'ai'],
+        }
+        response = manager_client.post(self.url, payload, format='json')
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['service_interest'] == ['software_dev', 'mobile', 'ai']
+
+    def test_create_prospect_with_invalid_service(self, manager_client):
+        payload = {
+            'company_name': 'Bad Corp',
+            'contact_name': 'X',
+            'contact_email': 'x@x.com',
+            'status': 'new',
+            'source': 'website',
+            'service_interest': ['invalid_value'],
+        }
+        response = manager_client.post(self.url, payload, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_create_prospect_with_status_on_creation(self, manager_client):
+        """Status deve ser definível na criação (não apenas em edição)."""
+        payload = {
+            'company_name': 'Corp XYZ',
+            'contact_name': 'B',
+            'contact_email': 'b@corp.com',
+            'status': 'qualified',
+            'source': 'linkedin',
+        }
+        response = manager_client.post(self.url, payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['status'] == 'qualified'
+
 
 # ─── PROPOSAL ────────────────────────────────────────────────────────────────
 

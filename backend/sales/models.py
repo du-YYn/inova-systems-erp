@@ -110,13 +110,21 @@ class Prospect(models.Model):
     ]
 
     SERVICE_INTEREST_CHOICES = [
-        ('software_dev', 'Desenvolvimento de Software'),
-        ('automation',   'Automação de Processos'),
-        ('ai',           'Inteligência Artificial'),
-        ('consulting',   'Consultoria Técnica'),
-        ('support',      'Suporte e Manutenção'),
-        ('mixed',        'Múltiplos Serviços'),
+        ('software_dev',  'Sistema Web'),
+        ('mobile',        'Aplicativo Mobile'),
+        ('site',          'Site Institucional'),
+        ('e_commerce',    'E-commerce'),
+        ('landing_page',  'Landing Page'),
+        ('automation',    'Automação de Processos'),
+        ('ai',            'Inteligência Artificial'),
+        ('erp',           'ERP / Sistema de Gestão'),
+        ('integration',   'Integração de Sistemas'),
+        ('consulting',    'Consultoria Técnica'),
+        ('support',       'Suporte e Manutenção'),
     ]
+
+    # Lista de valores válidos (usada no serializer)
+    VALID_SERVICE_INTERESTS = [c[0] for c in SERVICE_INTEREST_CHOICES]
 
     TEMPERATURE_CHOICES = [
         ('hot',  'Quente'),
@@ -131,9 +139,9 @@ class Prospect(models.Model):
     contact_phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='website')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
-    service_interest = models.CharField(
-        max_length=20, choices=SERVICE_INTEREST_CHOICES, blank=True,
-        help_text='Serviço de interesse principal do lead'
+    service_interest = models.JSONField(
+        default=list, blank=True,
+        help_text='Lista de serviços de interesse do lead'
     )
     temperature = models.CharField(
         max_length=10, choices=TEMPERATURE_CHOICES, default='warm',
