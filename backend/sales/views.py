@@ -221,6 +221,8 @@ class ProposalViewSet(viewsets.ModelViewSet):
             )
         proposal.status = 'approved'
         proposal.save()
+        if proposal.prospect_id:
+            Prospect.objects.filter(pk=proposal.prospect_id).update(status='won')
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
@@ -256,10 +258,18 @@ class ProposalViewSet(viewsets.ModelViewSet):
         story.append(Paragraph(f'Proposta Comercial #{proposal.number}', styles['Title']))
         story.append(Spacer(1, 0.5*cm))
         story.append(Paragraph(f'<b>Título:</b> {proposal.title}', styles['Normal']))
-        story.append(Paragraph(
-            f'<b>Cliente:</b> {proposal.customer.company_name or proposal.customer.name}',
-            styles['Normal'],
-        ))
+        if proposal.customer:
+            client_name = proposal.customer.company_name or proposal.customer.name
+        elif proposal.prospect:
+            client_name = proposal.prospect.company_name
+        else:
+            client_name = '—'
+        story.append(Paragraph(f'<b>Cliente:</b> {client_name}', styles['Normal']))
+        if proposal.prospect and not proposal.customer:
+            story.append(Paragraph(
+                f'<b>Contato:</b> {proposal.prospect.contact_name} — {proposal.prospect.contact_email}',
+                styles['Normal'],
+            ))
         story.append(Paragraph(f'<b>Tipo:</b> {proposal.get_proposal_type_display()}', styles['Normal']))
         story.append(Paragraph(f'<b>Modalidade:</b> {proposal.get_billing_type_display()}', styles['Normal']))
         story.append(Paragraph(
@@ -321,9 +331,31 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 last_seq = 0
             next_number = f"CTR-{last_seq + 1:05d}"
 
+            # Resolve customer — auto-create from prospect data if no customer linked
+            customer = proposal.customer
+            if not customer and proposal.prospect:
+                customer, _ = Customer.objects.get_or_create(
+                    email=proposal.prospect.contact_email,
+                    defaults={
+                        'customer_type': 'PJ',
+                        'company_name': proposal.prospect.company_name,
+                        'name': proposal.prospect.contact_name,
+                        'phone': proposal.prospect.contact_phone,
+                        'created_by': request.user,
+                    }
+                )
+                Prospect.objects.filter(pk=proposal.prospect_id).update(customer=customer)
+                Proposal.objects.filter(pk=proposal.pk).update(customer=customer)
+
+            if not customer:
+                return Response(
+                    {'error': 'Não foi possível determinar o cliente para o contrato.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
             contract = Contract.objects.create(
                 proposal=proposal,
-                customer=proposal.customer,
+                customer=customer,
                 number=next_number,
                 title=proposal.title,
                 contract_type=proposal.proposal_type,
@@ -336,8 +368,6 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 terms=proposal.terms,
                 created_by=request.user
             )
-
-            proposal.save()
 
         logger.info(f"Proposta {proposal.id} convertida em contrato {contract.id} por {request.user.username}")
         return Response(ContractSerializer(contract).data, status=status.HTTP_201_CREATED)

@@ -400,6 +400,7 @@ class WinLossReason(models.Model):
         ('competitor', 'Concorrente'),
         ('no_budget', 'Sem Orçamento'),
         ('no_fit', 'Sem Fit'),
+        ('no_response', 'Sem Resposta'),
         ('relationship', 'Relacionamento'),
         ('other', 'Outro'),
     ]

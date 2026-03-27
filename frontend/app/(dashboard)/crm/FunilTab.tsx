@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
   Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target, GripVertical, FileText,
+  Phone, Mail, MessageSquare, Monitor, Linkedin, Clock, Send,
 } from 'lucide-react';
 import { DndContext, DragOverlay, rectIntersection, PointerSensor, useDroppable, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -22,6 +23,16 @@ import { buildProposalDefaults } from '@/lib/proposalDefaults';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Activity {
+  id: number;
+  activity_type: string;
+  subject: string;
+  description: string;
+  outcome: string;
+  date: string;
+  created_by_name: string;
+}
 
 interface Prospect {
   id: number;
@@ -474,6 +485,16 @@ export default function FunilTab() {
   });
   const [savingFollowUp, setSavingFollowUp] = useState(false);
 
+  // Atividades do lead (drawer)
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [activityForm, setActivityForm] = useState({ activity_type: 'call', subject: '', description: '' });
+  const [savingActivity, setSavingActivity] = useState(false);
+
+  // Ações rápidas no drawer
+  const [markingAction, setMarkingAction] = useState<string | null>(null);
+
   // ─── Data fetching ────────────────────────────────────────────────────────
 
   const fetchProspects = useCallback(async () => {
@@ -501,6 +522,19 @@ export default function FunilTab() {
   useEffect(() => { fetchProspects(); }, [fetchProspects]);
   // Always keep allProspects fresh for KPIs + pipeline
   useEffect(() => { fetchAllProspects(); }, [fetchAllProspects]);
+
+  // Busca atividades sempre que um lead é aberto no drawer
+  useEffect(() => {
+    if (!viewingProspect) { setActivities([]); setShowActivityForm(false); return; }
+    setLoadingActivities(true);
+    api.get<{ results?: Activity[] }>('/sales/prospect-activities/', { prospect: String(viewingProspect.id) })
+      .then(data => {
+        const list = data.results ?? data;
+        setActivities(Array.isArray(list) ? list as Activity[] : []);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingActivities(false));
+  }, [viewingProspect?.id]);
 
   useEffect(() => {
     const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
@@ -805,6 +839,51 @@ export default function FunilTab() {
       fetchAllProspects();
     } catch {
       toast.error('Erro ao excluir prospect.');
+    }
+  };
+
+  const handleQuickAction = async (prospect: Prospect, action: 'mark_attended' | 'mark_no_show' | 'mark_ebook_sent') => {
+    setMarkingAction(action);
+    try {
+      const updated = await api.post<Prospect>(`/sales/prospects/${prospect.id}/${action}/`, {});
+      const labels: Record<string, string> = {
+        mark_attended: 'Reunião marcada como realizada.',
+        mark_no_show: 'Lead marcado como não compareceu.',
+        mark_ebook_sent: 'E-book marcado como enviado.',
+      };
+      toast.success(labels[action]);
+      setViewingProspect(updated);
+      fetchProspects();
+      fetchAllProspects();
+    } catch {
+      toast.error('Erro ao executar ação.');
+    } finally {
+      setMarkingAction(null);
+    }
+  };
+
+  const handleSaveActivity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!viewingProspect || !activityForm.subject.trim()) return;
+    setSavingActivity(true);
+    try {
+      await api.post('/sales/prospect-activities/', {
+        prospect: viewingProspect.id,
+        activity_type: activityForm.activity_type,
+        subject: activityForm.subject,
+        description: activityForm.description,
+      });
+      toast.success('Atividade registrada.');
+      setActivityForm({ activity_type: 'call', subject: '', description: '' });
+      setShowActivityForm(false);
+      // Refresh activities
+      const data = await api.get<{ results?: Activity[] }>('/sales/prospect-activities/', { prospect: String(viewingProspect.id) });
+      const list = data.results ?? data;
+      setActivities(Array.isArray(list) ? list as Activity[] : []);
+    } catch {
+      toast.error('Erro ao registrar atividade.');
+    } finally {
+      setSavingActivity(false);
     }
   };
 
@@ -1845,6 +1924,159 @@ export default function FunilTab() {
                   </span>
                 </section>
               )}
+
+              {/* Ações Rápidas — contextuais por status */}
+              {(['scheduled', 'pre_meeting'].includes(viewingProspect.status)) && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Ações Rápidas</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleQuickAction(viewingProspect, 'mark_attended')}
+                      disabled={!!markingAction}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {markingAction === 'mark_attended' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                      Compareceu
+                    </button>
+                    <button
+                      onClick={() => handleQuickAction(viewingProspect, 'mark_no_show')}
+                      disabled={!!markingAction}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {markingAction === 'mark_no_show' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                      Não Compareceu
+                    </button>
+                  </div>
+                </section>
+              )}
+              {viewingProspect.status === 'meeting_done' && !viewingProspect.ebook_sent_at && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Ações Rápidas</h3>
+                  <button
+                    onClick={() => handleQuickAction(viewingProspect, 'mark_ebook_sent')}
+                    disabled={!!markingAction}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {markingAction === 'mark_ebook_sent' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    Marcar E-book como Enviado
+                  </button>
+                </section>
+              )}
+              {viewingProspect.status === 'meeting_done' && viewingProspect.ebook_sent_at && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2">E-book</h3>
+                  <p className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> Enviado em {new Date(viewingProspect.ebook_sent_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </section>
+              )}
+
+              {/* Atividades */}
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">Atividades</h3>
+                  <button
+                    onClick={() => setShowActivityForm(v => !v)}
+                    className="flex items-center gap-1 text-xs text-accent-gold font-semibold hover:underline"
+                  >
+                    <Plus className="w-3 h-3" /> Registrar
+                  </button>
+                </div>
+
+                {showActivityForm && (
+                  <form onSubmit={handleSaveActivity} className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl space-y-2 border border-gray-100 dark:border-gray-700">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo</label>
+                        <select
+                          value={activityForm.activity_type}
+                          onChange={e => setActivityForm(f => ({ ...f, activity_type: e.target.value }))}
+                          className="input-field text-xs py-1.5 bg-white dark:bg-gray-900"
+                        >
+                          <option value="call">Ligação</option>
+                          <option value="whatsapp">WhatsApp</option>
+                          <option value="email">E-mail</option>
+                          <option value="meeting">Reunião</option>
+                          <option value="demo">Demo</option>
+                          <option value="linkedin">LinkedIn</option>
+                          <option value="other">Outro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Assunto *</label>
+                        <input
+                          type="text"
+                          required
+                          value={activityForm.subject}
+                          onChange={e => setActivityForm(f => ({ ...f, subject: e.target.value }))}
+                          className="input-field text-xs py-1.5"
+                          placeholder="Ex: 1ª ligação"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Observações</label>
+                      <textarea
+                        value={activityForm.description}
+                        onChange={e => setActivityForm(f => ({ ...f, description: e.target.value }))}
+                        rows={2}
+                        className="input-field text-xs py-1.5 resize-none"
+                        placeholder="Resultado, próximo passo..."
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => setShowActivityForm(false)} className="flex-1 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        Cancelar
+                      </button>
+                      <button type="submit" disabled={savingActivity} className="flex-1 px-3 py-1.5 text-xs bg-accent-gold text-white rounded-lg font-semibold hover:bg-accent-gold-dark transition-colors disabled:opacity-50">
+                        {savingActivity ? 'Salvando...' : 'Salvar'}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {loadingActivities ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
+                    <span className="w-3 h-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" /> Carregando...
+                  </div>
+                ) : activities.length === 0 ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">Nenhuma atividade registrada ainda.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {activities.map(act => {
+                      const typeConfig: Record<string, { label: string; color: string; Icon: React.ElementType }> = {
+                        call:     { label: 'Ligação',   color: 'bg-blue-100 text-blue-700',   Icon: Phone },
+                        email:    { label: 'E-mail',    color: 'bg-gray-100 text-gray-700',   Icon: Mail },
+                        meeting:  { label: 'Reunião',   color: 'bg-purple-100 text-purple-700', Icon: Calendar },
+                        whatsapp: { label: 'WhatsApp',  color: 'bg-green-100 text-green-700', Icon: MessageSquare },
+                        demo:     { label: 'Demo',      color: 'bg-indigo-100 text-indigo-700', Icon: Monitor },
+                        linkedin: { label: 'LinkedIn',  color: 'bg-sky-100 text-sky-700',     Icon: Linkedin },
+                        other:    { label: 'Outro',     color: 'bg-orange-100 text-orange-700', Icon: Clock },
+                      };
+                      const cfg = typeConfig[act.activity_type] || typeConfig.other;
+                      return (
+                        <div key={act.id} className="flex gap-2.5 items-start">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${cfg.color}`}>
+                            <cfg.Icon className="w-3 h-3" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">{act.subject}</span>
+                              <span className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
+                                {new Date(act.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+                              </span>
+                            </div>
+                            {act.description && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">{act.description}</p>
+                            )}
+                            <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{act.created_by_name}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
 
               {/* Meta */}
               <section className="pt-2 border-t border-gray-100 dark:border-gray-800">
