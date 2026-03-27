@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Plus, Search, Building2, User, Trash2, Edit, X, Phone, Mail, MapPin } from 'lucide-react';
+import { Plus, Search, Building2, User, Trash2, Edit, X, Phone, Mail, MapPin, ChevronUp, ChevronDown } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -71,6 +71,13 @@ export default function ClientesPage() {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [sortField, setSortField] = useState<'name' | 'type' | 'status' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'name' | 'type' | 'status') => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  };
 
   const isDirty = useMemo(() => {
     if (editTarget) {
@@ -216,6 +223,17 @@ export default function ClientesPage() {
 
   const displayName = (c: Customer) => c.company_name || c.name || '—';
 
+  const sortedCustomers = useMemo(() => {
+    if (!sortField) return customers;
+    return [...customers].sort((a, b) => {
+      let aVal = '', bVal = '';
+      if (sortField === 'name')   { aVal = displayName(a).toLowerCase(); bVal = displayName(b).toLowerCase(); }
+      if (sortField === 'type')   { aVal = a.customer_type; bVal = b.customer_type; }
+      if (sortField === 'status') { aVal = a.is_active ? '1' : '0'; bVal = b.is_active ? '1' : '0'; }
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+  }, [customers, sortField, sortDir]);
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
@@ -301,20 +319,35 @@ export default function ClientesPage() {
             <p>Nenhum cliente encontrado</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+          <table className="w-full table-premium">
+            <thead>
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Tipo</th>
-                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Contato</th>
-                <th className="hidden md:table-cell text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Localização</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
-                <th className="px-6 py-3"></th>
+                <th className="th-sort text-left" onClick={() => handleSort('name')}>
+                  Cliente
+                  <span className={`sort-icon ${sortField === 'name' ? 'active' : ''}`}>
+                    {sortField === 'name' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                  </span>
+                </th>
+                <th className="hidden md:table-cell th-sort text-left" onClick={() => handleSort('type')}>
+                  Tipo
+                  <span className={`sort-icon ${sortField === 'type' ? 'active' : ''}`}>
+                    {sortField === 'type' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                  </span>
+                </th>
+                <th className="hidden md:table-cell text-left">Contato</th>
+                <th className="hidden md:table-cell text-left">Localização</th>
+                <th className="th-sort text-left" onClick={() => handleSort('status')}>
+                  Status
+                  <span className={`sort-icon ${sortField === 'status' ? 'active' : ''}`}>
+                    {sortField === 'status' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                  </span>
+                </th>
+                <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-              {customers.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+            <tbody>
+              {sortedCustomers.map((c) => (
+                <tr key={c.id}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -363,9 +396,10 @@ export default function ClientesPage() {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
                       c.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600'
                     }`}>
+                      {c.is_active && <span className="dot-pulse bg-green-500" />}
                       {c.is_active ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>

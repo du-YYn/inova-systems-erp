@@ -995,21 +995,21 @@ export default function FinancePage() {
                 <p className="font-medium">Nenhuma fatura encontrada</p>
               </div>
             ) : (
-              <table className="w-full">
+              <table className="w-full table-premium">
                 <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Número</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descrição</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Vencimento</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Total</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
+                  <tr>
+                    <th className="text-left">Número</th>
+                    <th className="text-left">Descrição</th>
+                    <th className="text-left">Tipo</th>
+                    <th className="text-left">Vencimento</th>
+                    <th className="text-right">Total</th>
+                    <th className="text-left">Status</th>
+                    <th className="text-right">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                <tbody>
                   {invoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <tr key={inv.id}>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900 dark:text-gray-100"><Sensitive>{inv.number}</Sensitive></td>
                       <td className="py-3 px-4">
                         <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{inv.description || '—'}</p>
@@ -1112,20 +1112,20 @@ export default function FinancePage() {
                 <p className="font-medium">Nenhuma transação encontrada</p>
               </div>
             ) : (
-              <table className="w-full">
+              <table className="w-full table-premium">
                 <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Data</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descrição</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Categoria</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Conta</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Valor</th>
-                    <th className="text-right py-3 px-4 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
+                  <tr>
+                    <th className="text-left">Data</th>
+                    <th className="text-left">Descrição</th>
+                    <th className="text-left">Categoria</th>
+                    <th className="text-left">Conta</th>
+                    <th className="text-right">Valor</th>
+                    <th className="text-right">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                <tbody>
                   {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <tr key={tx.id}>
                       <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatDate(tx.date)}</td>
                       <td className="py-3 px-4 text-sm font-medium text-gray-900 dark:text-gray-100">{tx.description || '—'}</td>
                       <td className="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{tx.category_name || '—'}</td>

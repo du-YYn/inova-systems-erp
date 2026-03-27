@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Plus, Search, Edit, Trash2, FileText, TrendingUp, CheckCircle,
-  X, Send, ThumbsUp, ThumbsDown, ArrowRight,
+  X, Send, ThumbsUp, ThumbsDown, ArrowRight, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -93,6 +93,13 @@ export default function PropostasTab() {
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [autoFilled, setAutoFilled] = useState(false);
+  const [sortField, setSortField] = useState<'number' | 'title' | 'value' | 'status' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'number' | 'title' | 'value' | 'status') => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -125,6 +132,18 @@ export default function PropostasTab() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
   const approvedValue = proposals.filter(p => p.status === 'approved').reduce((s, p) => s + Number(p.total_value || 0), 0);
   const approvedCount = proposals.filter(p => p.status === 'approved').length;
+
+  const sortedProposals = useMemo(() => {
+    if (!sortField) return proposals;
+    return [...proposals].sort((a, b) => {
+      let aVal = '', bVal = '';
+      if (sortField === 'number') { aVal = a.number; bVal = b.number; }
+      if (sortField === 'title')  { aVal = a.title.toLowerCase(); bVal = b.title.toLowerCase(); }
+      if (sortField === 'value')  { aVal = String(Number(a.total_value || 0)); bVal = String(Number(b.total_value || 0)); }
+      if (sortField === 'status') { aVal = a.status; bVal = b.status; }
+      return sortDir === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+  }, [proposals, sortField, sortDir]);
 
   const openNewModal = () => { setEditingProposal(null); setFormData(EMPTY_FORM); setAutoFilled(false); setShowModal(true); };
 
@@ -249,27 +268,47 @@ export default function PropostasTab() {
 
         <div className="overflow-x-auto">
           {loading ? <TableSkeleton rows={6} cols={8} /> : (
-            <table className="w-full">
+            <table className="w-full table-premium">
               <thead>
-                <tr className="bg-gray-50/80 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Número</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Título</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cliente</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Valor</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Ações</th>
+                <tr>
+                  <th className="th-sort text-left" onClick={() => handleSort('number')}>
+                    Número
+                    <span className={`sort-icon ${sortField === 'number' ? 'active' : ''}`}>
+                      {sortField === 'number' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                    </span>
+                  </th>
+                  <th className="th-sort text-left" onClick={() => handleSort('title')}>
+                    Título
+                    <span className={`sort-icon ${sortField === 'title' ? 'active' : ''}`}>
+                      {sortField === 'title' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                    </span>
+                  </th>
+                  <th className="text-left">Cliente</th>
+                  <th className="text-left">Tipo</th>
+                  <th className="th-sort text-left" onClick={() => handleSort('value')}>
+                    Valor
+                    <span className={`sort-icon ${sortField === 'value' ? 'active' : ''}`}>
+                      {sortField === 'value' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                    </span>
+                  </th>
+                  <th className="th-sort text-left" onClick={() => handleSort('status')}>
+                    Status
+                    <span className={`sort-icon ${sortField === 'status' ? 'active' : ''}`}>
+                      {sortField === 'status' && sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />}
+                    </span>
+                  </th>
+                  <th className="text-right">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                {proposals.length === 0 ? (
+              <tbody>
+                {sortedProposals.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-16 text-center text-gray-400 dark:text-gray-500 text-sm">
                       Nenhuma proposta encontrada
                     </td>
                   </tr>
-                ) : proposals.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50/60 transition-colors">
+                ) : sortedProposals.map((p) => (
+                  <tr key={p.id}>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"><Sensitive>{p.number}</Sensitive></td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.title}</Sensitive></td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><Sensitive>{p.customer_name || p.prospect_company || '—'}</Sensitive></td>

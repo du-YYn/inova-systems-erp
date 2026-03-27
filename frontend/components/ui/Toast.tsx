@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useState, useRef } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 type ToastType = 'success' | 'error' | 'warning';
 
@@ -30,85 +31,86 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback((type: ToastType, message: string) => {
     const id = Math.random().toString(36).slice(2);
     setToasts(prev => [...prev, { id, type, message }]);
-    setTimeout(() => dismiss(id), 3300);
+    setTimeout(() => dismiss(id), 3800);
   }, [dismiss]);
 
   const success = useCallback((message: string) => toast('success', message), [toast]);
-  const error = useCallback((message: string) => toast('error', message), [toast]);
+  const error   = useCallback((message: string) => toast('error', message),   [toast]);
   const warning = useCallback((message: string) => toast('warning', message), [toast]);
 
   return (
     <ToastContext.Provider value={{ toast, success, error, warning }}>
       {children}
-      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm">
-        {toasts.map(t => (
-          <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
-        ))}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none">
+        <AnimatePresence initial={false} mode="sync">
+          {toasts.map(t => (
+            <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+          ))}
+        </AnimatePresence>
       </div>
     </ToastContext.Provider>
   );
 }
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
-  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
-  useEffect(() => {
-    requestAnimationFrame(() => setPhase('visible'));
-    timerRef.current = setTimeout(() => setPhase('exit'), 3000);
-    return () => clearTimeout(timerRef.current);
-  }, []);
-
-  useEffect(() => {
-    if (phase === 'exit') {
-      const id = setTimeout(() => onDismiss(toast.id), 300);
-      return () => clearTimeout(id);
-    }
-  }, [phase, toast.id, onDismiss]);
-
-  const styles: Record<ToastType, { bg: string; tint: string; icon: React.ReactNode }> = {
+  const styles: Record<ToastType, { bar: string; tint: string; icon: React.ReactNode }> = {
     success: {
-      bg: 'border-green-500',
-      tint: 'bg-green-50 dark:bg-green-900/30',
-      icon: <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />,
+      bar:  'bg-emerald-500',
+      tint: 'bg-white dark:bg-gray-800 border-emerald-200 dark:border-emerald-800/40',
+      icon: <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0" />,
     },
     error: {
-      bg: 'border-red-500',
-      tint: 'bg-red-50 dark:bg-red-900/30',
+      bar:  'bg-red-500',
+      tint: 'bg-white dark:bg-gray-800 border-red-200 dark:border-red-800/40',
       icon: <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />,
     },
     warning: {
-      bg: 'border-yellow-500',
-      tint: 'bg-yellow-50 dark:bg-yellow-900/30',
-      icon: <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0" />,
+      bar:  'bg-amber-400',
+      tint: 'bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-700/40',
+      icon: <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />,
     },
   };
 
-  const { bg, tint, icon } = styles[toast.type];
+  const { bar, tint, icon } = styles[toast.type];
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: 48, scale: 0.94 }}
+      animate={{ opacity: 1, x: 0,  scale: 1    }}
+      exit={{    opacity: 0, x: 48,  scale: 0.94 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
       role="alert"
       aria-live="assertive"
+      className="pointer-events-auto"
       onMouseEnter={() => clearTimeout(timerRef.current)}
-      onMouseLeave={() => { timerRef.current = setTimeout(() => setPhase('exit'), 1500); }}
-      className={`${tint} border-l-4 ${bg} rounded-lg shadow-lg p-4 flex items-start gap-3 transition-all duration-300 cursor-default ${
-        phase === 'visible'
-          ? 'opacity-100 translate-x-0 scale-100'
-          : phase === 'exit'
-          ? 'opacity-0 translate-x-8 scale-95'
-          : 'opacity-0 translate-x-8 scale-95'
-      }`}
+      onMouseLeave={() => {
+        timerRef.current = setTimeout(() => onDismiss(toast.id), 1500);
+      }}
     >
-      {icon}
-      <p className="text-sm text-gray-700 dark:text-gray-200 flex-1 leading-snug">{toast.message}</p>
-      <button
-        onClick={() => setPhase('exit')}
-        className="p-0.5 hover:bg-black/5 rounded flex-shrink-0 transition-colors"
-      >
-        <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-      </button>
-    </div>
+      <div className={`${tint} border rounded-xl shadow-card overflow-hidden`}>
+        {/* Progress bar */}
+        <motion.div
+          className={`h-0.5 ${bar}`}
+          initial={{ width: '100%' }}
+          animate={{ width: '0%' }}
+          transition={{ duration: 3.8, ease: 'linear' }}
+        />
+        <div className="flex items-start gap-3 px-4 py-3">
+          {icon}
+          <p className="text-sm text-gray-700 dark:text-gray-200 flex-1 leading-snug">{toast.message}</p>
+          <button
+            onClick={() => onDismiss(toast.id)}
+            className="p-0.5 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors flex-shrink-0 mt-0.5"
+            aria-label="Fechar notificação"
+          >
+            <X className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 

@@ -276,21 +276,21 @@ export default function ContratosTab() {
             <p>Nenhum contrato encontrado</p>
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700">
+          <table className="w-full table-premium">
+            <thead>
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Contrato</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Cliente</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Tipo / Cobrança</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Valor</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Vigência</th>
-                <th className="text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-3">Status</th>
-                <th className="px-6 py-3"></th>
+                <th className="text-left">Contrato</th>
+                <th className="text-left">Cliente</th>
+                <th className="text-left">Tipo / Cobrança</th>
+                <th className="text-left">Valor</th>
+                <th className="text-left">Vigência</th>
+                <th className="text-left">Status</th>
+                <th></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+            <tbody>
               {contracts.map((c) => (
-                <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                <tr key={c.id}>
                   <td className="px-6 py-4">
                     <p className="text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{c.title}</Sensitive></p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 font-mono"><Sensitive>{c.number}</Sensitive></p>
@@ -314,7 +314,8 @@ export default function ContratosTab() {
                     {c.auto_renew && <span className="text-xs text-green-600">↻ Renovação auto.</span>}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
+                      {c.status === 'active' && <span className="dot-pulse bg-green-500" />}
                       {statusLabels[c.status] || c.status}
                     </span>
                   </td>
