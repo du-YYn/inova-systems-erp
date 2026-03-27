@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
-  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target,
+  Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target, GripVertical,
 } from 'lucide-react';
 import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
@@ -343,7 +343,11 @@ function DroppableColumn({ id, children }: { id: string; children: React.ReactNo
   );
 }
 
-function DraggableCard({ prospect, children }: { prospect: Prospect; children: React.ReactNode }) {
+function DraggableCard({ prospect, onCardClick, children }: {
+  prospect: Prospect;
+  onCardClick: () => void;
+  children: React.ReactNode;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `prospect-${prospect.id}`,
     data: { prospect },
@@ -356,8 +360,23 @@ function DraggableCard({ prospect, children }: { prospect: Prospect; children: R
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {/* O card em si é clicável para abrir o detalhe */}
+      <div
+        className="card card-hover p-3 cursor-pointer animate-stagger-in relative group/card"
+        onClick={onCardClick}
+      >
+        {/* Drag handle — ícone visível no hover, separado do onClick do card */}
+        <div
+          {...listeners}
+          onClick={e => e.stopPropagation()}
+          className="absolute top-2 right-2 p-0.5 rounded text-gray-300 opacity-0 group-hover/card:opacity-100 transition-opacity cursor-grab active:cursor-grabbing z-10"
+          title="Arrastar"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -1138,8 +1157,8 @@ export default function FunilTab() {
                   {/* Cards */}
                   <div className="flex flex-col gap-2 min-h-[60px]">
                     {col.map(prospect => (
-                      <DraggableCard key={prospect.id} prospect={prospect}>
-                      <div className="card card-hover p-3 cursor-pointer animate-stagger-in" onClick={() => setViewingProspect(prospect)}>
+                      <DraggableCard key={prospect.id} prospect={prospect} onCardClick={() => setViewingProspect(prospect)}>
+                      <div>
                         <div className="flex items-center justify-between mb-0.5">
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{prospect.company_name}</Sensitive></p>
                           {prospect.temperature && (
