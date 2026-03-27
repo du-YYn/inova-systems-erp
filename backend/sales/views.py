@@ -185,7 +185,12 @@ class ProposalViewSet(viewsets.ModelViewSet):
             else:
                 last_seq = 0
             next_number = f"PROP-{last_seq + 1:05d}"
-            serializer.save(number=next_number, created_by=self.request.user)
+            proposal = serializer.save(number=next_number, created_by=self.request.user)
+            # Mover o lead para "Proposta Enviada" automaticamente
+            if proposal.prospect_id:
+                Prospect.objects.filter(pk=proposal.prospect_id).exclude(
+                    status__in=['won', 'lost', 'not_closed'],
+                ).update(status='proposal')
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):

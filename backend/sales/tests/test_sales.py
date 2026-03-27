@@ -330,6 +330,44 @@ class TestProposal:
         response = viewer_client.get(self.url)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    def test_create_proposal_from_prospect_moves_status(self, manager_client, db, manager_user):
+        """Criar proposta vinculada a um lead deve mover o lead para 'proposal'."""
+        prospect = Prospect.objects.create(
+            company_name='Lead Corp', contact_name='Ana', contact_email='ana@lead.com',
+            status='qualified', source='website', created_by=manager_user,
+        )
+        payload = {
+            'prospect': prospect.id,
+            'title': 'Proposta Lead Corp',
+            'proposal_type': 'software_dev',
+            'billing_type': 'fixed',
+            'total_value': '20000.00',
+            'valid_until': '2026-12-31',
+        }
+        response = manager_client.post(self.url, payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        prospect.refresh_from_db()
+        assert prospect.status == 'proposal'
+
+    def test_create_proposal_does_not_move_won_prospect(self, manager_client, db, manager_user):
+        """Lead já ganho não deve ter o status revertido ao criar segunda proposta."""
+        prospect = Prospect.objects.create(
+            company_name='Won Corp', contact_name='Bob', contact_email='bob@won.com',
+            status='won', source='referral', created_by=manager_user,
+        )
+        payload = {
+            'prospect': prospect.id,
+            'title': 'Proposta Won Corp',
+            'proposal_type': 'consulting',
+            'billing_type': 'hourly',
+            'total_value': '5000.00',
+            'valid_until': '2026-12-31',
+        }
+        response = manager_client.post(self.url, payload)
+        assert response.status_code == status.HTTP_201_CREATED
+        prospect.refresh_from_db()
+        assert prospect.status == 'won'  # não foi alterado
+
     def test_unauthenticated_forbidden(self, api_client):
         response = api_client.get(self.url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
