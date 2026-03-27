@@ -5,8 +5,8 @@ import {
   Plus, Search, Edit, Trash2, TrendingUp, X, LayoutList,
   Kanban, ChevronDown, UserPlus, CheckCircle, Calendar, Target, GripVertical, FileText,
 } from 'lucide-react';
-import { DndContext, DragOverlay, closestCenter, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
-import { useSortable } from '@dnd-kit/sortable';
+import { DndContext, DragOverlay, rectIntersection, PointerSensor, useDroppable, useSensor, useSensors, DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -330,13 +330,13 @@ function Section({ title, color, defaultOpen = true, children }: {
 // ─── Drag-and-Drop Components ────────────────────────────────────────────────
 
 function DroppableColumn({ id, children }: { id: string; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useSortable({ id, data: { type: 'column' } });
+  const { setNodeRef, isOver } = useDroppable({ id, data: { type: 'column' } });
 
   return (
     <div
       ref={setNodeRef}
       className={`w-60 flex flex-col gap-2 transition-all duration-200 rounded-xl ${
-        isOver ? 'ring-2 ring-accent-gold/30 bg-accent-gold/5' : ''
+        isOver ? 'ring-2 ring-accent-gold/40 bg-accent-gold/5' : ''
       }`}
     >
       {children}
@@ -544,13 +544,19 @@ export default function FunilTab() {
     if (!over) return;
 
     const prospect = (active.data.current as { prospect: Prospect }).prospect;
-    const targetStatus = over.id as string;
+    let targetStatus = over.id as string;
 
-    // Only process if dropping on a column (not another card)
+    // Se caiu em cima de outro card (id = "prospect-123"), resolve a coluna pelo status desse card
+    if (targetStatus.startsWith('prospect-')) {
+      const targetId = Number(targetStatus.replace('prospect-', ''));
+      const targetProspect = allProspects.find(p => p.id === targetId);
+      if (!targetProspect) return;
+      targetStatus = targetProspect.status;
+    }
+
     if (!PIPELINE_COLUMNS.includes(targetStatus)) return;
     if (prospect.status === targetStatus) return;
 
-    // Use the same handleStatusChange which handles lost/follow_up modals
     handleStatusChange(prospect, targetStatus);
   };
 
@@ -1167,12 +1173,13 @@ export default function FunilTab() {
 
       {/* ─── Pipeline View ─────────────────────────────────────────────────── */}
       {viewMode === 'pipeline' && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="overflow-x-auto pb-4">
           <div className="flex gap-3 min-w-max">
             {PIPELINE_COLUMNS.map((status) => {
               const col = allProspects.filter(p => p.status === status);
               const colValue = col.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
+              const colIds = col.map(p => `prospect-${p.id}`);
               return (
                 <DroppableColumn key={status} id={status}>
                   {/* Column header */}
@@ -1186,6 +1193,7 @@ export default function FunilTab() {
                     <p className="text-xs text-gray-400 dark:text-gray-500 px-1 font-medium tabular-nums"><Sensitive>{formatCurrency(colValue)}</Sensitive></p>
                   )}
                   {/* Cards */}
+                  <SortableContext items={colIds} strategy={verticalListSortingStrategy}>
                   <div className="flex flex-col gap-2 min-h-[60px]">
                     {col.map(prospect => (
                       <DraggableCard key={prospect.id} prospect={prospect} onCardClick={() => setViewingProspect(prospect)}>
@@ -1291,6 +1299,7 @@ export default function FunilTab() {
                       </DraggableCard>
                     ))}
                   </div>
+                  </SortableContext>
                   {col.length === 0 && (
                     <div className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-6 text-center">
                       <div className="w-10 h-10 bg-gray-50 dark:bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-2">
