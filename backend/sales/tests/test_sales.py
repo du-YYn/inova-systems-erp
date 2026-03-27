@@ -346,6 +346,10 @@ class TestProposal:
         }
         response = manager_client.post(self.url, payload)
         assert response.status_code == status.HTTP_201_CREATED
+        # Proposta nasce como 'sent', não 'draft'
+        assert response.data['status'] == 'sent'
+        assert response.data['sent_at'] is not None
+        # Lead movido para 'Proposta Enviada'
         prospect.refresh_from_db()
         assert prospect.status == 'proposal'
 
