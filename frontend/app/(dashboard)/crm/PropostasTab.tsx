@@ -35,7 +35,6 @@ interface Proposal {
   created_at: string;
 }
 
-interface Customer { id: number; company_name: string; name: string; }
 interface ProspectOption {
   id: number;
   company_name: string;
@@ -73,15 +72,13 @@ const formatCurrency = (v: string | number) =>
 const EMPTY_FORM = {
   title: '', proposal_type: 'software_dev', billing_type: 'fixed',
   total_value: '', hours_estimated: '', hourly_rate: '',
-  customer: '', prospect: '', source_type: 'customer' as 'customer' | 'prospect',
-  notes: '', valid_until: '',
+  prospect: '', notes: '', valid_until: '',
 };
 
 export default function PropostasTab() {
   const toast = useToast();
   const { isDemoMode } = useDemoMode();
   const [proposals, setProposals] = useState<Proposal[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [prospects, setProspects] = useState<ProspectOption[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -101,17 +98,14 @@ export default function PropostasTab() {
     try {
       const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
       if (search) params.search = search;
-      const [propData, custData, prospData] = await Promise.all([
+      const [propData, prospData] = await Promise.all([
         api.get<{ results: Proposal[]; count: number }>('/sales/proposals/', params),
-        api.get<{ results: Customer[] }>('/sales/customers/'),
         api.get<{ results: ProspectOption[] }>('/sales/prospects/', { page_size: '200' }),
       ]);
       const pList = propData.results || propData;
-      const cList = custData.results || custData;
       const prList = prospData.results || prospData;
       setProposals(Array.isArray(pList) ? pList : []);
       setTotal(propData.count ?? (Array.isArray(pList) ? pList.length : 0));
-      setCustomers(Array.isArray(cList) ? cList : []);
       setProspects(Array.isArray(prList) ? prList : []);
     } catch {
       toast.error('Erro ao carregar propostas');
@@ -135,13 +129,11 @@ export default function PropostasTab() {
 
   const openEditModal = (p: Proposal) => {
     setEditingProposal(p);
-    const hasProspect = !p.customer && !!p.prospect_company;
+    setAutoFilled(false);
     setFormData({
       title: p.title, proposal_type: p.proposal_type, billing_type: p.billing_type,
       total_value: p.total_value || '', hours_estimated: p.hours_estimated || '',
-      hourly_rate: p.hourly_rate || '', customer: p.customer ? String(p.customer) : '',
-      prospect: hasProspect ? String((p as unknown as { prospect: number }).prospect || '') : '',
-      source_type: hasProspect ? 'prospect' : 'customer',
+      hourly_rate: p.hourly_rate || '', prospect: '',
       notes: p.notes || '', valid_until: p.valid_until || '',
     });
     setShowModal(true);
@@ -155,9 +147,7 @@ export default function PropostasTab() {
         title: formData.title, proposal_type: formData.proposal_type,
         billing_type: formData.billing_type, notes: formData.notes,
       };
-      if (formData.source_type === 'customer' && formData.customer) {
-        body.customer = Number(formData.customer);
-      } else if (formData.source_type === 'prospect' && formData.prospect) {
+      if (!editingProposal && formData.prospect) {
         body.prospect = Number(formData.prospect);
       }
       if (formData.total_value) body.total_value = formData.total_value;
@@ -371,46 +361,13 @@ export default function PropostasTab() {
               </button>
             </div>
             <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className={labelInput}>Título *</label>
-                <input type="text" required value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Título da proposta" />
-              </div>
-              <div>
-                <label className={labelInput}>Origem</label>
-                <div className="flex gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, source_type: 'customer', prospect: '' })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                      formData.source_type === 'customer'
-                        ? 'bg-accent-gold text-white border-accent-gold'
-                        : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-600 hover:border-accent-gold'
-                    }`}
-                  >
-                    Cliente Cadastrado
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, source_type: 'prospect', customer: '' })}
-                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                      formData.source_type === 'prospect'
-                        ? 'bg-accent-gold text-white border-accent-gold'
-                        : 'bg-white dark:bg-gray-800 text-gray-500 border-gray-200 dark:border-gray-600 hover:border-accent-gold'
-                    }`}
-                  >
-                    Lead do Funil
-                  </button>
-                </div>
-                {formData.source_type === 'customer' ? (
-                  <select value={formData.customer} onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                    className="input-field bg-white dark:bg-gray-800">
-                    <option value="">Selecione um cliente</option>
-                    {customers.map((c) => <option key={c.id} value={c.id}>{c.company_name || c.name}</option>)}
-                  </select>
-                ) : (
+
+              {/* Lead — seletor (apenas nova proposta) ou leitura (edição) */}
+              {!editingProposal ? (
+                <div>
+                  <label className={labelInput}>Lead *</label>
                   <select
+                    required
                     value={formData.prospect}
                     onChange={(e) => {
                       const selected = prospects.find(p => String(p.id) === e.target.value);
@@ -434,15 +391,32 @@ export default function PropostasTab() {
                     }}
                     className="input-field bg-white dark:bg-gray-800"
                   >
-                    <option value="">Selecione um lead</option>
-                    {prospects.map((p) => <option key={p.id} value={p.id}>{p.company_name} — {p.contact_name}</option>)}
+                    <option value="">Selecione o lead...</option>
+                    {prospects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.company_name} — {p.contact_name}</option>
+                    ))}
                   </select>
-                )}
-                {autoFilled && (
-                  <p className="mt-2 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                    <span>✦</span> Campos preenchidos automaticamente com os dados do lead — edite se necessário
+                  {autoFilled && (
+                    <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <span>✦</span> Campos preenchidos com os dados do lead — edite se necessário
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className={labelInput}>Lead / Cliente</label>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
+                    {editingProposal.customer_name || editingProposal.prospect_company || '—'}
                   </p>
-                )}
+                </div>
+              )}
+
+              <div>
+                <label className={labelInput}>Título *</label>
+                <input type="text" required value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
+                  placeholder={autoFilled ? '' : 'Título da proposta'} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -486,7 +460,8 @@ export default function PropostasTab() {
               <div>
                 <label className={labelInput}>Observações</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3} className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="Observações sobre a proposta..." />
+                  rows={3} className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
+                  placeholder="Observações sobre a proposta..." />
               </div>
               <div className="flex gap-2 pt-2">
                 <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowModal(false)}>
