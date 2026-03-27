@@ -29,6 +29,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "cep",
             "contacts",
             "is_active",
+            "source",
             "notes",
             "created_by",
             "created_by_name",

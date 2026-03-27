@@ -24,8 +24,14 @@ class Customer(models.Model):
         ('other', 'Outro'),
     ]
 
+    SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('crm', 'Via CRM'),
+    ]
+
     customer_type = models.CharField(max_length=2, choices=TYPE_CHOICES, default='PJ')
     segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='smb')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='manual')
     company_name = models.CharField(max_length=200, blank=True)
     trading_name = models.CharField(max_length=200, blank=True)
     name = models.CharField(max_length=200, blank=True)

@@ -341,6 +341,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
                         'company_name': proposal.prospect.company_name,
                         'name': proposal.prospect.contact_name,
                         'phone': proposal.prospect.contact_phone,
+                        'source': 'crm',
                         'created_by': request.user,
                     }
                 )

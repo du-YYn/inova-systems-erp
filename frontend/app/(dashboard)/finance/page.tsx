@@ -23,6 +23,13 @@ import {
   ArrowLeftRight,
   Filter,
   XCircle,
+  Users,
+  Building2,
+  User,
+  Search,
+  Edit,
+  Mail,
+  Phone,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
@@ -33,6 +40,44 @@ import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FinanceCustomer {
+  id: number;
+  customer_type: 'PF' | 'PJ';
+  company_name: string;
+  trading_name: string;
+  name: string;
+  document: string;
+  email: string;
+  phone: string;
+  city: string;
+  state: string;
+  is_active: boolean;
+  segment: string;
+  source: string;
+  created_at: string;
+}
+
+const CUSTOMER_EMPTY_FORM = {
+  customer_type: 'PJ',
+  company_name: '',
+  trading_name: '',
+  name: '',
+  document: '',
+  email: '',
+  phone: '',
+  city: '',
+  state: '',
+  segment: '',
+  notes: '',
+};
+
+const CUSTOMER_SEGMENT_LABELS: Record<string, string> = {
+  startup: 'Startup', smb: 'Pequena/Média Empresa', enterprise: 'Enterprise',
+  government: 'Governo', education: 'Educação', health: 'Saúde',
+  finance: 'Financeiro', retail: 'Varejo', industry: 'Indústria',
+  tech: 'Tecnologia', other: 'Outro',
+};
 
 interface DashboardStats {
   pending_receivables: number;
@@ -162,7 +207,7 @@ const BUDGET_PERIODS = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
-type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categories' | 'budgets' | 'cost_centers';
+type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categories' | 'budgets' | 'cost_centers' | 'customers';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -235,7 +280,7 @@ export default function FinancePage() {
   const [confirmDeleteInvoice, setConfirmDeleteInvoice] = useState<FullInvoice | null>(null);
   const [invoiceForm, setInvoiceForm] = useState({
     invoice_type: 'receivable', description: '', value: '', due_date: today,
-    issue_date: today, bank_account: '', category: '',
+    issue_date: today, bank_account: '', category: '', customer: '',
   });
 
   // Transactions state
@@ -263,6 +308,16 @@ export default function FinancePage() {
   const [bankAccountForm, setBankAccountForm] = useState({
     name: '', bank: '', account_type: 'checking', agency: '', account_number: '', pix_key: '',
   });
+
+  // Customers state
+  const [financeCustomers, setFinanceCustomers] = useState<FinanceCustomer[]>([]);
+  const [loadingFinanceCustomers, setLoadingFinanceCustomers] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<FinanceCustomer | null>(null);
+  const [savingCustomer, setSavingCustomer] = useState(false);
+  const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState<FinanceCustomer | null>(null);
+  const [customerForm, setCustomerForm] = useState({ ...CUSTOMER_EMPTY_FORM });
 
   // ── Overview fetch ────────────────────────────────────────────────────────
 
@@ -395,6 +450,19 @@ export default function FinancePage() {
     }
   }, []);
 
+  const fetchFinanceCustomers = useCallback(async () => {
+    setLoadingFinanceCustomers(true);
+    try {
+      const data = await api.get<{ results?: FinanceCustomer[] }>('/sales/customers/', { page_size: '500' });
+      const list = data.results ?? data;
+      setFinanceCustomers(Array.isArray(list) ? list as FinanceCustomer[] : []);
+    } catch {
+      toast.error('Erro ao carregar clientes.');
+    } finally {
+      setLoadingFinanceCustomers(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTab === 'categories' && categories.length === 0) fetchCategories();
     if (activeTab === 'budgets') {
@@ -402,12 +470,13 @@ export default function FinancePage() {
       if (categories.length === 0) fetchCategories();
     }
     if (activeTab === 'cost_centers' && costCenters.length === 0) fetchCostCenters();
-    if (activeTab === 'invoices') fetchInvoices();
+    if (activeTab === 'invoices') { fetchInvoices(); fetchFinanceCustomers(); }
     if (activeTab === 'transactions') {
       fetchTransactions();
       if (bankAccounts.length === 0) fetchData();
     }
     if (activeTab === 'bank_accounts') fetchFullBankAccounts();
+    if (activeTab === 'customers') fetchFinanceCustomers();
   }, [activeTab]);
 
   // ── Revenue / Expense handlers ────────────────────────────────────────────
@@ -576,7 +645,7 @@ export default function FinancePage() {
 
   const openNewInvoice = () => {
     setEditingInvoice(null);
-    setInvoiceForm({ invoice_type: 'receivable', description: '', value: '', due_date: today, issue_date: today, bank_account: bankAccounts.length > 0 ? String(bankAccounts[0].id) : '', category: '' });
+    setInvoiceForm({ invoice_type: 'receivable', description: '', value: '', due_date: today, issue_date: today, bank_account: bankAccounts.length > 0 ? String(bankAccounts[0].id) : '', category: '', customer: '' });
     setShowInvoiceModal(true);
   };
 
@@ -587,6 +656,7 @@ export default function FinancePage() {
       due_date: inv.due_date, issue_date: inv.issue_date,
       bank_account: inv.bank_account ? String(inv.bank_account) : '',
       category: inv.category ? String(inv.category) : '',
+      customer: inv.customer ? String(inv.customer) : '',
     });
     setShowInvoiceModal(true);
   };
@@ -601,6 +671,7 @@ export default function FinancePage() {
       };
       if (invoiceForm.bank_account) body.bank_account = Number(invoiceForm.bank_account);
       if (invoiceForm.category) body.category = Number(invoiceForm.category);
+      if (invoiceForm.customer) body.customer = Number(invoiceForm.customer);
       if (editingInvoice) {
         await api.patch(`/finance/invoices/${editingInvoice.id}/`, body);
       } else {
@@ -680,6 +751,65 @@ export default function FinancePage() {
 
   // ── Bank Account handlers ─────────────────────────────────────────────────
 
+  // ── Customer handlers ─────────────────────────────────────────────────────
+
+  const openNewCustomer = () => {
+    setEditingCustomer(null);
+    setCustomerForm({ ...CUSTOMER_EMPTY_FORM });
+    setShowCustomerModal(true);
+  };
+
+  const openEditCustomer = (c: FinanceCustomer) => {
+    setEditingCustomer(c);
+    setCustomerForm({
+      customer_type: c.customer_type, company_name: c.company_name || '',
+      trading_name: c.trading_name || '', name: c.name || '',
+      document: c.document || '', email: c.email || '', phone: c.phone || '',
+      city: c.city || '', state: c.state || '', segment: c.segment || '', notes: '',
+    });
+    setShowCustomerModal(true);
+  };
+
+  const handleSaveCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingCustomer(true);
+    try {
+      if (editingCustomer) {
+        await api.patch(`/sales/customers/${editingCustomer.id}/`, customerForm);
+        toast.success('Cliente atualizado!');
+      } else {
+        await api.post('/sales/customers/', customerForm);
+        toast.success('Cliente cadastrado!');
+      }
+      setShowCustomerModal(false);
+      fetchFinanceCustomers();
+    } catch {
+      toast.error('Erro ao salvar cliente.');
+    } finally {
+      setSavingCustomer(false);
+    }
+  };
+
+  const handleDeleteCustomer = async () => {
+    if (!confirmDeleteCustomer) return;
+    try {
+      await api.delete(`/sales/customers/${confirmDeleteCustomer.id}/`);
+      toast.success('Cliente removido.');
+      setConfirmDeleteCustomer(null);
+      fetchFinanceCustomers();
+    } catch {
+      toast.error('Erro ao remover cliente.');
+    }
+  };
+
+  const filteredCustomers = financeCustomers.filter(c => {
+    if (!customerSearch) return true;
+    const q = customerSearch.toLowerCase();
+    return (c.company_name || c.name || '').toLowerCase().includes(q) ||
+           c.email.toLowerCase().includes(q) ||
+           c.document.includes(q);
+  });
+
   const openNewBankAccount = () => {
     setEditingBankAccount(null);
     setBankAccountForm({ name: '', bank: '', account_type: 'checking', agency: '', account_number: '', pix_key: '' });
@@ -742,6 +872,7 @@ export default function FinancePage() {
     { key: 'categories', label: 'Categorias', icon: <Tag className="w-4 h-4" /> },
     { key: 'budgets', label: 'Orçamentos', icon: <PieChart className="w-4 h-4" /> },
     { key: 'cost_centers', label: 'Centros de Custo', icon: <Building className="w-4 h-4" /> },
+    { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
   ];
 
   return (
@@ -798,6 +929,12 @@ export default function FinancePage() {
           <button onClick={openNewCostCenter}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Novo Centro de Custo
+          </button>
+        )}
+        {activeTab === 'customers' && (
+          <button onClick={openNewCustomer}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
+            <Plus className="w-5 h-5" /> Cadastrar Cliente
           </button>
         )}
       </div>
@@ -1391,6 +1528,117 @@ export default function FinancePage() {
         </div>
       )}
 
+      {/* ─── Customers Tab ─────────────────────────────────────────────────── */}
+      {activeTab === 'customers' && (
+        <div>
+          {/* Search bar */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, email ou documento..."
+                value={customerSearch}
+                onChange={e => setCustomerSearch(e.target.value)}
+                className="input-field pl-9"
+              />
+            </div>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {filteredCustomers.length} cliente{filteredCustomers.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="card overflow-hidden">
+            {loadingFinanceCustomers ? (
+              <div className="p-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 skeleton" />)}
+              </div>
+            ) : filteredCustomers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
+                <Users className="w-12 h-12 mb-3 opacity-30" />
+                <p className="font-medium mb-1">Nenhum cliente encontrado</p>
+                <p className="text-sm">Cadastre o primeiro cliente clicando em "Cadastrar Cliente"</p>
+              </div>
+            ) : (
+              <table className="w-full table-premium">
+                <thead>
+                  <tr>
+                    <th className="text-left">Cliente</th>
+                    <th className="hidden md:table-cell text-left">Tipo</th>
+                    <th className="hidden md:table-cell text-left">Contato</th>
+                    <th className="text-left">Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCustomers.map(c => (
+                    <tr key={c.id}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${c.customer_type === 'PJ' ? 'bg-blue-100 dark:bg-blue-900/40' : 'bg-purple-100 dark:bg-purple-900/40'}`}>
+                            {c.customer_type === 'PJ'
+                              ? <Building2 className="w-4 h-4 text-blue-600" />
+                              : <User className="w-4 h-4 text-purple-600" />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              <Sensitive>{c.company_name || c.name || '—'}</Sensitive>
+                            </p>
+                            {c.document && <p className="text-xs text-gray-500 dark:text-gray-400 font-mono"><Sensitive>{c.document}</Sensitive></p>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="hidden md:table-cell px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${c.customer_type === 'PJ' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-800'}`}>
+                            {c.customer_type === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+                          </span>
+                          {c.source === 'crm' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 dark:bg-amber-900/25 text-amber-700 w-fit">
+                              Via CRM
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="hidden md:table-cell px-4 py-3">
+                        {c.email && (
+                          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
+                            <Mail className="w-3 h-3 flex-shrink-0" /><Sensitive>{c.email}</Sensitive>
+                          </div>
+                        )}
+                        {c.phone && (
+                          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                            <Phone className="w-3 h-3 flex-shrink-0" /><Sensitive>{c.phone}</Sensitive>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${c.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600'}`}>
+                          {c.is_active && <span className="dot-pulse bg-green-500" />}
+                          {c.is_active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => openEditCustomer(c)} aria-label="Editar"
+                            className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setConfirmDeleteCustomer(c)} aria-label="Excluir"
+                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ═══════════════════════ MODALS ══════════════════════════════════════ */}
 
       {/* Invoice Modal */}
@@ -1462,6 +1710,24 @@ export default function FinancePage() {
                   </select>
                 </div>
               )}
+              {/* Cliente */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cliente</label>
+                  <button type="button" onClick={() => { setEditingCustomer(null); setCustomerForm({ ...CUSTOMER_EMPTY_FORM }); setShowCustomerModal(true); }}
+                    className="text-xs text-accent-gold hover:text-accent-gold-dark font-medium flex items-center gap-1 transition-colors">
+                    <Plus className="w-3 h-3" /> Novo
+                  </button>
+                </div>
+                <select value={invoiceForm.customer}
+                  onChange={e => setInvoiceForm({ ...invoiceForm, customer: e.target.value })}
+                  className="input-field bg-white dark:bg-gray-800">
+                  <option value="">Sem cliente vinculado</option>
+                  {financeCustomers.map(c => (
+                    <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setShowInvoiceModal(false)}
                   className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
@@ -1918,6 +2184,119 @@ export default function FinancePage() {
         </div>
       )}
 
+      {/* Customer Modal */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <FocusTrap onClose={() => setShowCustomerModal(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{editingCustomer ? 'Editar Cliente' : 'Cadastrar Cliente'}</h2>
+              <button onClick={() => setShowCustomerModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveCustomer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo *</label>
+                <select required value={customerForm.customer_type}
+                  onChange={e => setCustomerForm({ ...customerForm, customer_type: e.target.value })}
+                  className="input-field bg-white dark:bg-gray-800">
+                  <option value="PJ">Pessoa Jurídica</option>
+                  <option value="PF">Pessoa Física</option>
+                </select>
+              </div>
+              {customerForm.customer_type === 'PJ' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Razão Social *</label>
+                    <input type="text" required value={customerForm.company_name}
+                      onChange={e => setCustomerForm({ ...customerForm, company_name: e.target.value })}
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome Fantasia</label>
+                    <input type="text" value={customerForm.trading_name}
+                      onChange={e => setCustomerForm({ ...customerForm, trading_name: e.target.value })}
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome Completo *</label>
+                  <input type="text" required value={customerForm.name}
+                    onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })}
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{customerForm.customer_type === 'PJ' ? 'CNPJ' : 'CPF'}</label>
+                  <input type="text" value={customerForm.document}
+                    onChange={e => setCustomerForm({ ...customerForm, document: e.target.value })}
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Segmento</label>
+                  <select value={customerForm.segment}
+                    onChange={e => setCustomerForm({ ...customerForm, segment: e.target.value })}
+                    className="input-field bg-white dark:bg-gray-800">
+                    <option value="">Selecione</option>
+                    {Object.entries(CUSTOMER_SEGMENT_LABELS).map(([v, l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">E-mail</label>
+                  <input type="email" value={customerForm.email}
+                    onChange={e => setCustomerForm({ ...customerForm, email: e.target.value })}
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Telefone</label>
+                  <input type="text" value={customerForm.phone}
+                    onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })}
+                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Cidade</label>
+                  <input type="text" value={customerForm.city}
+                    onChange={e => setCustomerForm({ ...customerForm, city: e.target.value })}
+                    className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado (UF)</label>
+                  <input type="text" maxLength={2} value={customerForm.state}
+                    onChange={e => setCustomerForm({ ...customerForm, state: e.target.value.toUpperCase() })}
+                    className="input-field" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Observações</label>
+                <textarea rows={2} value={customerForm.notes}
+                  onChange={e => setCustomerForm({ ...customerForm, notes: e.target.value })}
+                  className="input-field resize-none" />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setShowCustomerModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={savingCustomer}
+                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
+                  {savingCustomer ? 'Salvando...' : editingCustomer ? 'Atualizar' : 'Cadastrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+          </FocusTrap>
+        </div>
+      )}
+
       {/* Confirm Dialogs */}
       <ConfirmDialog
         open={!!confirmDeleteCategory}
@@ -1960,6 +2339,13 @@ export default function FinancePage() {
         description={`Deseja remover a conta "${confirmDeleteBankAccount?.name}"?`}
         onConfirm={handleDeleteBankAccount}
         onCancel={() => setConfirmDeleteBankAccount(null)}
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteCustomer}
+        title="Remover Cliente"
+        description={`Deseja remover o cliente "${confirmDeleteCustomer?.company_name || confirmDeleteCustomer?.name}"? Esta ação não pode ser desfeita.`}
+        onConfirm={handleDeleteCustomer}
+        onCancel={() => setConfirmDeleteCustomer(null)}
       />
     </div>
   );
