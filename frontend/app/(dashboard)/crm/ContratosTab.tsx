@@ -34,7 +34,7 @@ interface Contract {
 }
 
 interface Customer { id: number; company_name: string; name: string; }
-interface Prospect { id: number; company_name: string; contact_name: string; status: string; }
+interface Prospect { id: number; company_name: string; contact_name: string; email?: string; phone?: string; status: string; }
 interface DashboardStats {
   total_contracts: number;
   active_contracts: number;
@@ -157,7 +157,7 @@ function ContractForm({
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), onQuickCreate())}
                 className="flex-1 input-field" autoFocus />
               <button type="button" onClick={onQuickCreate}
-                disabled={creatingCustomer || !quickCreateName.trim()}
+                disabled={creatingCustomer || quickCreateName.trim().length < 2}
                 className="px-4 py-2 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shrink-0">
                 {creatingCustomer ? '...' : 'Criar'}
               </button>
@@ -331,18 +331,19 @@ export default function ContratosTab() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   // ── Quick create customer ────────────────────────────────────────────────
-  const handleQuickCreateCustomer = async () => {
-    if (!quickCreateName.trim()) return;
+  const handleQuickCreateCustomer = async (setForm: (f: FormData) => void, currentForm: FormData) => {
+    const name = quickCreateName.trim();
+    if (name.length < 2) { toast.error('Nome deve ter pelo menos 2 caracteres.'); return; }
     setCreatingCustomer(true);
     try {
-      const newCustomer = await api.post<Customer>('/sales/customers/', { company_name: quickCreateName.trim() });
+      const newCustomer = await api.post<Customer>('/sales/customers/', { company_name: name });
       setCustomers(prev => [...prev, newCustomer]);
-      setFormData(prev => ({ ...prev, customer: String(newCustomer.id) }));
+      setForm({ ...currentForm, customer: String(newCustomer.id) });
       setShowQuickCreate(false);
       setQuickCreateName('');
       toast.success('Cliente criado!');
-    } catch {
-      toast.error('Erro ao criar cliente.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Erro ao criar cliente.');
     } finally {
       setCreatingCustomer(false);
     }
@@ -374,11 +375,20 @@ export default function ContratosTab() {
     if (customerValue.startsWith('prospect_')) {
       const prospectId = Number(customerValue.replace('prospect_', ''));
       const prospect = prospects.find(p => p.id === prospectId);
-      if (!prospect) return null;
-      const newCustomer = await api.post<Customer>('/sales/customers/', {
+      if (!prospect) throw new Error('Lead não encontrado. Recarregue a página e tente novamente.');
+      // Avoid creating duplicate customers
+      const existing = customers.find(
+        c => c.company_name?.toLowerCase() === prospect.company_name?.toLowerCase()
+      );
+      if (existing) return existing.id;
+      const payload: Record<string, string> = {
         company_name: prospect.company_name,
         name: prospect.contact_name,
-      });
+      };
+      if (prospect.email) payload.email = prospect.email;
+      if (prospect.phone) payload.phone = prospect.phone;
+      const newCustomer = await api.post<Customer>('/sales/customers/', payload);
+      setCustomers(prev => [...prev, newCustomer]);
       return newCustomer.id;
     }
     return Number(customerValue);
@@ -410,6 +420,8 @@ export default function ContratosTab() {
 
   // ── Open edit ────────────────────────────────────────────────────────────
   const openEdit = (c: Contract) => {
+    setShowQuickCreate(false);
+    setQuickCreateName('');
     setEditForm({
       title: c.title,
       customer: c.customer ? String(c.customer) : '',
@@ -490,7 +502,7 @@ export default function ContratosTab() {
   const formProps = (form: FormData, setForm: (f: FormData) => void, isEdit: boolean) => ({
     form, setForm, customers, prospects,
     showQuickCreate, setShowQuickCreate, quickCreateName, setQuickCreateName,
-    creatingCustomer, onQuickCreate: handleQuickCreateCustomer, isEdit,
+    creatingCustomer, onQuickCreate: () => handleQuickCreateCustomer(setForm, form), isEdit,
   });
 
   return (
@@ -704,14 +716,14 @@ export default function ContratosTab() {
       {/* ── Edit Modal ───────────────────────────────────────────────────── */}
       {editingContract && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <FocusTrap onClose={() => setEditingContract(null)}>
+          <FocusTrap onClose={() => { setEditingContract(null); setShowQuickCreate(false); setQuickCreateName(''); }}>
             <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar Contrato</h2>
                   <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{editingContract.number}</p>
                 </div>
-                <button onClick={() => setEditingContract(null)}
+                <button onClick={() => { setEditingContract(null); setShowQuickCreate(false); setQuickCreateName(''); }}
                   className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
                   <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
@@ -719,7 +731,7 @@ export default function ContratosTab() {
               <form onSubmit={handleUpdate}>
                 <ContractForm {...formProps(editForm, setEditForm, true)} />
                 <div className="flex gap-3 pt-6 mt-2">
-                  <button type="button" onClick={() => setEditingContract(null)}
+                  <button type="button" onClick={() => { setEditingContract(null); setShowQuickCreate(false); setQuickCreateName(''); }}
                     className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     Cancelar
                   </button>
