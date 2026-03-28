@@ -419,6 +419,19 @@ class ContractViewSet(viewsets.ModelViewSet):
             serializer.save(number=next_number, created_by=self.request.user)
 
     @action(detail=True, methods=['post'])
+    def submit(self, request, pk=None):
+        contract = self.get_object()
+        if contract.status != 'draft':
+            return Response(
+                {'error': f'Apenas contratos em rascunho podem ser enviados para assinatura (status atual: {contract.status})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        contract.status = 'pending_signature'
+        contract.save()
+        logger.info(f"Contrato {contract.id} enviado para assinatura por {request.user.username}")
+        return Response(ContractSerializer(contract).data)
+
+    @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
         contract = self.get_object()
         if contract.status != 'pending_signature':
@@ -434,9 +447,9 @@ class ContractViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         contract = self.get_object()
-        if contract.status == 'cancelled':
+        if contract.status not in ('pending_signature', 'active'):
             return Response(
-                {'error': 'Contrato já está cancelado'},
+                {'error': f'Contrato não pode ser cancelado (status atual: {contract.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         contract.status = 'cancelled'
@@ -444,13 +457,27 @@ class ContractViewSet(viewsets.ModelViewSet):
         logger.info(f"Contrato {contract.id} cancelado por {request.user.username}")
         return Response(ContractSerializer(contract).data)
 
+    @action(detail=True, methods=['post'])
+    def renew(self, request, pk=None):
+        contract = self.get_object()
+        if contract.status not in ('expired', 'active'):
+            return Response(
+                {'error': f'Contrato não pode ser renovado (status atual: {contract.status})'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        contract.status = 'renewed'
+        contract.save()
+        logger.info(f"Contrato {contract.id} renovado por {request.user.username}")
+        return Response(ContractSerializer(contract).data)
+
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         qs = self.get_queryset()
+        active_statuses = Q(status='active') | Q(status='renewed')
         stats = qs.aggregate(
             total=Count('id'),
-            active_count=Count('id', filter=Q(status='active')),
-            mrr=Sum('monthly_value', filter=Q(status='active')),
+            active_count=Count('id', filter=Q(status='active') | Q(status='renewed')),
+            mrr=Sum('monthly_value', filter=active_statuses),
             expiring_count=Count(
                 'id',
                 filter=Q(status='active', end_date__lte=timezone.now().date() + timedelta(days=30))

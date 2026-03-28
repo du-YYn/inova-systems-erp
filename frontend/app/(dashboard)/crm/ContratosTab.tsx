@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ScrollText, TrendingUp, CheckCircle, AlertTriangle, Trash2, X } from 'lucide-react';
+import { Plus, Search, ScrollText, TrendingUp, CheckCircle, AlertTriangle, Trash2, X, Edit2, FileSignature, RefreshCw } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -26,7 +26,11 @@ interface Contract {
   total_hours_monthly: string | null;
   status: string;
   auto_renew: boolean;
+  renewal_days: number;
+  notes: string;
+  terms: string;
   created_at: string;
+  updated_at: string;
 }
 
 interface Customer { id: number; company_name: string; name: string; }
@@ -41,12 +45,12 @@ interface DashboardStats {
 const PAGE_SIZE = 10;
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
-  pending_signature: 'bg-yellow-100 text-yellow-800',
-  active: 'bg-green-100 text-green-800',
-  renewed: 'bg-blue-100 text-blue-800',
-  cancelled: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
+  draft:               'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
+  pending_signature:   'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+  active:              'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  renewed:             'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+  cancelled:           'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  expired:             'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
 };
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', pending_signature: 'Aguard. Assinatura',
@@ -70,9 +74,195 @@ const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('pt-
 
 const EMPTY_FORM = {
   title: '', customer: '', contract_type: 'software_dev', billing_type: 'fixed',
-  start_date: new Date().toISOString().split('T')[0], end_date: '', monthly_value: '', hourly_rate: '',
-  total_hours_monthly: '', auto_renew: false, notes: '', terms: '',
+  start_date: new Date().toISOString().split('T')[0], end_date: '',
+  monthly_value: '', hourly_rate: '', total_hours_monthly: '',
+  auto_renew: false, renewal_days: '30', notes: '', terms: '',
 };
+
+type FormData = typeof EMPTY_FORM;
+
+function ContractForm({
+  form, setForm, customers, prospects,
+  showQuickCreate, setShowQuickCreate, quickCreateName, setQuickCreateName,
+  creatingCustomer, onQuickCreate, isEdit,
+}: {
+  form: FormData; setForm: (f: FormData) => void;
+  customers: Customer[]; prospects: Prospect[];
+  showQuickCreate: boolean; setShowQuickCreate: (v: boolean) => void;
+  quickCreateName: string; setQuickCreateName: (v: string) => void;
+  creatingCustomer: boolean; onQuickCreate: () => void;
+  isEdit: boolean;
+}) {
+  const lbl = 'block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1';
+
+  const validateDates = () => {
+    if (form.start_date && form.end_date && form.end_date < form.start_date) {
+      return 'Data de término deve ser após o início.';
+    }
+    return null;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Título */}
+      <div>
+        <label className={lbl}>Título *</label>
+        <input type="text" required value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          className="w-full input-field" />
+      </div>
+
+      {/* Cliente */}
+      <div>
+        <label className={lbl}>Cliente *</label>
+        {!showQuickCreate ? (
+          <>
+            <select value={form.customer}
+              onChange={(e) => setForm({ ...form, customer: e.target.value })}
+              className="w-full input-field bg-white dark:bg-gray-800">
+              <option value="">
+                {customers.length === 0 && prospects.length === 0
+                  ? 'Nenhum cliente — use "Cadastrar novo" abaixo'
+                  : 'Selecione um cliente'}
+              </option>
+              {customers.length > 0 && (
+                <optgroup label="Clientes Cadastrados">
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {prospects.length > 0 && (
+                <optgroup label="Do Funil (CRM)">
+                  {prospects.map((p) => (
+                    <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            {!isEdit && (
+              <button type="button"
+                onClick={() => { setShowQuickCreate(true); setForm({ ...form, customer: '' }); }}
+                className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-accent-gold/50 text-accent-gold hover:bg-accent-gold/5 rounded-lg text-sm transition-colors">
+                <Plus className="w-4 h-4" /> Cadastrar novo cliente
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="border border-accent-gold/30 bg-accent-gold/5 rounded-xl p-3 space-y-2">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Nome da empresa / cliente *</p>
+            <div className="flex gap-2">
+              <input type="text" placeholder="Ex: Empresa Ltda" value={quickCreateName}
+                onChange={(e) => setQuickCreateName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), onQuickCreate())}
+                className="flex-1 input-field" autoFocus />
+              <button type="button" onClick={onQuickCreate}
+                disabled={creatingCustomer || !quickCreateName.trim()}
+                className="px-4 py-2 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shrink-0">
+                {creatingCustomer ? '...' : 'Criar'}
+              </button>
+            </div>
+            <button type="button"
+              onClick={() => { setShowQuickCreate(false); setQuickCreateName(''); }}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+              ← Voltar para seleção
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Tipo / Cobrança */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={lbl}>Tipo</label>
+          <select value={form.contract_type}
+            onChange={(e) => setForm({ ...form, contract_type: e.target.value })}
+            className="w-full input-field bg-white dark:bg-gray-800">
+            {Object.entries(contractTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={lbl}>Cobrança</label>
+          <select value={form.billing_type}
+            onChange={(e) => setForm({ ...form, billing_type: e.target.value })}
+            className="w-full input-field bg-white dark:bg-gray-800">
+            {Object.entries(billingTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Datas */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={lbl}>Início *</label>
+          <input type="date" required value={form.start_date}
+            onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+            className="w-full input-field" />
+        </div>
+        <div>
+          <label className={lbl}>Término</label>
+          <input type="date" value={form.end_date}
+            min={form.start_date || undefined}
+            onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+            className="w-full input-field" />
+          {validateDates() && (
+            <p className="text-xs text-red-500 dark:text-red-400 mt-1">{validateDates()}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Valores */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={lbl}>Valor Mensal (R$)</label>
+          <input type="number" step="0.01" min="0" value={form.monthly_value}
+            onChange={(e) => setForm({ ...form, monthly_value: e.target.value })}
+            className="w-full input-field" />
+        </div>
+        <div>
+          <label className={lbl}>Valor/Hora (R$)</label>
+          <input type="number" step="0.01" min="0" value={form.hourly_rate}
+            onChange={(e) => setForm({ ...form, hourly_rate: e.target.value })}
+            className="w-full input-field" />
+        </div>
+      </div>
+
+      {/* Renovação */}
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={form.auto_renew}
+            onChange={(e) => setForm({ ...form, auto_renew: e.target.checked })}
+            className="w-4 h-4 rounded text-accent-gold" />
+          <span className="text-sm text-gray-500 dark:text-gray-400">Renovação automática</span>
+        </label>
+        {form.auto_renew && (
+          <div className="flex items-center gap-2">
+            <input type="number" min="1" max="365" value={form.renewal_days}
+              onChange={(e) => setForm({ ...form, renewal_days: e.target.value })}
+              className="w-20 input-field text-sm" />
+            <span className="text-sm text-gray-500 dark:text-gray-400">dias antes</span>
+          </div>
+        )}
+      </div>
+
+      {/* Observações */}
+      <div>
+        <label className={lbl}>Observações</label>
+        <textarea value={form.notes} rows={2}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          className="w-full input-field resize-none" placeholder="Anotações internas sobre o contrato..." />
+      </div>
+
+      {/* Termos */}
+      <div>
+        <label className={lbl}>Termos / Cláusulas</label>
+        <textarea value={form.terms} rows={3}
+          onChange={(e) => setForm({ ...form, terms: e.target.value })}
+          className="w-full input-field resize-none" placeholder="Cláusulas especiais, SLA, penalidades..." />
+      </div>
+    </div>
+  );
+}
 
 export default function ContratosTab() {
   const toast = useToast();
@@ -80,20 +270,29 @@ export default function ContratosTab() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [showQuickCreate, setShowQuickCreate] = useState(false);
-  const [quickCreateName, setQuickCreateName] = useState('');
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+
+  // Create modal
   const [showModal, setShowModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
+  const [formData, setFormData] = useState<FormData>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickCreateName, setQuickCreateName] = useState('');
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+
+  // Edit modal
+  const [editingContract, setEditingContract] = useState<Contract | null>(null);
+  const [editForm, setEditForm] = useState<FormData>({ ...EMPTY_FORM });
+  const [updating, setUpdating] = useState(false);
+
+  // Delete
+  const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [formData, setFormData] = useState({ ...EMPTY_FORM });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -124,7 +323,6 @@ export default function ContratosTab() {
   }, [page, search, filterStatus]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
   useEffect(() => {
     const id = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
     return () => clearTimeout(id);
@@ -132,6 +330,7 @@ export default function ContratosTab() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  // ── Quick create customer ────────────────────────────────────────────────
   const handleQuickCreateCustomer = async () => {
     if (!quickCreateName.trim()) return;
     setCreatingCustomer(true);
@@ -149,44 +348,53 @@ export default function ContratosTab() {
     }
   };
 
+  // ── Build body from form ─────────────────────────────────────────────────
+  const buildBody = (f: FormData, customerId: number | null) => {
+    const body: Record<string, unknown> = {
+      title: f.title,
+      contract_type: f.contract_type,
+      billing_type: f.billing_type,
+      auto_renew: f.auto_renew,
+      renewal_days: Number(f.renewal_days) || 30,
+      notes: f.notes,
+      terms: f.terms,
+    };
+    if (customerId) body.customer = customerId;
+    if (f.start_date) body.start_date = f.start_date;
+    if (f.end_date) body.end_date = f.end_date;
+    if (f.monthly_value) body.monthly_value = f.monthly_value;
+    if (f.hourly_rate) body.hourly_rate = f.hourly_rate;
+    if (f.total_hours_monthly) body.total_hours_monthly = f.total_hours_monthly;
+    return body;
+  };
+
+  // ── Resolve customer (may be prospect_xxx) ───────────────────────────────
+  const resolveCustomerId = async (customerValue: string): Promise<number | null> => {
+    if (!customerValue) return null;
+    if (customerValue.startsWith('prospect_')) {
+      const prospectId = Number(customerValue.replace('prospect_', ''));
+      const prospect = prospects.find(p => p.id === prospectId);
+      if (!prospect) return null;
+      const newCustomer = await api.post<Customer>('/sales/customers/', {
+        company_name: prospect.company_name,
+        name: prospect.contact_name,
+      });
+      return newCustomer.id;
+    }
+    return Number(customerValue);
+  };
+
+  // ── Create ───────────────────────────────────────────────────────────────
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.customer) { toast.error('Selecione ou cadastre um cliente.'); return; }
+    if (formData.end_date && formData.start_date && formData.end_date < formData.start_date) {
+      toast.error('Data de término deve ser após o início.'); return;
+    }
     setSaving(true);
     try {
-      let customerId: number | null = null;
-      if (formData.customer) {
-        if (formData.customer.startsWith('prospect_')) {
-          const prospectId = Number(formData.customer.replace('prospect_', ''));
-          const prospect = prospects.find(p => p.id === prospectId);
-          if (prospect) {
-            const newCustomer = await api.post<Customer>('/sales/customers/', {
-              company_name: prospect.company_name,
-              name: prospect.contact_name,
-            });
-            customerId = newCustomer.id;
-          }
-        } else {
-          customerId = Number(formData.customer);
-        }
-      }
-
-      const body: Record<string, unknown> = {
-        title: formData.title,
-        contract_type: formData.contract_type,
-        billing_type: formData.billing_type,
-        auto_renew: formData.auto_renew,
-      };
-      if (customerId) body.customer = customerId;
-      if (formData.start_date) body.start_date = formData.start_date;
-      if (formData.end_date) body.end_date = formData.end_date;
-      if (formData.monthly_value) body.monthly_value = formData.monthly_value;
-      if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
-      if (formData.total_hours_monthly) body.total_hours_monthly = formData.total_hours_monthly;
-      if (formData.notes) body.notes = formData.notes;
-      if (formData.terms) body.terms = formData.terms;
-
-      await api.post('/sales/contracts/', body);
+      const customerId = await resolveCustomerId(formData.customer);
+      await api.post('/sales/contracts/', buildBody(formData, customerId));
       toast.success('Contrato criado com sucesso!');
       setShowModal(false);
       setFormData({ ...EMPTY_FORM });
@@ -194,23 +402,70 @@ export default function ContratosTab() {
       setQuickCreateName('');
       fetchData();
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Erro ao criar contrato.';
-      toast.error(message);
+      toast.error(err instanceof ApiError ? err.message : 'Erro ao criar contrato.');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleStatusAction = async (contract: Contract, action: 'activate' | 'cancel') => {
+  // ── Open edit ────────────────────────────────────────────────────────────
+  const openEdit = (c: Contract) => {
+    setEditForm({
+      title: c.title,
+      customer: c.customer ? String(c.customer) : '',
+      contract_type: c.contract_type,
+      billing_type: c.billing_type,
+      start_date: c.start_date || '',
+      end_date: c.end_date || '',
+      monthly_value: c.monthly_value || '',
+      hourly_rate: c.hourly_rate || '',
+      total_hours_monthly: c.total_hours_monthly || '',
+      auto_renew: c.auto_renew,
+      renewal_days: String(c.renewal_days || 30),
+      notes: c.notes || '',
+      terms: c.terms || '',
+    });
+    setEditingContract(c);
+  };
+
+  // ── Update ───────────────────────────────────────────────────────────────
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingContract) return;
+    if (!editForm.customer) { toast.error('Selecione um cliente.'); return; }
+    if (editForm.end_date && editForm.start_date && editForm.end_date < editForm.start_date) {
+      toast.error('Data de término deve ser após o início.'); return;
+    }
+    setUpdating(true);
     try {
-      await api.post(`/sales/contracts/${contract.id}/${action}/`);
-      toast.success(action === 'activate' ? 'Contrato ativado!' : 'Contrato cancelado.');
+      const customerId = await resolveCustomerId(editForm.customer);
+      await api.patch(`/sales/contracts/${editingContract.id}/`, buildBody(editForm, customerId));
+      toast.success('Contrato atualizado!');
+      setEditingContract(null);
       fetchData();
-    } catch {
-      toast.error('Erro ao atualizar status do contrato.');
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Erro ao atualizar contrato.');
+    } finally {
+      setUpdating(false);
     }
   };
 
+  // ── Status actions ───────────────────────────────────────────────────────
+  const handleStatusAction = async (contract: Contract, action: 'submit' | 'activate' | 'cancel' | 'renew') => {
+    const labels: Record<string, string> = {
+      submit: 'enviado para assinatura', activate: 'ativado',
+      cancel: 'cancelado', renew: 'renovado',
+    };
+    try {
+      await api.post(`/sales/contracts/${contract.id}/${action}/`);
+      toast.success(`Contrato ${labels[action]}!`);
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Erro ao atualizar status.');
+    }
+  };
+
+  // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -227,22 +482,24 @@ export default function ContratosTab() {
   };
 
   const statusTabs = [
-    ['', 'Todos'],
-    ['pending_signature', 'Aguard. Assinatura'],
-    ['active', 'Ativos'],
-    ['cancelled', 'Cancelados'],
+    ['', 'Todos'], ['draft', 'Rascunho'], ['pending_signature', 'Aguard. Assinatura'],
+    ['active', 'Ativos'], ['expired', 'Expirados'], ['cancelled', 'Cancelados'],
   ];
+
+  // ── Shared modal form props ──────────────────────────────────────────────
+  const formProps = (form: FormData, setForm: (f: FormData) => void, isEdit: boolean) => ({
+    form, setForm, customers, prospects,
+    showQuickCreate, setShowQuickCreate, quickCreateName, setQuickCreateName,
+    creatingCustomer, onQuickCreate: handleQuickCreateCustomer, isEdit,
+  });
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div />
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Contrato
+        <button onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
+          <Plus className="w-5 h-5" /> Novo Contrato
         </button>
       </div>
 
@@ -288,25 +545,18 @@ export default function ContratosTab() {
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="relative flex-1 min-w-48 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <input
-            type="text"
-            placeholder="Buscar contrato..."
-            value={searchInput}
+          <input type="text" placeholder="Buscar contrato..." value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm"
-          />
+            className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
         </div>
         <div className="flex gap-2 flex-wrap">
           {statusTabs.map(([val, label]) => (
-            <button
-              key={val}
-              onClick={() => { setFilterStatus(val); setPage(1); }}
+            <button key={val} onClick={() => { setFilterStatus(val); setPage(1); }}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filterStatus === val
                   ? 'bg-accent-gold text-white'
                   : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-              }`}
-            >
+              }`}>
               {label}
             </button>
           ))}
@@ -314,10 +564,8 @@ export default function ContratosTab() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
-        {loading ? (
-          <div className="p-4"><TableSkeleton rows={8} cols={6} /></div>
-        ) : contracts.length === 0 ? (
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        {loading ? <TableSkeleton rows={5} cols={7} /> : contracts.length === 0 ? (
           <div className="text-center py-16 text-gray-500 dark:text-gray-400">
             <ScrollText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Nenhum contrato encontrado</p>
@@ -358,37 +606,54 @@ export default function ContratosTab() {
                   <td className="px-6 py-4">
                     <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(c.start_date)} →</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(c.end_date)}</p>
-                    {c.auto_renew && <span className="text-xs text-green-600">↻ Renovação auto.</span>}
+                    {c.auto_renew && <span className="text-xs text-green-600 dark:text-green-400">↻ Auto</span>}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'}`}>
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${statusColors[c.status] || statusColors.draft}`}>
                       {c.status === 'active' && <span className="dot-pulse bg-green-500" />}
                       {statusLabels[c.status] || c.status}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1 justify-end">
+                      {/* Draft → Enviar para assinatura */}
+                      {c.status === 'draft' && (
+                        <button onClick={() => handleStatusAction(c, 'submit')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800/30 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors">
+                          <FileSignature className="w-3 h-3" /> Assinar
+                        </button>
+                      )}
+                      {/* Pending → Ativar */}
                       {c.status === 'pending_signature' && (
-                        <button
-                          onClick={() => handleStatusAction(c, 'activate')}
-                          className="px-2 py-1 text-xs bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
-                        >
-                          Ativar
+                        <button onClick={() => handleStatusAction(c, 'activate')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/30 rounded hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
+                          <CheckCircle className="w-3 h-3" /> Ativar
                         </button>
                       )}
+                      {/* Active → Cancelar */}
                       {c.status === 'active' && (
-                        <button
-                          onClick={() => handleStatusAction(c, 'cancel')}
-                          className="px-2 py-1 text-xs bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors"
-                        >
-                          Cancelar
+                        <button onClick={() => handleStatusAction(c, 'cancel')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/30 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
+                          <X className="w-3 h-3" /> Cancelar
                         </button>
                       )}
-                      <button
-                        onClick={() => setDeleteTarget(c)}
+                      {/* Expired → Renovar */}
+                      {c.status === 'expired' && (
+                        <button onClick={() => handleStatusAction(c, 'renew')}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
+                          <RefreshCw className="w-3 h-3" /> Renovar
+                        </button>
+                      )}
+                      {/* Edit */}
+                      <button onClick={() => openEdit(c)}
+                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-accent-gold transition-colors"
+                        aria-label="Editar">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      {/* Delete */}
+                      <button onClick={() => setDeleteTarget(c)}
                         className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                        aria-label="Excluir"
-                      >
+                        aria-label="Excluir">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -406,185 +671,65 @@ export default function ContratosTab() {
         </div>
       )}
 
-      {/* Create Modal */}
+      {/* ── Create Modal ─────────────────────────────────────────────────── */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <FocusTrap onClose={() => setShowModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Contrato</h2>
-              <button onClick={() => { setShowModal(false); setShowQuickCreate(false); setQuickCreateName(''); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
-                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-              </button>
+          <FocusTrap onClose={() => { setShowModal(false); setShowQuickCreate(false); setQuickCreateName(''); }}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Contrato</h2>
+                <button onClick={() => { setShowModal(false); setShowQuickCreate(false); setQuickCreateName(''); }}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              </div>
+              <form onSubmit={handleCreate}>
+                <ContractForm {...formProps(formData, setFormData, false)} />
+                <div className="flex gap-3 pt-6 mt-2">
+                  <button type="button" onClick={() => { setShowModal(false); setShowQuickCreate(false); setQuickCreateName(''); }}
+                    className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={saving}
+                    className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
+                    {saving ? 'Salvando...' : 'Criar Contrato'}
+                  </button>
+                </div>
+              </form>
             </div>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Título *</label>
-                <input
-                  type="text" required value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full input-field"
-                />
-              </div>
+          </FocusTrap>
+        </div>
+      )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente *</label>
-                {!showQuickCreate ? (
-                  <>
-                    <select
-                      value={formData.customer}
-                      onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
-                      className="w-full input-field bg-white dark:bg-gray-800"
-                    >
-                      <option value="">
-                        {customers.length === 0 && prospects.length === 0
-                          ? 'Nenhum cliente — use "Cadastrar novo" abaixo'
-                          : 'Selecione um cliente'}
-                      </option>
-                      {customers.length > 0 && (
-                        <optgroup label="Clientes Cadastrados">
-                          {customers.map((c) => (
-                            <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {prospects.length > 0 && (
-                        <optgroup label="Do Funil (CRM)">
-                          {prospects.map((p) => (
-                            <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => { setShowQuickCreate(true); setFormData(f => ({ ...f, customer: '' })); }}
-                      className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-accent-gold/50 text-accent-gold hover:bg-accent-gold/5 rounded-lg text-sm transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Cadastrar novo cliente
-                    </button>
-                  </>
-                ) : (
-                  <div className="border border-accent-gold/30 bg-accent-gold/5 rounded-xl p-3 space-y-2">
-                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Nome da empresa / cliente *</p>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Ex: Empresa Ltda"
-                        value={quickCreateName}
-                        onChange={(e) => setQuickCreateName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickCreateCustomer())}
-                        className="flex-1 input-field"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={handleQuickCreateCustomer}
-                        disabled={creatingCustomer || !quickCreateName.trim()}
-                        className="px-4 py-2 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shrink-0"
-                      >
-                        {creatingCustomer ? '...' : 'Criar'}
-                      </button>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setShowQuickCreate(false); setQuickCreateName(''); }}
-                      className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                    >
-                      ← Voltar para seleção
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+      {/* ── Edit Modal ───────────────────────────────────────────────────── */}
+      {editingContract && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <FocusTrap onClose={() => setEditingContract(null)}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Tipo</label>
-                  <select
-                    value={formData.contract_type}
-                    onChange={(e) => setFormData({ ...formData, contract_type: e.target.value })}
-                    className="w-full input-field bg-white dark:bg-gray-800"
-                  >
-                    {Object.entries(contractTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar Contrato</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{editingContract.number}</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cobrança</label>
-                  <select
-                    value={formData.billing_type}
-                    onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="w-full input-field bg-white dark:bg-gray-800"
-                  >
-                    {Object.entries(billingTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Início *</label>
-                  <input
-                    type="date" required value={formData.start_date}
-                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Término</label>
-                  <input
-                    type="date" value={formData.end_date}
-                    onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Valor Mensal (R$)</label>
-                  <input
-                    type="number" step="0.01" value={formData.monthly_value}
-                    onChange={(e) => setFormData({ ...formData, monthly_value: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Valor/Hora (R$)</label>
-                  <input
-                    type="number" step="0.01" value={formData.hourly_rate}
-                    onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                    className="w-full input-field"
-                  />
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.auto_renew}
-                  onChange={(e) => setFormData({ ...formData, auto_renew: e.target.checked })}
-                  className="w-4 h-4 rounded text-accent-gold"
-                />
-                <span className="text-sm text-gray-500 dark:text-gray-400">Renovação automática</span>
-              </label>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit" disabled={saving}
-                  className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
-                >
-                  {saving ? 'Salvando...' : 'Criar Contrato'}
+                <button onClick={() => setEditingContract(null)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                  <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
-            </form>
-          </div>
+              <form onSubmit={handleUpdate}>
+                <ContractForm {...formProps(editForm, setEditForm, true)} />
+                <div className="flex gap-3 pt-6 mt-2">
+                  <button type="button" onClick={() => setEditingContract(null)}
+                    className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    Cancelar
+                  </button>
+                  <button type="submit" disabled={updating}
+                    className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60">
+                    {updating ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </FocusTrap>
         </div>
       )}
