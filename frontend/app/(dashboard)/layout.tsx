@@ -118,7 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchUnreadCount = async () => {
     try {
-      const data = await api.get<{ unread_count: number }>('/notifications/notifications/unread_count/');
+      const data = await api.get<{ unread_count: number }>('/notifications/unread_count/');
       setUnreadCount(data.unread_count ?? 0);
     } catch {
       // silently ignore
@@ -127,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const fetchNotifications = async () => {
     try {
-      const data = await api.get<{ results: Notif[] }>('/notifications/notifications/', { page_size: '10' });
+      const data = await api.get<{ results: Notif[] }>('/notifications/', { page_size: '10' });
       setNotifications(data.results ?? []);
     } catch {
       // silently ignore
@@ -160,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleMarkRead = async (id: number) => {
     try {
-      await api.post(`/notifications/notifications/${id}/mark_read/`);
+      await api.post(`/notifications/${id}/mark_read/`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
@@ -172,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleMarkAllRead = async () => {
     try {
-      await api.post('/notifications/notifications/mark_all_read/');
+      await api.post('/notifications/mark_all_read/');
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch {

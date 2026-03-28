@@ -100,7 +100,7 @@ export default function NotificacoesPage() {
     else setLoadingMore(true);
 
     try {
-      const data = await api.get<ApiResponse>('/notifications/notifications/', {
+      const data = await api.get<ApiResponse>('/notifications/', {
         page: String(pageNum),
         page_size: String(PAGE_SIZE),
       });
@@ -128,7 +128,7 @@ export default function NotificacoesPage() {
   const handleMarkRead = async (notification: Notification) => {
     if (notification.is_read) return;
     try {
-      await api.post(`/notifications/notifications/${notification.id}/mark_read/`);
+      await api.post(`/notifications/${notification.id}/mark_read/`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
       );
@@ -140,7 +140,7 @@ export default function NotificacoesPage() {
   const handleMarkAllRead = async () => {
     setMarkingAll(true);
     try {
-      await api.post('/notifications/notifications/mark_all_read/');
+      await api.post('/notifications/mark_all_read/');
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     } catch {
       // silently fail
