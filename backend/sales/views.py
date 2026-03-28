@@ -43,6 +43,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         search = self.request.query_params.get('search', None)
+        customer_type = self.request.query_params.get('customer_type', None)
         if search:
             queryset = queryset.filter(
                 models.Q(name__icontains=search) |
@@ -50,6 +51,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 models.Q(document__icontains=search) |
                 models.Q(email__icontains=search)
             )
+        if customer_type:
+            queryset = queryset.filter(customer_type=customer_type)
         return queryset
 
     def perform_create(self, serializer):
@@ -188,14 +191,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
             proposal = serializer.save(
                 number=next_number,
                 created_by=self.request.user,
-                status='sent',
-                sent_at=timezone.now(),
             )
-            # Mover o lead para "Proposta Enviada" automaticamente
-            if proposal.prospect_id:
-                Prospect.objects.filter(pk=proposal.prospect_id).exclude(
-                    status__in=['won', 'lost', 'not_closed'],
-                ).update(status='proposal')
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):
@@ -208,6 +204,11 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.status = 'sent'
         proposal.sent_at = timezone.now()
         proposal.save()
+        # Mover lead para "Proposta Enviada" ao enviar
+        if proposal.prospect_id:
+            Prospect.objects.filter(pk=proposal.prospect_id).exclude(
+                status__in=['won', 'lost', 'not_closed'],
+            ).update(status='proposal')
         logger.info(f"Proposta {proposal.id} enviada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 

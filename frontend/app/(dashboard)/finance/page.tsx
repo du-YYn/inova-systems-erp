@@ -774,11 +774,14 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingCustomer(true);
     try {
+      const body = Object.fromEntries(
+        Object.entries(customerForm).filter(([, v]) => v !== '')
+      );
       if (editingCustomer) {
-        await api.patch(`/sales/customers/${editingCustomer.id}/`, customerForm);
+        await api.patch(`/sales/customers/${editingCustomer.id}/`, body);
         toast.success('Cliente atualizado!');
       } else {
-        await api.post('/sales/customers/', customerForm);
+        await api.post('/sales/customers/', body);
         toast.success('Cliente cadastrado!');
       }
       setShowCustomerModal(false);

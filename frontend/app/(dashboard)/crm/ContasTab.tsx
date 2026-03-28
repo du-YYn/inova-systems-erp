@@ -25,6 +25,7 @@ interface Customer {
   state: string;
   is_active: boolean;
   segment: string;
+  notes: string;
   created_at: string;
 }
 
@@ -119,7 +120,7 @@ export default function ContasTab() {
       city: c.city || '',
       state: c.state || '',
       segment: c.segment || '',
-      notes: '',
+      notes: c.notes || '',
     });
     setShowModal(true);
   };

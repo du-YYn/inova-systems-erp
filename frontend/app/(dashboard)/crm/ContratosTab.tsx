@@ -43,22 +43,24 @@ const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   pending_signature: 'bg-yellow-100 text-yellow-800',
   active: 'bg-green-100 text-green-800',
-  suspended: 'bg-orange-100 text-orange-800',
+  renewed: 'bg-blue-100 text-blue-800',
   cancelled: 'bg-red-100 text-red-800',
   expired: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400',
 };
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', pending_signature: 'Aguard. Assinatura',
-  active: 'Ativo', suspended: 'Suspenso',
+  active: 'Ativo', renewed: 'Renovado',
   cancelled: 'Cancelado', expired: 'Expirado',
 };
 const contractTypeLabels: Record<string, string> = {
-  custom_dev: 'Desenvolvimento', saas: 'SaaS', maintenance: 'Manutenção',
-  support: 'Suporte', consulting: 'Consultoria', internal: 'Interno',
+  software_dev: 'Desenvolvimento', automation: 'Automação',
+  ai: 'Inteligência Artificial', consulting: 'Consultoria',
+  maintenance: 'Manutenção', support: 'Suporte',
+  saas: 'SaaS', mixed: 'Múltiplos Serviços',
 };
 const billingTypeLabels: Record<string, string> = {
   fixed: 'Valor Fixo', hourly: 'Por Hora', monthly: 'Mensal',
-  milestone: 'Por Marco', not_billed: 'Não Faturado',
+  milestone: 'Por Marco',
 };
 
 const formatCurrency = (v: string | number | null) =>
@@ -66,8 +68,8 @@ const formatCurrency = (v: string | number | null) =>
 const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
 const EMPTY_FORM = {
-  title: '', customer: '', contract_type: 'custom_dev', billing_type: 'fixed',
-  start_date: '', end_date: '', monthly_value: '', hourly_rate: '',
+  title: '', customer: '', contract_type: 'software_dev', billing_type: 'fixed',
+  start_date: new Date().toISOString().split('T')[0], end_date: '', monthly_value: '', hourly_rate: '',
   total_hours_monthly: '', auto_renew: false, notes: '', terms: '',
 };
 
@@ -381,8 +383,9 @@ export default function ContratosTab() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente</label>
+                <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente *</label>
                 <select
+                  required
                   value={formData.customer}
                   onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
                   className="w-full input-field bg-white dark:bg-gray-800"
@@ -419,9 +422,9 @@ export default function ContratosTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Início</label>
+                  <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Início *</label>
                   <input
-                    type="date" value={formData.start_date}
+                    type="date" required value={formData.start_date}
                     onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
                     className="w-full input-field"
                   />

@@ -491,8 +491,8 @@ export default function PropostasTab() {
                     className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
                 <div>
-                  <label className={labelInput}>Validade</label>
-                  <input type="date" value={formData.valid_until}
+                  <label className={labelInput}>Validade *</label>
+                  <input type="date" required value={formData.valid_until}
                     onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
                     className="input-field" />
                 </div>
