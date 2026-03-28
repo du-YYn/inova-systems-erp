@@ -3,6 +3,13 @@ import logging
 import io
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
+
+
+class DynamicPageSizePagination(PageNumberPagination):
+    """Permite que o cliente controle o tamanho da página via ?page_size=N."""
+    page_size_query_param = 'page_size'
+    max_page_size = 500
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 from django.db import models, transaction
@@ -39,6 +46,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.select_related('created_by')
     serializer_class = CustomerSerializer
     permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -64,6 +72,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
     queryset = Prospect.objects.select_related('customer', 'assigned_to', 'created_by')
     serializer_class = ProspectSerializer
     permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):
         queryset = super().get_queryset()

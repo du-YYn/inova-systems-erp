@@ -34,7 +34,7 @@ interface Contract {
 }
 
 interface Customer { id: number; company_name: string; name: string; }
-interface Prospect { id: number; company_name: string; contact_name: string; email?: string; phone?: string; status: string; }
+interface Prospect { id: number; company_name: string; contact_name: string; contact_email?: string; contact_phone?: string; status: string; }
 interface DashboardStats {
   total_contracts: number;
   active_contracts: number;
@@ -408,8 +408,8 @@ export default function ContratosTab() {
         company_name: prospect.company_name,
         name: prospect.contact_name,
       };
-      if (prospect.email) payload.email = prospect.email;
-      if (prospect.phone) payload.phone = prospect.phone;
+      if (prospect.contact_email) payload.email = prospect.contact_email;
+      if (prospect.contact_phone) payload.phone = prospect.contact_phone;
       const newCustomer = await api.post<Customer>('/sales/customers/', payload);
       setCustomers(prev => [...prev, newCustomer]);
       return newCustomer.id;
