@@ -35,6 +35,7 @@
     --color-accent-gold: #C4A67C;
     --color-accent-gold-light: #D4BC96;
     --color-accent-gold-dark: #A6864A;
+    color-scheme: dark;
   }
 
   /* Smooth theme transition */
@@ -117,11 +118,22 @@
 
   /* Input field */
   .input-field {
-    @apply w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-xl text-sm
-      text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500
+    @apply w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm
+      text-gray-900 placeholder-gray-400
       transition-all duration-150
       focus:outline-none focus:ring-2 focus:ring-accent-gold/25 focus:border-accent-gold
-      hover:border-gray-300 dark:hover:border-gray-500;
+      hover:border-gray-300;
+  }
+  .dark .input-field {
+    background-color: rgb(31 41 55); /* gray-800 */
+    border-color: rgb(75 85 99);     /* gray-600 */
+    color: rgb(243 244 246);         /* gray-100 */
+  }
+  .dark .input-field::placeholder {
+    color: rgb(107 114 128);         /* gray-500 */
+  }
+  .dark .input-field:hover {
+    border-color: rgb(107 114 128);  /* gray-500 */
   }
 
   /* Label for form inputs */
