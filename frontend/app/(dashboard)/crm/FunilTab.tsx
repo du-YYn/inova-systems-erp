@@ -288,9 +288,9 @@ function TriCheckbox({
     value === true ? '✓' : value === false ? '✗' : '—';
   const cls =
     value === true
-      ? 'bg-green-100 border-green-400 text-green-700'
+      ? 'bg-green-100 dark:bg-green-900/30 border-green-400 dark:border-green-600/50 text-green-700 dark:text-green-300'
       : value === false
-      ? 'bg-red-100 border-red-400 text-red-700'
+      ? 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600/50 text-red-700 dark:text-red-300'
       : 'bg-gray-100 dark:bg-gray-700 border-gray-300 text-gray-400 dark:text-gray-500';
 
   return (
@@ -313,14 +313,13 @@ function Section({ title, color, defaultOpen = true, children }: {
   title: string; color: string; defaultOpen?: boolean; children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const colors: Record<string, string> = {
-    blue: 'bg-blue-50/50 border-blue-100 text-blue-700',
-    purple: 'bg-purple-50/50 border-purple-100 text-purple-700',
-    amber: 'bg-amber-50/50 border-amber-100 text-amber-700',
-    green: 'bg-green-50/50 border-green-100 text-green-700',
+  const colors: Record<string, { bg: string; border: string; text: string }> = {
+    blue:   { bg: 'bg-blue-50/50 dark:bg-blue-900/20',     border: 'border-blue-100 dark:border-blue-800/30',     text: 'text-blue-700 dark:text-blue-300'   },
+    purple: { bg: 'bg-purple-50/50 dark:bg-purple-900/20', border: 'border-purple-100 dark:border-purple-800/30', text: 'text-purple-700 dark:text-purple-300' },
+    amber:  { bg: 'bg-amber-50/50 dark:bg-amber-900/20',   border: 'border-amber-100 dark:border-amber-800/30',   text: 'text-amber-700 dark:text-amber-300'   },
+    green:  { bg: 'bg-green-50/50 dark:bg-green-900/20',   border: 'border-green-100 dark:border-green-800/30',   text: 'text-green-700 dark:text-green-300'   },
   };
-  const cls = colors[color] || colors.blue;
-  const [bg, border, text] = cls.split(' ');
+  const { bg, border, text } = colors[color] || colors.blue;
 
   return (
     <div className={`${bg} border ${border} rounded-xl overflow-hidden transition-all`}>
@@ -1834,8 +1833,8 @@ export default function FunilTab() {
                       { label: 'Já tentou antes', val: viewingProspect.has_operation },
                     ].map(({ label, val }) => val !== null && (
                       <div key={label} className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
-                        val === true ? 'bg-green-50 text-green-700 border border-green-100' :
-                        'bg-red-50 text-red-700 border border-red-100'
+                        val === true ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-100 dark:border-green-800/30' :
+                        'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-100 dark:border-red-800/30'
                       }`}>
                         <span className="font-bold">{val ? '✓' : '✗'}</span>
                         {label}
@@ -1933,7 +1932,7 @@ export default function FunilTab() {
                     <button
                       onClick={() => handleQuickAction(viewingProspect, 'mark_attended')}
                       disabled={!!markingAction}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                     >
                       {markingAction === 'mark_attended' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
                       Compareceu
@@ -1941,7 +1940,7 @@ export default function FunilTab() {
                     <button
                       onClick={() => handleQuickAction(viewingProspect, 'mark_no_show')}
                       disabled={!!markingAction}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                     >
                       {markingAction === 'mark_no_show' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <X className="w-3.5 h-3.5" />}
                       Não Compareceu
@@ -1955,7 +1954,7 @@ export default function FunilTab() {
                   <button
                     onClick={() => handleQuickAction(viewingProspect, 'mark_ebook_sent')}
                     disabled={!!markingAction}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                   >
                     {markingAction === 'mark_ebook_sent' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                     Marcar E-book como Enviado
@@ -2202,8 +2201,8 @@ export default function FunilTab() {
               </button>
             </div>
 
-            <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-5">
-              <p className="text-xs text-red-700 font-medium">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800/30 rounded-xl p-3 mb-5">
+              <p className="text-xs text-red-700 dark:text-red-300 font-medium">
                 O preenchimento do motivo de perda é obrigatório. Sem esses dados, não é possível medir onde o funil sangra.
               </p>
             </div>
@@ -2302,8 +2301,8 @@ export default function FunilTab() {
               </button>
             </div>
 
-            <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 mb-5">
-              <p className="text-xs text-orange-700 font-medium">
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30 rounded-xl p-3 mb-5">
+              <p className="text-xs text-orange-700 dark:text-orange-300 font-medium">
                 Informe o motivo e a data de retomada para que o lead não caia no esquecimento.
               </p>
             </div>
