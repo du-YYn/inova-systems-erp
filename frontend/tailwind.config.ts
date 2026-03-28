@@ -6,6 +6,13 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    // Section component dark mode variants (FunilTab)
+    'bg-blue-50/50',   'dark:bg-blue-900/30',   'border-blue-100',   'dark:border-blue-700/50',   'text-blue-700',   'dark:text-blue-300',
+    'bg-purple-50/50', 'dark:bg-purple-900/30', 'border-purple-100', 'dark:border-purple-700/50', 'text-purple-700', 'dark:text-purple-300',
+    'bg-amber-50/50',  'dark:bg-amber-900/30',  'border-amber-100',  'dark:border-amber-700/50',  'text-amber-700',  'dark:text-amber-300',
+    'bg-green-50/50',  'dark:bg-green-900/30',  'border-green-100',  'dark:border-green-700/50',  'text-green-700',  'dark:text-green-300',
+  ],
   theme: {
     extend: {
       colors: {

@@ -314,10 +314,10 @@ function Section({ title, color, defaultOpen = true, children }: {
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const colors: Record<string, { bg: string; border: string; text: string }> = {
-    blue:   { bg: 'bg-blue-50/50 dark:bg-blue-900/20',     border: 'border-blue-100 dark:border-blue-800/30',     text: 'text-blue-700 dark:text-blue-300'   },
-    purple: { bg: 'bg-purple-50/50 dark:bg-purple-900/20', border: 'border-purple-100 dark:border-purple-800/30', text: 'text-purple-700 dark:text-purple-300' },
-    amber:  { bg: 'bg-amber-50/50 dark:bg-amber-900/20',   border: 'border-amber-100 dark:border-amber-800/30',   text: 'text-amber-700 dark:text-amber-300'   },
-    green:  { bg: 'bg-green-50/50 dark:bg-green-900/20',   border: 'border-green-100 dark:border-green-800/30',   text: 'text-green-700 dark:text-green-300'   },
+    blue:   { bg: 'bg-blue-50/50 dark:bg-blue-900/30',   border: 'border-blue-100 dark:border-blue-700/50',   text: 'text-blue-700 dark:text-blue-300'   },
+    purple: { bg: 'bg-purple-50/50 dark:bg-purple-900/30', border: 'border-purple-100 dark:border-purple-700/50', text: 'text-purple-700 dark:text-purple-300' },
+    amber:  { bg: 'bg-amber-50/50 dark:bg-amber-900/30',  border: 'border-amber-100 dark:border-amber-700/50',  text: 'text-amber-700 dark:text-amber-300'   },
+    green:  { bg: 'bg-green-50/50 dark:bg-green-900/30',  border: 'border-green-100 dark:border-green-700/50',  text: 'text-green-700 dark:text-green-300'   },
   };
   const { bg, border, text } = colors[color] || colors.blue;
 
