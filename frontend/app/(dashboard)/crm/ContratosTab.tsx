@@ -30,6 +30,7 @@ interface Contract {
 }
 
 interface Customer { id: number; company_name: string; name: string; }
+interface Prospect { id: number; company_name: string; contact_name: string; status: string; }
 interface DashboardStats {
   total_contracts: number;
   active_contracts: number;
@@ -77,7 +78,11 @@ export default function ContratosTab() {
   const toast = useToast();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [prospects, setProspects] = useState<Prospect[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickCreateName, setQuickCreateName] = useState('');
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -97,16 +102,19 @@ export default function ContratosTab() {
       if (search) params.search = search;
       if (filterStatus) params.status = filterStatus;
 
-      const [contractsData, customersData, statsData] = await Promise.all([
+      const [contractsData, customersData, prospectsData, statsData] = await Promise.all([
         api.get<{ results: Contract[]; count: number }>('/sales/contracts/', params),
         api.get<{ results: Customer[] }>('/sales/customers/', { page_size: '200' }),
+        api.get<{ results: Prospect[] }>('/sales/prospects/', { page_size: '200' }).catch(() => ({ results: [] })),
         api.get<DashboardStats>('/sales/contracts/dashboard/').catch(() => ({} as DashboardStats)),
       ]);
       const cList = contractsData.results || contractsData;
       const kList = customersData.results || customersData;
+      const pList = (prospectsData as { results: Prospect[] }).results || prospectsData;
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
       setCustomers(Array.isArray(kList) ? kList : []);
+      setProspects(Array.isArray(pList) ? pList.filter(p => !['lost', 'disqualified'].includes(p.status)) : []);
       if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
@@ -124,17 +132,51 @@ export default function ContratosTab() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const handleQuickCreateCustomer = async () => {
+    if (!quickCreateName.trim()) return;
+    setCreatingCustomer(true);
+    try {
+      const newCustomer = await api.post<Customer>('/sales/customers/', { company_name: quickCreateName.trim() });
+      setCustomers(prev => [...prev, newCustomer]);
+      setFormData(prev => ({ ...prev, customer: String(newCustomer.id) }));
+      setShowQuickCreate(false);
+      setQuickCreateName('');
+      toast.success('Cliente criado!');
+    } catch {
+      toast.error('Erro ao criar cliente.');
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
+      let customerId: number | null = null;
+      if (formData.customer) {
+        if (formData.customer.startsWith('prospect_')) {
+          const prospectId = Number(formData.customer.replace('prospect_', ''));
+          const prospect = prospects.find(p => p.id === prospectId);
+          if (prospect) {
+            const newCustomer = await api.post<Customer>('/sales/customers/', {
+              company_name: prospect.company_name,
+              name: prospect.contact_name,
+            });
+            customerId = newCustomer.id;
+          }
+        } else {
+          customerId = Number(formData.customer);
+        }
+      }
+
       const body: Record<string, unknown> = {
         title: formData.title,
         contract_type: formData.contract_type,
         billing_type: formData.billing_type,
         auto_renew: formData.auto_renew,
       };
-      if (formData.customer) body.customer = Number(formData.customer);
+      if (customerId) body.customer = customerId;
       if (formData.start_date) body.start_date = formData.start_date;
       if (formData.end_date) body.end_date = formData.end_date;
       if (formData.monthly_value) body.monthly_value = formData.monthly_value;
@@ -147,6 +189,8 @@ export default function ContratosTab() {
       toast.success('Contrato criado com sucesso!');
       setShowModal(false);
       setFormData({ ...EMPTY_FORM });
+      setShowQuickCreate(false);
+      setQuickCreateName('');
       fetchData();
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Erro ao criar contrato.';
@@ -368,7 +412,7 @@ export default function ContratosTab() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Contrato</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+              <button onClick={() => { setShowModal(false); setShowQuickCreate(false); setQuickCreateName(''); }} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
                 <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             </div>
@@ -387,14 +431,61 @@ export default function ContratosTab() {
                 <select
                   required
                   value={formData.customer}
-                  onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                  onChange={(e) => { setFormData({ ...formData, customer: e.target.value }); setShowQuickCreate(false); }}
                   className="w-full input-field bg-white dark:bg-gray-800"
                 >
                   <option value="">Selecione um cliente</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
-                  ))}
+                  {customers.length > 0 && (
+                    <optgroup label="Clientes Cadastrados">
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {prospects.length > 0 && (
+                    <optgroup label="Do Funil (CRM)">
+                      {prospects.map((p) => (
+                        <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
+                {!showQuickCreate ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickCreate(true)}
+                    className="mt-1.5 text-xs text-accent-gold hover:text-accent-gold-dark transition-colors"
+                  >
+                    + Cadastrar novo cliente
+                  </button>
+                ) : (
+                  <div className="mt-2 flex gap-2 items-center">
+                    <input
+                      type="text"
+                      placeholder="Nome da empresa / cliente"
+                      value={quickCreateName}
+                      onChange={(e) => setQuickCreateName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickCreateCustomer())}
+                      className="flex-1 input-field py-1.5 text-sm"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleQuickCreateCustomer}
+                      disabled={creatingCustomer || !quickCreateName.trim()}
+                      className="px-3 py-1.5 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                    >
+                      {creatingCustomer ? '...' : 'Criar'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowQuickCreate(false); setQuickCreateName(''); }}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
