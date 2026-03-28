@@ -114,7 +114,7 @@ export default function ContratosTab() {
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
       setCustomers(Array.isArray(kList) ? kList : []);
-      setProspects(Array.isArray(pList) ? pList.filter(p => !['lost', 'disqualified'].includes(p.status)) : []);
+      setProspects(Array.isArray(pList) ? pList : []);
       if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
