@@ -151,6 +151,7 @@ export default function ContratosTab() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.customer) { toast.error('Selecione ou cadastre um cliente.'); return; }
     setSaving(true);
     try {
       let customerId: number | null = null;
@@ -428,61 +429,70 @@ export default function ContratosTab() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">Cliente *</label>
-                <select
-                  required
-                  value={formData.customer}
-                  onChange={(e) => { setFormData({ ...formData, customer: e.target.value }); setShowQuickCreate(false); }}
-                  className="w-full input-field bg-white dark:bg-gray-800"
-                >
-                  <option value="">Selecione um cliente</option>
-                  {customers.length > 0 && (
-                    <optgroup label="Clientes Cadastrados">
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {prospects.length > 0 && (
-                    <optgroup label="Do Funil (CRM)">
-                      {prospects.map((p) => (
-                        <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
                 {!showQuickCreate ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickCreate(true)}
-                    className="mt-1.5 text-xs text-accent-gold hover:text-accent-gold-dark transition-colors"
-                  >
-                    + Cadastrar novo cliente
-                  </button>
-                ) : (
-                  <div className="mt-2 flex gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Nome da empresa / cliente"
-                      value={quickCreateName}
-                      onChange={(e) => setQuickCreateName(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickCreateCustomer())}
-                      className="flex-1 input-field py-1.5 text-sm"
-                      autoFocus
-                    />
+                  <>
+                    <select
+                      value={formData.customer}
+                      onChange={(e) => setFormData({ ...formData, customer: e.target.value })}
+                      className="w-full input-field bg-white dark:bg-gray-800"
+                    >
+                      <option value="">
+                        {customers.length === 0 && prospects.length === 0
+                          ? 'Nenhum cliente — use "Cadastrar novo" abaixo'
+                          : 'Selecione um cliente'}
+                      </option>
+                      {customers.length > 0 && (
+                        <optgroup label="Clientes Cadastrados">
+                          {customers.map((c) => (
+                            <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {prospects.length > 0 && (
+                        <optgroup label="Do Funil (CRM)">
+                          {prospects.map((p) => (
+                            <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
                     <button
                       type="button"
-                      onClick={handleQuickCreateCustomer}
-                      disabled={creatingCustomer || !quickCreateName.trim()}
-                      className="px-3 py-1.5 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                      onClick={() => { setShowQuickCreate(true); setFormData(f => ({ ...f, customer: '' })); }}
+                      className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 border border-dashed border-accent-gold/50 text-accent-gold hover:bg-accent-gold/5 rounded-lg text-sm transition-colors"
                     >
-                      {creatingCustomer ? '...' : 'Criar'}
+                      <Plus className="w-4 h-4" />
+                      Cadastrar novo cliente
                     </button>
+                  </>
+                ) : (
+                  <div className="border border-accent-gold/30 bg-accent-gold/5 rounded-xl p-3 space-y-2">
+                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Nome da empresa / cliente *</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Ex: Empresa Ltda"
+                        value={quickCreateName}
+                        onChange={(e) => setQuickCreateName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleQuickCreateCustomer())}
+                        className="flex-1 input-field"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handleQuickCreateCustomer}
+                        disabled={creatingCustomer || !quickCreateName.trim()}
+                        className="px-4 py-2 bg-accent-gold hover:bg-accent-gold-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {creatingCustomer ? '...' : 'Criar'}
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => { setShowQuickCreate(false); setQuickCreateName(''); }}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                      className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                     >
-                      <X className="w-4 h-4" />
+                      ← Voltar para seleção
                     </button>
                   </div>
                 )}
