@@ -396,14 +396,37 @@ class ProposalViewSet(viewsets.ModelViewSet):
 class ContractViewSet(viewsets.ModelViewSet):
     queryset = Contract.objects.select_related('customer', 'proposal', 'created_by')
     serializer_class = ContractSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [IsAdminOrManagerOrOperatorStrict]
 
     def get_queryset(self):
+        # Auto-expire contracts whose end_date has passed
+        today = timezone.now().date()
+        Contract.objects.filter(
+            status='active', end_date__isnull=False, end_date__lt=today
+        ).update(status='expired')
+
         queryset = super().get_queryset()
         contract_status = self.request.query_params.get('status', None)
+        search = self.request.query_params.get('search', None)
         if contract_status:
             queryset = queryset.filter(status=contract_status)
+        if search:
+            queryset = queryset.filter(
+                Q(title__icontains=search) |
+                Q(number__icontains=search) |
+                Q(customer__company_name__icontains=search) |
+                Q(customer__name__icontains=search)
+            )
         return queryset
+
+    def destroy(self, request, *args, **kwargs):
+        contract = self.get_object()
+        if contract.status in ('active', 'pending_signature', 'renewed'):
+            return Response(
+                {'error': 'Contratos ativos, em assinatura ou renovados não podem ser excluídos. Cancele-o primeiro.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         with transaction.atomic():
@@ -465,10 +488,45 @@ class ContractViewSet(viewsets.ModelViewSet):
                 {'error': f'Contrato não pode ser renovado (status atual: {contract.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        contract.status = 'renewed'
-        contract.save()
-        logger.info(f"Contrato {contract.id} renovado por {request.user.username}")
-        return Response(ContractSerializer(contract).data)
+        with transaction.atomic():
+            contract.status = 'renewed'
+            contract.save()
+
+            # Calculate new dates based on original duration
+            start_date = timezone.now().date()
+            if contract.start_date and contract.end_date:
+                duration = contract.end_date - contract.start_date
+                end_date = start_date + duration
+            else:
+                end_date = None
+
+            last = Contract.objects.select_for_update().order_by('-id').first()
+            try:
+                last_seq = int(last.number.split('-')[1])
+            except (IndexError, ValueError, AttributeError):
+                last_seq = 0
+
+            new_contract = Contract.objects.create(
+                proposal=contract.proposal,
+                customer=contract.customer,
+                number=f"CTR-{last_seq + 1:05d}",
+                title=contract.title,
+                contract_type=contract.contract_type,
+                billing_type=contract.billing_type,
+                start_date=start_date,
+                end_date=end_date,
+                auto_renew=contract.auto_renew,
+                renewal_days=contract.renewal_days,
+                monthly_value=contract.monthly_value,
+                hourly_rate=contract.hourly_rate,
+                total_hours_monthly=contract.total_hours_monthly,
+                status='draft',
+                notes=contract.notes,
+                terms=contract.terms,
+                created_by=request.user,
+            )
+        logger.info(f"Contrato {contract.id} renovado → novo contrato {new_contract.id} por {request.user.username}")
+        return Response(ContractSerializer(new_contract).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):

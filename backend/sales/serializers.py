@@ -184,13 +184,16 @@ class ProposalSerializer(serializers.ModelSerializer):
 
 
 class ContractSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(
-        source="customer.company_name", read_only=True
-    )
+    customer_name = serializers.SerializerMethodField()
     proposal_title = serializers.CharField(source="proposal.title", read_only=True)
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+
+    def get_customer_name(self, obj):
+        if obj.customer_id:
+            return obj.customer.company_name or obj.customer.name or ''
+        return ''
 
     class Meta:
         model = Contract

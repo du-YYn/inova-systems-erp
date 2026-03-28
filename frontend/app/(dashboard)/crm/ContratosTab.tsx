@@ -205,9 +205,7 @@ function ContractForm({
             min={form.start_date || undefined}
             onChange={(e) => setForm({ ...form, end_date: e.target.value })}
             className="w-full input-field" />
-          {validateDates() && (
-            <p className="text-xs text-red-500 dark:text-red-400 mt-1">{validateDates()}</p>
-          )}
+          {(() => { const e = validateDates(); return e ? <p className="text-xs text-red-500 dark:text-red-400 mt-1">{e}</p> : null; })()}
         </div>
       </div>
 
@@ -226,6 +224,14 @@ function ContractForm({
             className="w-full input-field" />
         </div>
       </div>
+      {form.billing_type === 'hourly' && (
+        <div>
+          <label className={lbl}>Horas Mensais Contratadas</label>
+          <input type="number" step="0.5" min="0" value={form.total_hours_monthly}
+            onChange={(e) => setForm({ ...form, total_hours_monthly: e.target.value })}
+            className="w-full input-field" placeholder="Ex: 40" />
+        </div>
+      )}
 
       {/* Renovação */}
       <div className="flex items-center gap-4">
@@ -293,6 +299,10 @@ export default function ContratosTab() {
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Cancel confirmation
+  const [cancelTarget, setCancelTarget] = useState<Contract | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -476,17 +486,31 @@ export default function ContratosTab() {
   };
 
   // ── Status actions ───────────────────────────────────────────────────────
-  const handleStatusAction = async (contract: Contract, action: 'submit' | 'activate' | 'cancel' | 'renew') => {
+  const handleStatusAction = async (contract: Contract, action: 'submit' | 'activate' | 'renew') => {
     const labels: Record<string, string> = {
-      submit: 'enviado para assinatura', activate: 'ativado',
-      cancel: 'cancelado', renew: 'renovado',
+      submit: 'enviado para assinatura', activate: 'ativado', renew: 'renovado',
     };
     try {
       await api.post(`/sales/contracts/${contract.id}/${action}/`);
-      toast.success(`Contrato ${labels[action]}!`);
+      toast.success(action === 'renew' ? 'Contrato renovado! Novo rascunho criado.' : `Contrato ${labels[action]}!`);
       fetchData();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : 'Erro ao atualizar status.');
+    }
+  };
+
+  const handleCancelConfirmed = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await api.post(`/sales/contracts/${cancelTarget.id}/cancel/`);
+      toast.success('Contrato cancelado.');
+      setCancelTarget(null);
+      fetchData();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Erro ao cancelar contrato.');
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -508,7 +532,7 @@ export default function ContratosTab() {
 
   const statusTabs = [
     ['', 'Todos'], ['draft', 'Rascunho'], ['pending_signature', 'Aguard. Assinatura'],
-    ['active', 'Ativos'], ['expired', 'Expirados'], ['cancelled', 'Cancelados'],
+    ['active', 'Ativos'], ['renewed', 'Renovados'], ['expired', 'Expirados'], ['cancelled', 'Cancelados'],
   ];
 
   // ── Shared modal form props ──────────────────────────────────────────────
@@ -655,15 +679,15 @@ export default function ContratosTab() {
                           <CheckCircle className="w-3 h-3" /> Ativar
                         </button>
                       )}
-                      {/* Active → Cancelar */}
-                      {c.status === 'active' && (
-                        <button onClick={() => handleStatusAction(c, 'cancel')}
+                      {/* Active/Pending → Cancelar (com confirmação) */}
+                      {(c.status === 'active' || c.status === 'pending_signature') && (
+                        <button onClick={() => setCancelTarget(c)}
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/30 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors">
                           <X className="w-3 h-3" /> Cancelar
                         </button>
                       )}
-                      {/* Expired → Renovar */}
-                      {c.status === 'expired' && (
+                      {/* Active/Expired → Renovar */}
+                      {(c.status === 'expired' || c.status === 'active') && (
                         <button onClick={() => handleStatusAction(c, 'renew')}
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
                           <RefreshCw className="w-3 h-3" /> Renovar
@@ -675,12 +699,14 @@ export default function ContratosTab() {
                         aria-label="Editar">
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      {/* Delete */}
-                      <button onClick={() => setDeleteTarget(c)}
-                        className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
-                        aria-label="Excluir">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {/* Delete — protegido para status críticos */}
+                      {!['active', 'pending_signature', 'renewed'].includes(c.status) && (
+                        <button onClick={() => setDeleteTarget(c)}
+                          className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-500 transition-colors"
+                          aria-label="Excluir">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -767,6 +793,16 @@ export default function ContratosTab() {
         danger
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title="Cancelar Contrato"
+        description={`Tem certeza que deseja cancelar o contrato "${cancelTarget?.number} — ${cancelTarget?.title}"? Esta ação não pode ser desfeita.`}
+        confirmLabel={cancelling ? 'Cancelando...' : 'Confirmar cancelamento'}
+        danger
+        onConfirm={handleCancelConfirmed}
+        onCancel={() => setCancelTarget(null)}
       />
     </div>
   );
