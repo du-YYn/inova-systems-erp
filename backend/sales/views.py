@@ -1,34 +1,28 @@
 import hmac
-import logging
 import io
+import logging
+from datetime import timedelta
+
+from django.conf import settings as django_settings
+from django.db import models, transaction
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
+from django.utils import timezone
+from drf_spectacular.utils import extend_schema
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-
-
-class DynamicPageSizePagination(PageNumberPagination):
-    """Permite que o cliente controle o tamanho da página via ?page_size=N."""
-    page_size_query_param = 'page_size'
-    max_page_size = 500
-from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
-from django.db import models, transaction
-from django.db.models import Sum, Count, Q
-from django.http import HttpResponse
-from django.utils import timezone
-from datetime import timedelta
-
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.units import cm
-
-from django.conf import settings as django_settings
-from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
+from rest_framework.views import APIView
 
+from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
 from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
@@ -36,9 +30,14 @@ from .serializers import (
     ProspectActivitySerializer, WinLossReasonSerializer,
     WebsiteLeadSerializer,
 )
-from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
 
 logger = logging.getLogger('sales')
+
+
+class DynamicPageSizePagination(PageNumberPagination):
+    """Permite que o cliente controle o tamanho da página via ?page_size=N."""
+    page_size_query_param = 'page_size'
+    max_page_size = 500
 
 
 @extend_schema(tags=['sales'])
@@ -199,8 +198,14 @@ class ProposalViewSet(viewsets.ModelViewSet):
             next_number = f"PROP-{last_seq + 1:05d}"
             proposal = serializer.save(
                 number=next_number,
+                status='sent',
+                sent_at=timezone.now(),
                 created_by=self.request.user,
             )
+            if proposal.prospect_id:
+                Prospect.objects.filter(pk=proposal.prospect_id).exclude(
+                    status__in=['won', 'lost', 'not_closed'],
+                ).update(status='proposal')
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):

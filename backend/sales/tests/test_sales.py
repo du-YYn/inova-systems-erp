@@ -435,10 +435,10 @@ class TestContract:
         assert 'active_contracts' in response.data
         assert 'mrr' in response.data
 
-    def test_contract_requires_manager(self, operator_client, contract):
-        # ContractViewSet requer IsAdminOrManager — operator deve receber 403
+    def test_contract_allows_operator(self, operator_client, contract):
+        # ContractViewSet usa IsAdminOrManagerOrOperatorStrict — operator tem acesso
         response = operator_client.get(self.url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
 
     def test_contract_unauthenticated(self, api_client):
         response = api_client.get(self.url)
@@ -451,11 +451,11 @@ class TestContract:
 class TestCrossUserAccess:
     """Garante que usuários não acessam dados uns dos outros de forma indevida."""
 
-    def test_operator_cannot_access_contracts(self, operator_client, contract):
-        """Operadores não têm acesso ao módulo de contratos."""
+    def test_operator_can_access_contracts(self, operator_client, contract):
+        """Operadores têm acesso ao módulo de contratos (permissão atualizada)."""
         url = f'/api/v1/sales/contracts/{contract.id}/'
         response = operator_client.get(url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
 
     def test_viewer_cannot_list_customers(self, viewer_client):
         """Viewer não tem acesso a nenhum recurso de vendas."""

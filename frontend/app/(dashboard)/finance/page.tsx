@@ -1560,7 +1560,7 @@ export default function FinancePage() {
               <div className="flex flex-col items-center justify-center py-20 text-gray-500 dark:text-gray-400">
                 <Users className="w-12 h-12 mb-3 opacity-30" />
                 <p className="font-medium mb-1">Nenhum cliente encontrado</p>
-                <p className="text-sm">Cadastre o primeiro cliente clicando em "Cadastrar Cliente"</p>
+                <p className="text-sm">Cadastre o primeiro cliente clicando em &quot;Cadastrar Cliente&quot;</p>
               </div>
             ) : (
               <table className="w-full table-premium">
