@@ -301,24 +301,37 @@ export default function ContratosTab() {
       if (search) params.search = search;
       if (filterStatus) params.status = filterStatus;
 
-      const [contractsData, customersData, prospectsData, statsData] = await Promise.all([
+      // Contracts + stats: may fail together
+      const [contractsData, statsData] = await Promise.all([
         api.get<{ results: Contract[]; count: number }>('/sales/contracts/', params),
-        api.get<{ results: Customer[] }>('/sales/customers/', { page_size: '200' }),
-        api.get<{ results: Prospect[] }>('/sales/prospects/', { page_size: '200' }).catch(() => ({ results: [] })),
         api.get<DashboardStats>('/sales/contracts/dashboard/').catch(() => ({} as DashboardStats)),
       ]);
       const cList = contractsData.results || contractsData;
-      const kList = customersData.results || customersData;
-      const pList = (prospectsData as { results: Prospect[] }).results || prospectsData;
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
-      setCustomers(Array.isArray(kList) ? kList : []);
-      setProspects(Array.isArray(pList) ? pList : []);
       if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
     } finally {
       setLoading(false);
+    }
+
+    // Customers + prospects: load independently so contract errors don't block them
+    try {
+      const customersData = await api.get<{ results: Customer[]; count: number } | Customer[]>('/sales/customers/', { page_size: '200' });
+      const kList = (customersData as { results: Customer[] }).results ?? customersData;
+      setCustomers(Array.isArray(kList) ? kList : []);
+    } catch (err) {
+      console.error('[ContratosTab] customers fetch error:', err);
+    }
+
+    try {
+      const prospectsData = await api.get<{ results: Prospect[]; count: number } | Prospect[]>('/sales/prospects/', { page_size: '200' });
+      const pList = (prospectsData as { results: Prospect[] }).results ?? prospectsData;
+      setProspects(Array.isArray(pList) ? pList : []);
+    } catch (err) {
+      console.error('[ContratosTab] prospects fetch error:', err);
+      toast.error('Não foi possível carregar os leads do funil.');
     }
   }, [page, search, filterStatus]);
 
