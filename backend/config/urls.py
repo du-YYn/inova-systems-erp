@@ -12,6 +12,7 @@ urlpatterns = [
     path('api/v1/core/', include('core.urls')),
     path('api/v1/support/', include('support.urls')),
     path('api/v1/', include('notifications.urls')),
+    path('api/v1/notifications/', include('notifications.urls')),  # compat: frontend build antigo usa path duplo
 ]
 
 # Swagger/ReDoc apenas em desenvolvimento — nunca expor em produção
