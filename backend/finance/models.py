@@ -196,6 +196,186 @@ class Transaction(models.Model):
         return f"{self.transaction_type} - {self.amount} - {self.description}"
 
 
+class TaxEntry(models.Model):
+    """Impostos e deduções mensais (DAS, INSS, taxas)."""
+    TYPE_CHOICES = [
+        ('das', 'DAS Faturamento'),
+        ('das_parcelamento', 'DAS Parcelamento'),
+        ('inss', 'INSS Pro labore'),
+        ('taxa_bancaria', 'Taxa Bancária'),
+        ('taxa_asaas', 'Taxa ASAAS'),
+        ('other', 'Outro'),
+    ]
+
+    tax_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    reference_month = models.DateField(help_text='Primeiro dia do mês de referência')
+    rate = models.DecimalField(max_digits=5, decimal_places=2, default=0, help_text='Alíquota %')
+    base_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Base de cálculo')
+    value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='tax_entries')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'tax_entries'
+        ordering = ['-reference_month', 'tax_type']
+
+    def __str__(self):
+        return f"{self.get_tax_type_display()} - {self.reference_month.strftime('%m/%Y')}"
+
+
+class ClientCost(models.Model):
+    """Custos variáveis por cliente (licenças, comissões)."""
+    COST_TYPE_CHOICES = [
+        ('license_erp', 'Licença Sistema Parceiro'),
+        ('license_botconversa', 'Licença BotConversa'),
+        ('license_zapi', 'Licença Z-API'),
+        ('reserve_zapi', 'Reserva Limite Z-API'),
+        ('commission_closer', 'Comissão Closer'),
+        ('commission_sdr', 'Comissão SDR'),
+        ('miv', 'MIV - Custo de Lead'),
+        ('designer', 'Designer'),
+        ('other', 'Outro'),
+    ]
+
+    customer = models.ForeignKey('sales.Customer', on_delete=models.CASCADE, related_name='client_costs')
+    cost_type = models.CharField(max_length=30, choices=COST_TYPE_CHOICES)
+    value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    reference_month = models.DateField(help_text='Primeiro dia do mês de referência')
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='client_costs')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'client_costs'
+        ordering = ['-reference_month', 'customer__company_name']
+
+    def __str__(self):
+        return f"{self.customer} - {self.get_cost_type_display()} - {self.reference_month.strftime('%m/%Y')}"
+
+
+class RecurringExpense(models.Model):
+    """Despesas fixas recorrentes."""
+    CATEGORY_CHOICES = [
+        ('salarios', 'Salários'),
+        ('imovel', 'Imóvel'),
+        ('manutencao', 'Manutenção'),
+        ('materiais', 'Materiais'),
+        ('sistemas', 'Sistemas/Assinaturas'),
+        ('equipamentos', 'Equipamentos'),
+        ('marketing', 'Marketing'),
+        ('honorarios', 'Honorários'),
+        ('gerais', 'Despesas Gerais'),
+    ]
+
+    expense_category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    description = models.CharField(max_length=200)
+    value = models.DecimalField(max_digits=12, decimal_places=2)
+    due_day = models.IntegerField(default=1, help_text='Dia do vencimento (1-31)')
+    is_recurring = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='recurring_expenses')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'recurring_expenses'
+        ordering = ['expense_category', 'description']
+
+    def __str__(self):
+        return f"{self.get_expense_category_display()} - {self.description}"
+
+
+class Loan(models.Model):
+    """Empréstimos e reparcelamentos."""
+    partner = models.CharField(max_length=100, help_text='Sócio responsável')
+    card_bank = models.CharField(max_length=100, blank=True, help_text='Cartão/Banco')
+    description = models.CharField(max_length=200)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    num_installments = models.IntegerField()
+    installment_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    start_date = models.DateField()
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='loans')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'loans'
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f"{self.partner} - {self.description}"
+
+
+class LoanInstallment(models.Model):
+    """Parcelas de empréstimo (geradas automaticamente)."""
+    loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name='installments')
+    number = models.IntegerField()
+    due_date = models.DateField()
+    value = models.DecimalField(max_digits=12, decimal_places=2)
+    is_paid = models.BooleanField(default=False)
+    paid_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'loan_installments'
+        ordering = ['loan', 'number']
+
+    def __str__(self):
+        return f"{self.loan} - Parcela {self.number}/{self.loan.num_installments}"
+
+
+class Asset(models.Model):
+    """Ativos com depreciação."""
+    name = models.CharField(max_length=200)
+    quantity = models.IntegerField(default=1)
+    unit_value = models.DecimalField(max_digits=12, decimal_places=2)
+    useful_life_months = models.IntegerField(help_text='Vida útil em meses')
+    acquisition_date = models.DateField()
+    monthly_depreciation = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='assets')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'assets'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.quantity}x)"
+
+
+class ProfitDistConfig(models.Model):
+    """Configuração de distribuição de lucros (singleton)."""
+    working_capital_pct = models.DecimalField(max_digits=5, decimal_places=2, default=20)
+    reserve_fund_pct = models.DecimalField(max_digits=5, decimal_places=2, default=20)
+    directors_pct = models.DecimalField(max_digits=5, decimal_places=2, default=50)
+    directors_cap = models.DecimalField(max_digits=12, decimal_places=2, default=15000)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'profit_dist_config'
+
+    def __str__(self):
+        return f"Distrib.: CG {self.working_capital_pct}% | Reserva {self.reserve_fund_pct}% | Dir. {self.directors_pct}%"
+
+
+class ProfitDistPartner(models.Model):
+    """Sócios na distribuição de lucros."""
+    config = models.ForeignKey(ProfitDistConfig, on_delete=models.CASCADE, related_name='partners')
+    name = models.CharField(max_length=100)
+    share_pct = models.DecimalField(max_digits=5, decimal_places=2, help_text='% de participação')
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'profit_dist_partners'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.share_pct}%)"
+
+
 class CostCenter(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20, unique=True)

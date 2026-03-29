@@ -1,5 +1,9 @@
 from rest_framework import serializers
-from .models import BankAccount, Category, Invoice, Transaction, CostCenter, Budget
+from .models import (
+    BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
+    TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
+    Asset, ProfitDistConfig, ProfitDistPartner,
+)
 
 
 class BankAccountSerializer(serializers.ModelSerializer):
@@ -102,3 +106,98 @@ class BudgetSerializer(serializers.ModelSerializer):
         if obj.planned and obj.planned > 0:
             return float((obj.actual / obj.planned) * 100)
         return 0
+
+
+class TaxEntrySerializer(serializers.ModelSerializer):
+    tax_type_display = serializers.CharField(source='get_tax_type_display', read_only=True)
+
+    class Meta:
+        model = TaxEntry
+        fields = ['id', 'tax_type', 'tax_type_display', 'reference_month', 'rate',
+                  'base_amount', 'value', 'notes', 'created_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at']
+
+
+class ClientCostSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    cost_type_display = serializers.CharField(source='get_cost_type_display', read_only=True)
+
+    class Meta:
+        model = ClientCost
+        fields = ['id', 'customer', 'customer_name', 'cost_type', 'cost_type_display',
+                  'value', 'reference_month', 'notes', 'created_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at']
+
+    def get_customer_name(self, obj):
+        return obj.customer.company_name or obj.customer.name or ''
+
+
+class RecurringExpenseSerializer(serializers.ModelSerializer):
+    expense_category_display = serializers.CharField(source='get_expense_category_display', read_only=True)
+
+    class Meta:
+        model = RecurringExpense
+        fields = ['id', 'expense_category', 'expense_category_display', 'description',
+                  'value', 'due_day', 'is_recurring', 'is_active', 'notes',
+                  'created_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at']
+
+
+class LoanInstallmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LoanInstallment
+        fields = ['id', 'number', 'due_date', 'value', 'is_paid', 'paid_date']
+        read_only_fields = ['id']
+
+
+class LoanSerializer(serializers.ModelSerializer):
+    installments = LoanInstallmentSerializer(many=True, read_only=True)
+    paid_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Loan
+        fields = ['id', 'partner', 'card_bank', 'description', 'total_amount',
+                  'num_installments', 'installment_value', 'start_date',
+                  'is_active', 'notes', 'installments', 'paid_count',
+                  'created_by', 'created_at']
+        read_only_fields = ['id', 'installment_value', 'created_by', 'created_at']
+
+    def get_paid_count(self, obj):
+        return obj.installments.filter(is_paid=True).count()
+
+
+class AssetSerializer(serializers.ModelSerializer):
+    total_value = serializers.SerializerMethodField()
+    life_used_months = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Asset
+        fields = ['id', 'name', 'quantity', 'unit_value', 'useful_life_months',
+                  'acquisition_date', 'monthly_depreciation', 'total_value',
+                  'life_used_months', 'is_active', 'notes', 'created_by', 'created_at']
+        read_only_fields = ['id', 'monthly_depreciation', 'created_by', 'created_at']
+
+    def get_total_value(self, obj):
+        return float(obj.unit_value * obj.quantity)
+
+    def get_life_used_months(self, obj):
+        from django.utils import timezone
+        if obj.acquisition_date:
+            delta = timezone.now().date() - obj.acquisition_date
+            return min(delta.days // 30, obj.useful_life_months)
+        return 0
+
+
+class ProfitDistPartnerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProfitDistPartner
+        fields = ['id', 'name', 'share_pct', 'is_active']
+
+
+class ProfitDistConfigSerializer(serializers.ModelSerializer):
+    partners = ProfitDistPartnerSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ProfitDistConfig
+        fields = ['id', 'working_capital_pct', 'reserve_fund_pct', 'directors_pct',
+                  'directors_cap', 'partners', 'updated_at']

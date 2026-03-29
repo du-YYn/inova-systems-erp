@@ -12,10 +12,17 @@ from django.utils.dateparse import parse_date
 from datetime import timedelta
 from decimal import Decimal
 
-from .models import BankAccount, Category, Invoice, Transaction, CostCenter, Budget
+from .models import (
+    BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
+    TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
+    Asset, ProfitDistConfig, ProfitDistPartner,
+)
 from .serializers import (
     BankAccountSerializer, CategorySerializer, InvoiceSerializer,
-    TransactionSerializer, CostCenterSerializer, BudgetSerializer
+    TransactionSerializer, CostCenterSerializer, BudgetSerializer,
+    TaxEntrySerializer, ClientCostSerializer, RecurringExpenseSerializer,
+    LoanSerializer, LoanInstallmentSerializer, AssetSerializer,
+    ProfitDistConfigSerializer, ProfitDistPartnerSerializer,
 )
 from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
 
@@ -450,3 +457,304 @@ class BudgetViewSet(viewsets.ModelViewSet):
             })
 
         return Response(result)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NOVOS VIEWSETS — Módulo Financeiro Reestruturado
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@extend_schema(tags=['finance'])
+class TaxEntryViewSet(viewsets.ModelViewSet):
+    queryset = TaxEntry.objects.all()
+    serializer_class = TaxEntrySerializer
+    permission_classes = [IsAdminOrManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        month = self.request.query_params.get('month')
+        if month:
+            qs = qs.filter(reference_month=month)
+        return qs
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        rate = data.get('rate', 0)
+        base = data.get('base_amount', 0)
+        value = data.get('value', 0)
+        if rate and base and not value:
+            value = base * rate / 100
+        serializer.save(created_by=self.request.user, value=value)
+
+
+@extend_schema(tags=['finance'])
+class ClientCostViewSet(viewsets.ModelViewSet):
+    queryset = ClientCost.objects.select_related('customer')
+    serializer_class = ClientCostSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        month = self.request.query_params.get('month')
+        customer_id = self.request.query_params.get('customer')
+        if month:
+            qs = qs.filter(reference_month=month)
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+@extend_schema(tags=['finance'])
+class RecurringExpenseViewSet(viewsets.ModelViewSet):
+    queryset = RecurringExpense.objects.all()
+    serializer_class = RecurringExpenseSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        category = self.request.query_params.get('category')
+        active_only = self.request.query_params.get('active')
+        if category:
+            qs = qs.filter(expense_category=category)
+        if active_only == 'true':
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+@extend_schema(tags=['finance'])
+class LoanViewSet(viewsets.ModelViewSet):
+    queryset = Loan.objects.prefetch_related('installments')
+    serializer_class = LoanSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def perform_create(self, serializer):
+        loan = serializer.save(created_by=self.request.user)
+        # Auto-calculate installment value and generate installments
+        loan.installment_value = loan.total_amount / loan.num_installments
+        loan.save(update_fields=['installment_value'])
+
+        installments = []
+        for i in range(loan.num_installments):
+            month_offset = i
+            year = loan.start_date.year + (loan.start_date.month + month_offset - 1) // 12
+            month = (loan.start_date.month + month_offset - 1) % 12 + 1
+            day = min(loan.start_date.day, 28)
+            from datetime import date
+            due = date(year, month, day)
+            installments.append(LoanInstallment(
+                loan=loan, number=i + 1, due_date=due, value=loan.installment_value,
+            ))
+        LoanInstallment.objects.bulk_create(installments)
+
+    @action(detail=True, methods=['post'], url_path='pay/(?P<installment_id>[0-9]+)')
+    def pay_installment(self, request, pk=None, installment_id=None):
+        inst = LoanInstallment.objects.filter(loan_id=pk, id=installment_id).first()
+        if not inst:
+            return Response({'error': 'Parcela não encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        inst.is_paid = True
+        inst.paid_date = timezone.now().date()
+        inst.save(update_fields=['is_paid', 'paid_date'])
+        return Response(LoanInstallmentSerializer(inst).data)
+
+
+@extend_schema(tags=['finance'])
+class AssetViewSet(viewsets.ModelViewSet):
+    queryset = Asset.objects.all()
+    serializer_class = AssetSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def perform_create(self, serializer):
+        asset = serializer.save(created_by=self.request.user)
+        asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        asset.save(update_fields=['monthly_depreciation'])
+
+    def perform_update(self, serializer):
+        asset = serializer.save()
+        asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        asset.save(update_fields=['monthly_depreciation'])
+
+
+@extend_schema(tags=['finance'])
+class ProfitDistConfigViewSet(viewsets.ModelViewSet):
+    queryset = ProfitDistConfig.objects.prefetch_related('partners')
+    serializer_class = ProfitDistConfigSerializer
+    permission_classes = [IsAdminOrManager]
+
+    @action(detail=True, methods=['post'], url_path='partners')
+    def add_partner(self, request, pk=None):
+        config = self.get_object()
+        ser = ProfitDistPartnerSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save(config=config)
+        return Response(ProfitDistConfigSerializer(config).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['delete'], url_path='partners/(?P<partner_id>[0-9]+)')
+    def remove_partner(self, request, pk=None, partner_id=None):
+        ProfitDistPartner.objects.filter(config_id=pk, id=partner_id).delete()
+        config = self.get_object()
+        return Response(ProfitDistConfigSerializer(config).data)
+
+    @action(detail=False, methods=['get'], url_path='calculate')
+    def calculate(self, request):
+        """Calcula distribuição de lucros para um resultado informado."""
+        resultado = float(request.query_params.get('resultado', 0))
+        config = ProfitDistConfig.objects.prefetch_related('partners').first()
+        if not config:
+            return Response({'error': 'Configure a distribuição de lucros primeiro.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if resultado <= 0:
+            return Response({
+                'resultado': resultado,
+                'working_capital': 0, 'reserve_fund': 0,
+                'directors_total': 0, 'partners': [], 'excess': 0,
+            })
+
+        wc = resultado * float(config.working_capital_pct) / 100
+        rf = resultado * float(config.reserve_fund_pct) / 100
+        directors_raw = resultado * float(config.directors_pct) / 100
+        directors = min(directors_raw, float(config.directors_cap))
+        excess = directors_raw - directors
+
+        partners = config.partners.filter(is_active=True)
+        partner_values = [
+            {'name': p.name, 'share_pct': float(p.share_pct), 'value': directors * float(p.share_pct) / 100}
+            for p in partners
+        ]
+
+        return Response({
+            'resultado': resultado,
+            'working_capital': round(wc, 2),
+            'reserve_fund': round(rf, 2),
+            'directors_total': round(directors, 2),
+            'partners': partner_values,
+            'excess': round(excess, 2),
+        })
+
+
+@extend_schema(tags=['finance'])
+class FinanceDashboardView(viewsets.ViewSet):
+    """Dashboard financeiro consolidado — DRE, indicadores, MRR, distribuição."""
+    permission_classes = [IsAdminOrManager]
+
+    def list(self, request):
+        from sales.models import Customer, Contract
+        from django.db.models import Q
+        from datetime import date
+
+        today = date.today()
+        month_start = today.replace(day=1)
+        year = int(request.query_params.get('year', today.year))
+        month = int(request.query_params.get('month', today.month))
+        ref_date = date(year, month, 1)
+
+        # ── ROB: soma tickets dos clientes ativos com frequência mensal
+        active_customers = Customer.objects.filter(is_active=True)
+        rob = sum(float(c.contract_value) for c in active_customers if c.contract_value)
+
+        # ── MRR: só clientes mensais
+        mrr = sum(
+            float(c.contract_value) for c in active_customers
+            if c.contract_value and c.billing_frequency == 'monthly'
+        )
+
+        # ── Churn: clientes inativos que tinham contrato
+        churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
+        churn_value = sum(float(c.contract_value) for c in churned)
+        churn_rate = (churn_value / rob * 100) if rob > 0 else 0
+
+        # ── Deduções: impostos do mês
+        deducoes = TaxEntry.objects.filter(reference_month=ref_date).aggregate(
+            total=Sum('value')
+        )['total'] or 0
+
+        # ── Custos Variáveis: custos por cliente do mês
+        custos_variaveis = ClientCost.objects.filter(reference_month=ref_date).aggregate(
+            total=Sum('value')
+        )['total'] or 0
+
+        # ── Despesas Operacionais: despesas fixas ativas
+        desp_operacionais = RecurringExpense.objects.filter(is_active=True).aggregate(
+            total=Sum('value')
+        )['total'] or 0
+
+        # ── Depreciação: soma de ativos ativos
+        depreciacao = Asset.objects.filter(is_active=True).aggregate(
+            total=Sum('monthly_depreciation')
+        )['total'] or 0
+
+        # ── Despesas Financeiras: parcelas de empréstimos do mês
+        from django.db.models.functions import ExtractMonth, ExtractYear
+        desp_financeiras = LoanInstallment.objects.filter(
+            due_date__year=year, due_date__month=month, loan__is_active=True
+        ).aggregate(total=Sum('value'))['total'] or 0
+
+        # ── Cálculos DRE
+        rol = float(rob) - float(churn_value) - float(deducoes)
+        lucro_bruto = rol - float(custos_variaveis)
+        margem_contrib = (lucro_bruto / float(rob) * 100) if rob > 0 else 0
+        ebitda = lucro_bruto - float(desp_operacionais)
+        margem_ebitda = (ebitda / rol * 100) if rol > 0 else 0
+        ebit = ebitda - float(depreciacao) - float(desp_financeiras)
+        resultado = ebit  # Simples Nacional: IR/CSLL = 0
+
+        # ── Break-even
+        custos_fixos_total = float(desp_operacionais) + float(desp_financeiras) + float(depreciacao)
+        break_even = (custos_fixos_total / (margem_contrib / 100)) if margem_contrib > 0 else 0
+
+        # ── Clientes para Receita Recorrente
+        customers_data = []
+        for c in active_customers:
+            costs = ClientCost.objects.filter(customer=c, reference_month=ref_date).aggregate(
+                total=Sum('value')
+            )['total'] or 0
+            customers_data.append({
+                'id': c.id,
+                'name': c.company_name or c.name,
+                'ticket': float(c.contract_value or 0),
+                'costs': float(costs),
+                'margin': float(c.contract_value or 0) - float(costs),
+                'billing_frequency': c.billing_frequency,
+                'is_active': c.is_active,
+            })
+
+        return Response({
+            'period': f"{month:02d}/{year}",
+            'indicators': {
+                'rob': round(float(rob), 2),
+                'rol': round(rol, 2),
+                'ebitda': round(ebitda, 2),
+                'resultado': round(resultado, 2),
+                'mrr': round(mrr, 2),
+                'churn_rate': round(churn_rate, 2),
+                'churn_value': round(float(churn_value), 2),
+                'margem_contribuicao': round(margem_contrib, 2),
+                'margem_ebitda': round(margem_ebitda, 2),
+                'break_even': round(break_even, 2),
+            },
+            'dre': {
+                'rob': round(float(rob), 2),
+                'churn': round(float(churn_value), 2),
+                'deducoes': round(float(deducoes), 2),
+                'rol': round(rol, 2),
+                'custos_variaveis': round(float(custos_variaveis), 2),
+                'lucro_bruto': round(lucro_bruto, 2),
+                'margem_contribuicao': round(margem_contrib, 2),
+                'despesas_operacionais': round(float(desp_operacionais), 2),
+                'ebitda': round(ebitda, 2),
+                'margem_ebitda': round(margem_ebitda, 2),
+                'depreciacao': round(float(depreciacao), 2),
+                'despesas_financeiras': round(float(desp_financeiras), 2),
+                'ebit': round(ebit, 2),
+                'ir_csll': 0,
+                'resultado_liquido': round(resultado, 2),
+            },
+            'customers': customers_data,
+            'active_customers': active_customers.count(),
+            'churned_customers': churned.count(),
+        })
