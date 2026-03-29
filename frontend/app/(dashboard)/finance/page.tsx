@@ -38,6 +38,13 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
+import DashboardFinanceiro from './DashboardFinanceiro';
+import ImpostosSection from './ImpostosSection';
+import CustosPorClienteSection from './CustosPorClienteSection';
+import DespesasFixasSection from './DespesasFixasSection';
+import EmprestimosSection from './EmprestimosSection';
+import AtivosSection from './AtivosSection';
+import ConfigFinanceiro from './ConfigFinanceiro';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,6 +234,9 @@ const BUDGET_PERIODS = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
+type MainTab = 'dashboard' | 'movimento';
+type SubTab = 'invoices' | 'transactions' | 'customers' | 'taxes' | 'client_costs' | 'fixed_expenses' | 'loans' | 'assets' | 'budgets' | 'config';
+// Keep legacy Tab for internal state compatibility
 type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categories' | 'budgets' | 'cost_centers' | 'customers';
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -236,6 +246,8 @@ export default function FinancePage() {
   const { isDemoMode } = useDemoMode();
   const today = new Date().toISOString().split('T')[0];
 
+  const [mainTab, setMainTab] = useState<MainTab>('dashboard');
+  const [subTab, setSubTab] = useState<SubTab>('invoices');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
 
   // Overview state
@@ -893,16 +905,27 @@ export default function FinancePage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'overview', label: 'Visão Geral', icon: <TrendingUp className="w-4 h-4" /> },
+  const subTabs: { key: SubTab; label: string; icon: React.ReactNode }[] = [
     { key: 'invoices', label: 'Faturas', icon: <Receipt className="w-4 h-4" /> },
     { key: 'transactions', label: 'Transações', icon: <ArrowLeftRight className="w-4 h-4" /> },
-    { key: 'bank_accounts', label: 'Contas Bancárias', icon: <Landmark className="w-4 h-4" /> },
-    { key: 'categories', label: 'Categorias', icon: <Tag className="w-4 h-4" /> },
-    { key: 'budgets', label: 'Orçamentos', icon: <PieChart className="w-4 h-4" /> },
-    { key: 'cost_centers', label: 'Centros de Custo', icon: <Building className="w-4 h-4" /> },
     { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
+    { key: 'taxes', label: 'Impostos', icon: <FileText className="w-4 h-4" /> },
+    { key: 'client_costs', label: 'Custos/Cliente', icon: <CreditCard className="w-4 h-4" /> },
+    { key: 'fixed_expenses', label: 'Desp. Fixas', icon: <Building className="w-4 h-4" /> },
+    { key: 'loans', label: 'Empréstimos', icon: <Landmark className="w-4 h-4" /> },
+    { key: 'assets', label: 'Ativos', icon: <PieChart className="w-4 h-4" /> },
+    { key: 'budgets', label: 'Orçamentos', icon: <TrendingUp className="w-4 h-4" /> },
+    { key: 'config', label: '⚙️ Config', icon: null },
   ];
+
+  // Map subTab to legacy activeTab for existing sections
+  const syncLegacyTab = (sub: SubTab) => {
+    setSubTab(sub);
+    if (sub === 'invoices') setActiveTab('invoices');
+    else if (sub === 'transactions') setActiveTab('transactions');
+    else if (sub === 'customers') setActiveTab('customers');
+    else if (sub === 'budgets') setActiveTab('budgets');
+  };
 
   return (
     <div>
@@ -910,57 +933,21 @@ export default function FinancePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Financeiro</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Controle de receitas, despesas e orçamentos</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestão financeira completa — do planejamento ao resultado</p>
         </div>
-        {activeTab === 'overview' && (
-          <div className="flex items-center gap-3">
-            <button onClick={() => setShowRevenueModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-              <ArrowUpRight className="w-5 h-5" /> Nova Receita
-            </button>
-            <button onClick={() => setShowExpenseModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-              <ArrowDownRight className="w-5 h-5" /> Nova Despesa
-            </button>
-          </div>
-        )}
-        {activeTab === 'invoices' && (
+        {mainTab === 'movimento' && subTab === 'invoices' && (
           <button onClick={openNewInvoice}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Fatura
           </button>
         )}
-        {activeTab === 'transactions' && (
+        {mainTab === 'movimento' && subTab === 'transactions' && (
           <button onClick={() => setShowTransactionModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Transação
           </button>
         )}
-        {activeTab === 'bank_accounts' && (
-          <button onClick={openNewBankAccount}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-            <Plus className="w-5 h-5" /> Nova Conta
-          </button>
-        )}
-        {activeTab === 'categories' && (
-          <button onClick={openNewCategory}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-            <Plus className="w-5 h-5" /> Nova Categoria
-          </button>
-        )}
-        {activeTab === 'budgets' && (
-          <button onClick={() => setShowBudgetModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-            <Plus className="w-5 h-5" /> Novo Orçamento
-          </button>
-        )}
-        {activeTab === 'cost_centers' && (
-          <button onClick={openNewCostCenter}
-            className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-            <Plus className="w-5 h-5" /> Novo Centro de Custo
-          </button>
-        )}
-        {activeTab === 'customers' && (
+        {mainTab === 'movimento' && subTab === 'customers' && (
           <button onClick={openNewCustomer}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Cadastrar Cliente
@@ -968,22 +955,56 @@ export default function FinancePage() {
         )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg p-1 w-fit">
-        {tabs.map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'bg-accent-gold text-white'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-            }`}>
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+      {/* Main Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button onClick={() => setMainTab('dashboard')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+            mainTab === 'dashboard' ? 'bg-accent-gold text-white shadow-md' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          }`}>
+          <PieChart className="w-4 h-4" /> Dashboard
+        </button>
+        <button onClick={() => setMainTab('movimento')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+            mainTab === 'movimento' ? 'bg-accent-gold text-white shadow-md' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+          }`}>
+          <FileText className="w-4 h-4" /> Movimento
+        </button>
       </div>
 
-      {/* ─── Overview Tab ─────────────────────────────────────────────────── */}
-      {activeTab === 'overview' && (
+      {/* ─── DASHBOARD TAB ────────────────────────────────────────────────── */}
+      {mainTab === 'dashboard' && (
+        <DashboardFinanceiro isDemoMode={isDemoMode} />
+      )}
+
+      {/* ─── MOVIMENTO TAB ────────────────────────────────────────────────── */}
+      {mainTab === 'movimento' && (
+        <>
+          {/* Sub-tabs */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {subTabs.map(st => (
+              <button key={st.key} onClick={() => syncLegacyTab(st.key)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  subTab === st.key
+                    ? 'bg-accent-gold text-white'
+                    : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                }`}>
+                {st.icon} {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* New sections */}
+          {subTab === 'taxes' && <ImpostosSection isDemoMode={isDemoMode} />}
+          {subTab === 'client_costs' && <CustosPorClienteSection isDemoMode={isDemoMode} customers={financeCustomers.map(c => ({ id: c.id, company_name: c.company_name, name: c.name }))} />}
+          {subTab === 'fixed_expenses' && <DespesasFixasSection isDemoMode={isDemoMode} />}
+          {subTab === 'loans' && <EmprestimosSection isDemoMode={isDemoMode} />}
+          {subTab === 'assets' && <AtivosSection isDemoMode={isDemoMode} />}
+          {subTab === 'config' && <ConfigFinanceiro isDemoMode={isDemoMode} />}
+        </>
+      )}
+
+      {/* ─── LEGACY: Overview Tab (hidden, kept for data loading) ──────── */}
+      {mainTab === 'movimento' && activeTab === 'overview' && (
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1119,7 +1140,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Invoices Tab ─────────────────────────────────────────────────── */}
-      {activeTab === 'invoices' && (
+      {mainTab === 'movimento' && subTab === 'invoices' && (
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
@@ -1234,7 +1255,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Transactions Tab ──────────────────────────────────────────────── */}
-      {activeTab === 'transactions' && (
+      {mainTab === 'movimento' && subTab === 'transactions' && (
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
@@ -1318,7 +1339,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Bank Accounts Tab ────────────────────────────────────────────── */}
-      {activeTab === 'bank_accounts' && (
+      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'bank_accounts' && (
         <div className="card">
           {loadingFullBankAccounts ? (
             <div className="p-6 space-y-3">
@@ -1390,7 +1411,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Categories Tab ────────────────────────────────────────────────── */}
-      {activeTab === 'categories' && (
+      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'categories' && (
         <div className="card">
           {loadingCategories ? (
             <div className="p-6 space-y-3">
@@ -1453,7 +1474,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Budgets Tab ──────────────────────────────────────────────────── */}
-      {activeTab === 'budgets' && (
+      {mainTab === 'movimento' && subTab === 'budgets' && (
         <div className="space-y-4">
           {loadingBudgets ? (
             Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
@@ -1506,7 +1527,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Cost Centers Tab ─────────────────────────────────────────────── */}
-      {activeTab === 'cost_centers' && (
+      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'cost_centers' && (
         <div className="card">
           {loadingCostCenters ? (
             <div className="p-6 space-y-3">
@@ -1558,7 +1579,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Customers Tab ─────────────────────────────────────────────────── */}
-      {activeTab === 'customers' && (
+      {mainTab === 'movimento' && subTab === 'customers' && (
         <div>
           {/* Search bar */}
           <div className="flex items-center gap-3 mb-4">
