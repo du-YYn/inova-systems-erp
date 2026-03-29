@@ -643,12 +643,10 @@ class FinanceDashboardView(viewsets.ViewSet):
     permission_classes = [IsAdminOrManager]
 
     def list(self, request):
-        from sales.models import Customer, Contract
-        from django.db.models import Q
+        from sales.models import Customer
         from datetime import date
 
         today = date.today()
-        month_start = today.replace(day=1)
         year = int(request.query_params.get('year', today.year))
         month = int(request.query_params.get('month', today.month))
         ref_date = date(year, month, 1)
@@ -689,7 +687,6 @@ class FinanceDashboardView(viewsets.ViewSet):
         )['total'] or 0
 
         # ── Despesas Financeiras: parcelas de empréstimos do mês
-        from django.db.models.functions import ExtractMonth, ExtractYear
         desp_financeiras = LoanInstallment.objects.filter(
             due_date__year=year, due_date__month=month, loan__is_active=True
         ).aggregate(total=Sum('value'))['total'] or 0
