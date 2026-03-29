@@ -50,11 +50,17 @@ interface FinanceCustomer {
   document: string;
   email: string;
   phone: string;
+  website: string;
+  address: string;
   city: string;
   state: string;
+  cep: string;
+  contract_value: string;
+  billing_frequency: string;
   is_active: boolean;
   segment: string;
   source: string;
+  notes: string;
   created_at: string;
 }
 
@@ -66,10 +72,24 @@ const CUSTOMER_EMPTY_FORM = {
   document: '',
   email: '',
   phone: '',
+  website: '',
+  address: '',
   city: '',
   state: '',
+  cep: '',
+  contract_value: '',
+  billing_frequency: 'monthly',
+  is_active: true as boolean | string,
   segment: '',
   notes: '',
+};
+
+const BILLING_FREQUENCY_LABELS: Record<string, string> = {
+  one_time: 'Pagamento Único',
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  yearly: 'Anual',
 };
 
 const CUSTOMER_SEGMENT_LABELS: Record<string, string> = {
@@ -765,7 +785,10 @@ export default function FinancePage() {
       customer_type: c.customer_type, company_name: c.company_name || '',
       trading_name: c.trading_name || '', name: c.name || '',
       document: c.document || '', email: c.email || '', phone: c.phone || '',
-      city: c.city || '', state: c.state || '', segment: c.segment || '', notes: '',
+      website: c.website || '', address: c.address || '',
+      city: c.city || '', state: c.state || '', cep: c.cep || '',
+      contract_value: c.contract_value || '', billing_frequency: c.billing_frequency || 'monthly',
+      is_active: c.is_active, segment: c.segment || '', notes: c.notes || '',
     });
     setShowCustomerModal(true);
   };
@@ -774,9 +797,12 @@ export default function FinancePage() {
     e.preventDefault();
     setSavingCustomer(true);
     try {
-      const body = Object.fromEntries(
-        Object.entries(customerForm).filter(([, v]) => v !== '')
-      );
+      const body: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(customerForm)) {
+        if (k === 'is_active') { body[k] = v === true || v === 'true'; continue; }
+        if (k === 'contract_value' && v === '') continue;
+        if (v !== '') body[k] = v;
+      }
       if (editingCustomer) {
         await api.patch(`/sales/customers/${editingCustomer.id}/`, body);
         toast.success('Cliente atualizado!');
@@ -1568,7 +1594,9 @@ export default function FinancePage() {
                   <tr>
                     <th className="text-left">Cliente</th>
                     <th className="hidden md:table-cell text-left">Tipo</th>
-                    <th className="hidden md:table-cell text-left">Contato</th>
+                    <th className="hidden lg:table-cell text-left">Contato</th>
+                    <th className="hidden md:table-cell text-right">Valor Contrato</th>
+                    <th className="hidden lg:table-cell text-left">Cobrança</th>
                     <th className="text-left">Status</th>
                     <th></th>
                   </tr>
@@ -1603,7 +1631,7 @@ export default function FinancePage() {
                           )}
                         </div>
                       </td>
-                      <td className="hidden md:table-cell px-4 py-3">
+                      <td className="hidden lg:table-cell px-4 py-3">
                         {c.email && (
                           <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-1">
                             <Mail className="w-3 h-3 flex-shrink-0" /><Sensitive>{c.email}</Sensitive>
@@ -1614,6 +1642,16 @@ export default function FinancePage() {
                             <Phone className="w-3 h-3 flex-shrink-0" /><Sensitive>{c.phone}</Sensitive>
                           </div>
                         )}
+                      </td>
+                      <td className="hidden md:table-cell px-4 py-3 text-right">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          <Sensitive>{Number(c.contract_value) > 0 ? formatCurrency(c.contract_value) : '—'}</Sensitive>
+                        </p>
+                      </td>
+                      <td className="hidden lg:table-cell px-4 py-3">
+                        <span className="text-xs text-gray-600 dark:text-gray-300">
+                          {BILLING_FREQUENCY_LABELS[c.billing_frequency] || '—'}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${c.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-800' : 'bg-gray-100 dark:bg-gray-700 text-gray-600'}`}>
@@ -2264,20 +2302,79 @@ export default function FinancePage() {
                     className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Cidade</label>
-                  <input type="text" value={customerForm.city}
-                    onChange={e => setCustomerForm({ ...customerForm, city: e.target.value })}
-                    className="input-field" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado (UF)</label>
-                  <input type="text" maxLength={2} value={customerForm.state}
-                    onChange={e => setCustomerForm({ ...customerForm, state: e.target.value.toUpperCase() })}
-                    className="input-field" />
+              {/* Valor do Contrato / Frequência */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Dados Financeiros</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor do Contrato (R$)</label>
+                    <input type="number" step="0.01" min="0" value={customerForm.contract_value}
+                      onChange={e => setCustomerForm({ ...customerForm, contract_value: e.target.value })}
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="0,00" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Frequência de Cobrança</label>
+                    <select value={customerForm.billing_frequency}
+                      onChange={e => setCustomerForm({ ...customerForm, billing_frequency: e.target.value })}
+                      className="input-field bg-white dark:bg-gray-800">
+                      {Object.entries(BILLING_FREQUENCY_LABELS).map(([v, l]) => (
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
+
+              {/* Endereço */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Endereço</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Endereço</label>
+                    <input type="text" value={customerForm.address}
+                      onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })}
+                      className="input-field" placeholder="Rua, número, complemento" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Cidade</label>
+                      <input type="text" value={customerForm.city}
+                        onChange={e => setCustomerForm({ ...customerForm, city: e.target.value })}
+                        className="input-field" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">UF</label>
+                      <input type="text" maxLength={2} value={customerForm.state}
+                        onChange={e => setCustomerForm({ ...customerForm, state: e.target.value.toUpperCase() })}
+                        className="input-field" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">CEP</label>
+                      <input type="text" maxLength={9} value={customerForm.cep}
+                        onChange={e => setCustomerForm({ ...customerForm, cep: e.target.value })}
+                        className="input-field" placeholder="00000-000" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Website</label>
+                    <input type="url" value={customerForm.website}
+                      onChange={e => setCustomerForm({ ...customerForm, website: e.target.value })}
+                      className="input-field" placeholder="https://" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status + Observações */}
+              {editingCustomer && (
+                <div className="flex items-center gap-2 pt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={customerForm.is_active === true || customerForm.is_active === 'true'}
+                      onChange={e => setCustomerForm({ ...customerForm, is_active: e.target.checked })}
+                      className="w-4 h-4 rounded text-accent-gold" />
+                    <span className="text-sm text-gray-500 dark:text-gray-400">Cliente ativo</span>
+                  </label>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Observações</label>
                 <textarea rows={2} value={customerForm.notes}

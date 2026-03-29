@@ -29,6 +29,14 @@ class Customer(models.Model):
         ('crm', 'Via CRM'),
     ]
 
+    BILLING_FREQUENCY_CHOICES = [
+        ('one_time', 'Pagamento Único'),
+        ('monthly', 'Mensal'),
+        ('quarterly', 'Trimestral'),
+        ('semiannual', 'Semestral'),
+        ('yearly', 'Anual'),
+    ]
+
     customer_type = models.CharField(max_length=2, choices=TYPE_CHOICES, default='PJ')
     segment = models.CharField(max_length=20, choices=SEGMENT_CHOICES, default='smb')
     source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='manual')
@@ -46,6 +54,8 @@ class Customer(models.Model):
     state = models.CharField(max_length=2, blank=True)
     cep = models.CharField(max_length=9, blank=True)
     contacts = models.JSONField(default=list, validators=[validate_contact_list])  # [{"name": "", "email": "", "phone": "", "role": ""}]
+    contract_value = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Valor do contrato')
+    billing_frequency = models.CharField(max_length=20, choices=BILLING_FREQUENCY_CHOICES, default='monthly', blank=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='customers')

@@ -28,6 +28,8 @@ class CustomerSerializer(serializers.ModelSerializer):
             "state",
             "cep",
             "contacts",
+            "contract_value",
+            "billing_frequency",
             "is_active",
             "source",
             "notes",
