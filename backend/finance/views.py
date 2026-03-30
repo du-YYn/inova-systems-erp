@@ -571,12 +571,18 @@ class AssetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         asset = serializer.save(created_by=self.request.user)
-        asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        if asset.useful_life_months and asset.useful_life_months > 0:
+            asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        else:
+            asset.monthly_depreciation = 0
         asset.save(update_fields=['monthly_depreciation'])
 
     def perform_update(self, serializer):
         asset = serializer.save()
-        asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        if asset.useful_life_months and asset.useful_life_months > 0:
+            asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
+        else:
+            asset.monthly_depreciation = 0
         asset.save(update_fields=['monthly_depreciation'])
 
 
@@ -691,16 +697,17 @@ class FinanceDashboardView(viewsets.ViewSet):
             due_date__year=year, due_date__month=month, loan__is_active=True
         ).aggregate(total=Sum('value'))['total'] or 0
 
-        # ── Cálculos DRE
-        rol = float(rob) - float(churn_value) - float(deducoes)
+        # ── Cálculos DRE (com guardas de divisão por zero)
+        rob_f = float(rob) if rob else 0
+        rol = rob_f - float(churn_value) - float(deducoes)
         lucro_bruto = rol - float(custos_variaveis)
-        margem_contrib = (lucro_bruto / float(rob) * 100) if rob > 0 else 0
+        margem_contrib = (lucro_bruto / rob_f * 100) if rob_f > 0 else 0
         ebitda = lucro_bruto - float(desp_operacionais)
         margem_ebitda = (ebitda / rol * 100) if rol > 0 else 0
         ebit = ebitda - float(depreciacao) - float(desp_financeiras)
         resultado = ebit  # Simples Nacional: IR/CSLL = 0
 
-        # ── Break-even
+        # ── Break-even (guarda divisão por zero)
         custos_fixos_total = float(desp_operacionais) + float(desp_financeiras) + float(depreciacao)
         break_even = (custos_fixos_total / (margem_contrib / 100)) if margem_contrib > 0 else 0
 

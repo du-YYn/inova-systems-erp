@@ -921,10 +921,19 @@ export default function FinancePage() {
   // Map subTab to legacy activeTab for existing sections
   const syncLegacyTab = (sub: SubTab) => {
     setSubTab(sub);
-    if (sub === 'invoices') setActiveTab('invoices');
-    else if (sub === 'transactions') setActiveTab('transactions');
-    else if (sub === 'customers') setActiveTab('customers');
-    else if (sub === 'budgets') setActiveTab('budgets');
+    const legacyMap: Partial<Record<SubTab, Tab>> = {
+      invoices: 'invoices', transactions: 'transactions',
+      customers: 'customers', budgets: 'budgets',
+      config: 'categories',
+    };
+    if (legacyMap[sub]) setActiveTab(legacyMap[sub]!);
+
+    // Trigger data loading for the active sub-tab
+    if (sub === 'invoices') fetchInvoices();
+    if (sub === 'transactions') fetchTransactions();
+    if (sub === 'customers') fetchFinanceCustomers();
+    if (sub === 'budgets') { fetchBudgets(); fetchCategories(); }
+    if (sub === 'config') { fetchCategories(); fetchFullBankAccounts(); fetchCostCenters(); }
   };
 
   return (
@@ -999,7 +1008,26 @@ export default function FinancePage() {
           {subTab === 'fixed_expenses' && <DespesasFixasSection isDemoMode={isDemoMode} />}
           {subTab === 'loans' && <EmprestimosSection isDemoMode={isDemoMode} />}
           {subTab === 'assets' && <AtivosSection isDemoMode={isDemoMode} />}
-          {subTab === 'config' && <ConfigFinanceiro isDemoMode={isDemoMode} />}
+          {subTab === 'config' && (
+            <>
+              <ConfigFinanceiro isDemoMode={isDemoMode} />
+              <div className="mt-8 border-t border-gray-200 dark:border-gray-700 pt-8">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Categorias, Contas e Centros de Custo</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex gap-2">
+                    <button onClick={() => { setActiveTab('categories'); fetchCategories(); }} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'categories' ? 'bg-accent-gold text-white' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600'}`}>Categorias</button>
+                    <button onClick={() => { setActiveTab('bank_accounts'); fetchFullBankAccounts(); }} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'bank_accounts' ? 'bg-accent-gold text-white' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600'}`}>Contas Bancárias</button>
+                    <button onClick={() => { setActiveTab('cost_centers'); fetchCostCenters(); }} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${activeTab === 'cost_centers' ? 'bg-accent-gold text-white' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600'}`}>Centros de Custo</button>
+                  </div>
+                  <div>
+                    {activeTab === 'categories' && <button onClick={openNewCategory} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-gold text-white rounded-lg text-sm hover:bg-accent-gold-dark"><Plus className="w-4 h-4" /> Nova Categoria</button>}
+                    {activeTab === 'bank_accounts' && <button onClick={openNewBankAccount} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-gold text-white rounded-lg text-sm hover:bg-accent-gold-dark"><Plus className="w-4 h-4" /> Nova Conta</button>}
+                    {activeTab === 'cost_centers' && <button onClick={openNewCostCenter} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-gold text-white rounded-lg text-sm hover:bg-accent-gold-dark"><Plus className="w-4 h-4" /> Novo Centro</button>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
 

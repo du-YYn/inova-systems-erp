@@ -50,7 +50,7 @@ export default function ConfigFinanceiro({ isDemoMode }: { isDemoMode: boolean }
     setLoading(true);
     try {
       const res = await api.get("/finance/profit-dist/");
-      const items = Array.isArray(res.data) ? res.data : res.data.results ?? [];
+      const items = Array.isArray(res) ? res : (res as { results?: unknown[] }).results ?? [];
       if (items.length > 0) {
         const cfg = items[0];
         setConfig(cfg);

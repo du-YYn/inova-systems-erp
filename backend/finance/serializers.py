@@ -60,6 +60,24 @@ class InvoiceSerializer(serializers.ModelSerializer):
             return obj.project.name
         return None
 
+    def validate_value(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Valor não pode ser negativo.')
+        return v
+
+    def validate(self, data):
+        value = data.get('value', 0) or 0
+        discount = data.get('discount', 0) or 0
+        interest = data.get('interest', 0) or 0
+        tax = data.get('tax', 0) or 0
+        expected_total = value - discount + interest + tax
+        if 'total' in data and data['total'] is not None:
+            if abs(float(data['total']) - float(expected_total)) > 0.01:
+                data['total'] = expected_total
+        else:
+            data['total'] = expected_total
+        return data
+
 
 class TransactionSerializer(serializers.ModelSerializer):
     bank_account_name = serializers.CharField(source='bank_account.name', read_only=True)
@@ -81,6 +99,11 @@ class TransactionSerializer(serializers.ModelSerializer):
         if obj.project_id:
             return obj.project.name
         return None
+
+    def validate_amount(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Valor não pode ser negativo.')
+        return v
 
 
 class CostCenterSerializer(serializers.ModelSerializer):
@@ -107,6 +130,11 @@ class BudgetSerializer(serializers.ModelSerializer):
             return float((obj.actual / obj.planned) * 100)
         return 0
 
+    def validate(self, data):
+        if data.get('start_date') and data.get('end_date') and data['start_date'] > data['end_date']:
+            raise serializers.ValidationError('Data de início deve ser anterior à data de término.')
+        return data
+
 
 class TaxEntrySerializer(serializers.ModelSerializer):
     tax_type_display = serializers.CharField(source='get_tax_type_display', read_only=True)
@@ -116,6 +144,16 @@ class TaxEntrySerializer(serializers.ModelSerializer):
         fields = ['id', 'tax_type', 'tax_type_display', 'reference_month', 'rate',
                   'base_amount', 'value', 'notes', 'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def validate_rate(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Alíquota não pode ser negativa.')
+        return v
+
+    def validate_value(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Valor não pode ser negativo.')
+        return v
 
 
 class ClientCostSerializer(serializers.ModelSerializer):
@@ -131,6 +169,11 @@ class ClientCostSerializer(serializers.ModelSerializer):
     def get_customer_name(self, obj):
         return obj.customer.company_name or obj.customer.name or ''
 
+    def validate_value(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Valor não pode ser negativo.')
+        return v
+
 
 class RecurringExpenseSerializer(serializers.ModelSerializer):
     expense_category_display = serializers.CharField(source='get_expense_category_display', read_only=True)
@@ -141,6 +184,16 @@ class RecurringExpenseSerializer(serializers.ModelSerializer):
                   'value', 'due_day', 'is_recurring', 'is_active', 'notes',
                   'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
+
+    def validate_value(self, v):
+        if v is not None and v < 0:
+            raise serializers.ValidationError('Valor não pode ser negativo.')
+        return v
+
+    def validate_due_day(self, v):
+        if v < 1 or v > 31:
+            raise serializers.ValidationError('Dia de vencimento deve ser entre 1 e 31.')
+        return v
 
 
 class LoanInstallmentSerializer(serializers.ModelSerializer):
@@ -164,6 +217,16 @@ class LoanSerializer(serializers.ModelSerializer):
 
     def get_paid_count(self, obj):
         return obj.installments.filter(is_paid=True).count()
+
+    def validate_total_amount(self, v):
+        if v is not None and v <= 0:
+            raise serializers.ValidationError('Valor total deve ser positivo.')
+        return v
+
+    def validate_num_installments(self, v):
+        if v is not None and v <= 0:
+            raise serializers.ValidationError('Número de parcelas deve ser maior que zero.')
+        return v
 
 
 class AssetSerializer(serializers.ModelSerializer):

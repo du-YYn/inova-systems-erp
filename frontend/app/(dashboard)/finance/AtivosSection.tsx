@@ -47,7 +47,8 @@ export default function AtivosSection({ isDemoMode }: { isDemoMode: boolean }) {
     setLoading(true);
     try {
       const res = await api.get("/finance/assets/");
-      setAssets(Array.isArray(res.data) ? res.data : res.data.results ?? []);
+      const list = (res as { results?: Asset[] }).results ?? res;
+      setAssets(Array.isArray(list) ? list : []);
     } catch {
       toast.error("Erro ao carregar ativos.");
     } finally {
