@@ -234,7 +234,7 @@ const BUDGET_PERIODS = [
   { value: 'custom', label: 'Personalizado' },
 ];
 
-type MainTab = 'dashboard' | 'movimento';
+type MainTab = 'dashboard' | 'gestao';
 type SubTab = 'invoices' | 'transactions' | 'customers' | 'taxes' | 'client_costs' | 'fixed_expenses' | 'loans' | 'assets' | 'budgets' | 'config';
 // Keep legacy Tab for internal state compatibility
 type Tab = 'overview' | 'invoices' | 'transactions' | 'bank_accounts' | 'categories' | 'budgets' | 'cost_centers' | 'customers';
@@ -910,12 +910,12 @@ export default function FinancePage() {
     { key: 'transactions', label: 'Transações', icon: <ArrowLeftRight className="w-4 h-4" /> },
     { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
     { key: 'taxes', label: 'Impostos', icon: <FileText className="w-4 h-4" /> },
-    { key: 'client_costs', label: 'Custos/Cliente', icon: <CreditCard className="w-4 h-4" /> },
-    { key: 'fixed_expenses', label: 'Desp. Fixas', icon: <Building className="w-4 h-4" /> },
+    { key: 'client_costs', label: 'Custos por Cliente', icon: <CreditCard className="w-4 h-4" /> },
+    { key: 'fixed_expenses', label: 'Despesas Fixas', icon: <Building className="w-4 h-4" /> },
     { key: 'loans', label: 'Empréstimos', icon: <Landmark className="w-4 h-4" /> },
     { key: 'assets', label: 'Ativos', icon: <PieChart className="w-4 h-4" /> },
     { key: 'budgets', label: 'Orçamentos', icon: <TrendingUp className="w-4 h-4" /> },
-    { key: 'config', label: '⚙️ Config', icon: null },
+    { key: 'config', label: 'Configurações', icon: null },
   ];
 
   // Map subTab to legacy activeTab for existing sections
@@ -944,19 +944,19 @@ export default function FinancePage() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Financeiro</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestão financeira completa — do planejamento ao resultado</p>
         </div>
-        {mainTab === 'movimento' && subTab === 'invoices' && (
+        {mainTab === 'gestao' && subTab === 'invoices' && (
           <button onClick={openNewInvoice}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Fatura
           </button>
         )}
-        {mainTab === 'movimento' && subTab === 'transactions' && (
+        {mainTab === 'gestao' && subTab === 'transactions' && (
           <button onClick={() => setShowTransactionModal(true)}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Nova Transação
           </button>
         )}
-        {mainTab === 'movimento' && subTab === 'customers' && (
+        {mainTab === 'gestao' && subTab === 'customers' && (
           <button onClick={openNewCustomer}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
             <Plus className="w-5 h-5" /> Cadastrar Cliente
@@ -970,13 +970,13 @@ export default function FinancePage() {
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
             mainTab === 'dashboard' ? 'bg-accent-gold text-white shadow-md' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
           }`}>
-          <PieChart className="w-4 h-4" /> Dashboard
+          <PieChart className="w-4 h-4" /> Visão Geral
         </button>
-        <button onClick={() => setMainTab('movimento')}
+        <button onClick={() => setMainTab('gestao')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-            mainTab === 'movimento' ? 'bg-accent-gold text-white shadow-md' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+            mainTab === 'gestao' ? 'bg-accent-gold text-white shadow-md' : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50'
           }`}>
-          <FileText className="w-4 h-4" /> Movimento
+          <FileText className="w-4 h-4" /> Gestão
         </button>
       </div>
 
@@ -986,7 +986,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── MOVIMENTO TAB ────────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && (
+      {mainTab === 'gestao' && (
         <>
           {/* Sub-tabs */}
           <div className="flex flex-wrap gap-2 mb-6">
@@ -1032,7 +1032,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── LEGACY: Overview Tab (hidden, kept for data loading) ──────── */}
-      {mainTab === 'movimento' && activeTab === 'overview' && (
+      {mainTab === 'gestao' && activeTab === 'overview' && (
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -1168,7 +1168,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Invoices Tab ─────────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'invoices' && (
+      {mainTab === 'gestao' && subTab === 'invoices' && (
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
@@ -1283,7 +1283,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Transactions Tab ──────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'transactions' && (
+      {mainTab === 'gestao' && subTab === 'transactions' && (
         <div className="space-y-4">
           {/* Filters */}
           <div className="card p-4 flex flex-wrap gap-3 items-center">
@@ -1367,7 +1367,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Bank Accounts Tab ────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'bank_accounts' && (
+      {mainTab === 'gestao' && subTab === 'config' && activeTab === 'bank_accounts' && (
         <div className="card">
           {loadingFullBankAccounts ? (
             <div className="p-6 space-y-3">
@@ -1439,7 +1439,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Categories Tab ────────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'categories' && (
+      {mainTab === 'gestao' && subTab === 'config' && activeTab === 'categories' && (
         <div className="card">
           {loadingCategories ? (
             <div className="p-6 space-y-3">
@@ -1502,7 +1502,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Budgets Tab ──────────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'budgets' && (
+      {mainTab === 'gestao' && subTab === 'budgets' && (
         <div className="space-y-4">
           {loadingBudgets ? (
             Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
@@ -1555,7 +1555,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Cost Centers Tab ─────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'config' && activeTab === 'cost_centers' && (
+      {mainTab === 'gestao' && subTab === 'config' && activeTab === 'cost_centers' && (
         <div className="card">
           {loadingCostCenters ? (
             <div className="p-6 space-y-3">
@@ -1607,7 +1607,7 @@ export default function FinancePage() {
       )}
 
       {/* ─── Customers Tab ─────────────────────────────────────────────────── */}
-      {mainTab === 'movimento' && subTab === 'customers' && (
+      {mainTab === 'gestao' && subTab === 'customers' && (
         <div>
           {/* Search bar */}
           <div className="flex items-center gap-3 mb-4">
