@@ -1,19 +1,17 @@
-'use client';
-import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
-import { useToast } from '@/components/ui/Toast';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import FocusTrap from '@/components/ui/FocusTrap';
-import { Sensitive } from '@/components/ui/Sensitive';
-import api from '@/lib/api';
+"use client";
 
-const fmt = (v: number | string) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
+import { useEffect, useState, useCallback } from "react";
+import { Settings, Plus, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import api from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
+import { Sensitive } from "@/components/ui/Sensitive";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import FocusTrap from "@/components/ui/FocusTrap";
 
 interface Partner {
   id: number;
   name: string;
   share_pct: string;
-  is_active: boolean;
 }
 
 interface ProfitDistConfig {
@@ -25,256 +23,251 @@ interface ProfitDistConfig {
   partners: Partner[];
 }
 
+const EMPTY_CONFIG = {
+  working_capital_pct: "",
+  reserve_fund_pct: "",
+  directors_pct: "",
+  directors_cap: "",
+};
+
+const EMPTY_PARTNER = { name: "", share_pct: "" };
+
+const formatCurrency = (value: number | string) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value));
+
 export default function ConfigFinanceiro({ isDemoMode }: { isDemoMode: boolean }) {
   const toast = useToast();
   const [config, setConfig] = useState<ProfitDistConfig | null>(null);
+  const [configForm, setConfigForm] = useState({ ...EMPTY_CONFIG });
+  const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    working_capital_pct: '',
-    reserve_fund_pct: '',
-    directors_pct: '',
-    directors_cap: '',
-  });
-  const [newPartnerName, setNewPartnerName] = useState('');
-  const [newPartnerPct, setNewPartnerPct] = useState('');
-  const [showAddPartner, setShowAddPartner] = useState(false);
+  const [newPartner, setNewPartner] = useState({ ...EMPTY_PARTNER });
   const [addingPartner, setAddingPartner] = useState(false);
-  const [delPartner, setDelPartner] = useState<Partner | null>(null);
+  const [confirmDeletePartner, setConfirmDeletePartner] = useState<Partner | null>(null);
 
-  const lbl = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1';
-
-  const fetchData = useCallback(async () => {
+  const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const d = await api.get<{ results: ProfitDistConfig[] } | ProfitDistConfig[]>('/finance/profit-dist/');
-      const list = (d as { results: ProfitDistConfig[] }).results ?? d;
-      const arr = Array.isArray(list) ? list : [];
-      if (arr.length > 0) {
-        const c = arr[0];
-        setConfig(c);
-        setForm({
-          working_capital_pct: c.working_capital_pct,
-          reserve_fund_pct: c.reserve_fund_pct,
-          directors_pct: c.directors_pct,
-          directors_cap: c.directors_cap,
+      const res = await api.get("/finance/profit-dist/");
+      const items = Array.isArray(res.data) ? res.data : res.data.results ?? [];
+      if (items.length > 0) {
+        const cfg = items[0];
+        setConfig(cfg);
+        setConfigForm({
+          working_capital_pct: String(cfg.working_capital_pct),
+          reserve_fund_pct: String(cfg.reserve_fund_pct),
+          directors_pct: String(cfg.directors_pct),
+          directors_cap: String(cfg.directors_cap),
         });
+        setPartners(cfg.partners || []);
       } else {
         setConfig(null);
+        setConfigForm({ ...EMPTY_CONFIG });
+        setPartners([]);
       }
-    } catch { /* silent */ } finally { setLoading(false); }
-  }, []);
+    } catch {
+      toast.error("Erro ao carregar configuracao.");
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchConfig(); }, [fetchConfig]);
 
-  const handleCreate = async () => {
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
     setSaving(true);
     try {
-      await api.post('/finance/profit-dist/', {
-        working_capital_pct: '0',
-        reserve_fund_pct: '0',
-        directors_pct: '0',
-        directors_cap: '0',
-      });
-      toast.success('Configuração criada!');
-      fetchData();
-    } catch { toast.error('Erro ao criar.'); } finally { setSaving(false); }
-  };
-
-  const handleSave = async () => {
-    if (!config) return;
-    setSaving(true);
-    try {
-      await api.patch(`/finance/profit-dist/${config.id}/`, form);
-      toast.success('Configuração salva!');
-      fetchData();
-    } catch { toast.error('Erro ao salvar.'); } finally { setSaving(false); }
+      const payload = {
+        working_capital_pct: configForm.working_capital_pct,
+        reserve_fund_pct: configForm.reserve_fund_pct,
+        directors_pct: configForm.directors_pct,
+        directors_cap: configForm.directors_cap,
+      };
+      if (config) {
+        await api.patch(`/finance/profit-dist/${config.id}/`, payload);
+        toast.success("Configuracao atualizada!");
+      } else {
+        await api.post("/finance/profit-dist/", payload);
+        toast.success("Configuracao criada!");
+      }
+      fetchConfig();
+    } catch {
+      toast.error("Erro ao salvar configuracao.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAddPartner = async () => {
-    if (!config || !newPartnerName.trim() || !newPartnerPct.trim()) return;
+    if (!config) return;
+    if (!newPartner.name || !newPartner.share_pct) {
+      toast.error("Preencha nome e percentual do socio.");
+      return;
+    }
     setAddingPartner(true);
     try {
       await api.post(`/finance/profit-dist/${config.id}/partners/`, {
-        name: newPartnerName.trim(),
-        share_pct: newPartnerPct,
+        name: newPartner.name,
+        share_pct: newPartner.share_pct,
       });
-      toast.success('Sócio adicionado!');
-      setNewPartnerName('');
-      setNewPartnerPct('');
-      setShowAddPartner(false);
-      fetchData();
-    } catch { toast.error('Erro ao adicionar sócio.'); } finally { setAddingPartner(false); }
+      toast.success("Socio adicionado!");
+      setNewPartner({ ...EMPTY_PARTNER });
+      fetchConfig();
+    } catch {
+      toast.error("Erro ao adicionar socio.");
+    } finally {
+      setAddingPartner(false);
+    }
   };
 
   const handleDeletePartner = async () => {
-    if (!config || !delPartner) return;
+    if (!config || !confirmDeletePartner) return;
     try {
-      await api.delete(`/finance/profit-dist/${config.id}/partners/${delPartner.id}/`);
-      toast.success('Sócio removido.');
-      setDelPartner(null);
-      fetchData();
-    } catch { toast.error('Erro.'); }
+      await api.delete(`/finance/profit-dist/${config.id}/partners/${confirmDeletePartner.id}/`);
+      toast.success("Socio removido.");
+      setConfirmDeletePartner(null);
+      fetchConfig();
+    } catch {
+      toast.error("Erro ao remover socio.");
+    }
   };
 
-  const partnerTotal = config?.partners.reduce((s, p) => s + Number(p.share_pct), 0) ?? 0;
-  const partnerValid = Math.abs(partnerTotal - 100) < 0.01;
+  const totalPct =
+    Number(configForm.working_capital_pct || 0) +
+    Number(configForm.reserve_fund_pct || 0) +
+    Number(configForm.directors_pct || 0) +
+    partners.reduce((sum, p) => sum + Number(p.share_pct || 0), 0);
+
+  const isValid = Math.abs(totalPct - 100) < 0.01;
 
   if (loading) {
     return <div className="p-8 text-center text-gray-400">Carregando...</div>;
   }
 
-  if (!config) {
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-8 text-center">
-        <p className="text-gray-500 mb-4">Nenhuma configuração de distribuição de lucros encontrada.</p>
-        <button onClick={handleCreate} disabled={saving} className="px-6 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60">
-          {saving ? 'Criando...' : 'Criar Configuração'}
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-6">Distribuição de Lucros</h3>
-
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <label className={lbl}>Capital de Giro (%)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.working_capital_pct}
-              onChange={e => setForm({ ...form, working_capital_pct: e.target.value })}
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className={lbl}>Fundo de Reserva (%)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.reserve_fund_pct}
-              onChange={e => setForm({ ...form, reserve_fund_pct: e.target.value })}
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className={lbl}>Diretoria (%)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.directors_pct}
-              onChange={e => setForm({ ...form, directors_pct: e.target.value })}
-              className="input-field"
-            />
-          </div>
-          <div>
-            <label className={lbl}>Teto Diretoria (R$)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={form.directors_cap}
-              onChange={e => setForm({ ...form, directors_cap: e.target.value })}
-              className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
-            />
-          </div>
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+          <Settings className="w-5 h-5 text-blue-600 dark:text-blue-400" />
         </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Distribuicao de Lucros</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Configure os percentuais de distribuicao e socios</p>
+        </div>
+      </div>
 
-        <div className="border-t border-gray-100 dark:border-gray-700 pt-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Sócios</h4>
-            {!partnerValid && config.partners.length > 0 && (
-              <span className="text-xs text-red-500 font-medium">
-                Soma das participações: {partnerTotal.toFixed(2)}% (deve ser 100%)
-              </span>
+      <form onSubmit={handleSaveConfig}>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Capital de Giro (%)</label>
+              <input type="number" className="input-field" value={configForm.working_capital_pct}
+                onChange={(e) => setConfigForm({ ...configForm, working_capital_pct: e.target.value })}
+                min="0" max="100" step="0.01" placeholder="0.00" required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Fundo de Reserva (%)</label>
+              <input type="number" className="input-field" value={configForm.reserve_fund_pct}
+                onChange={(e) => setConfigForm({ ...configForm, reserve_fund_pct: e.target.value })}
+                min="0" max="100" step="0.01" placeholder="0.00" required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Diretoria (%)</label>
+              <input type="number" className="input-field" value={configForm.directors_pct}
+                onChange={(e) => setConfigForm({ ...configForm, directors_pct: e.target.value })}
+                min="0" max="100" step="0.01" placeholder="0.00" required />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Teto Diretoria (R$)</label>
+              <input type="number"
+                className={`input-field ${isDemoMode ? "sensitive-blur" : ""}`}
+                value={configForm.directors_cap}
+                onChange={(e) => setConfigForm({ ...configForm, directors_cap: e.target.value })}
+                min="0" step="0.01" placeholder="0.00" required />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {isValid ? (
+              <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            )}
+            <div className="flex-1">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Total: <strong className={isValid ? "text-green-600" : "text-amber-600"}>{totalPct.toFixed(2)}%</strong>
+                </span>
+                <span className="text-xs text-gray-400">{isValid ? "Distribuicao valida" : "A soma deve ser 100%"}</span>
+              </div>
+              <div className="h-2 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                <div
+                  className={`${isValid ? "bg-green-500" : totalPct > 100 ? "bg-red-500" : "bg-amber-500"} h-full rounded-full transition-all`}
+                  style={{ width: `${Math.min(totalPct, 100)}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-gray-100 dark:border-gray-700 pt-6">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">Socios</h3>
+            {partners.length > 0 && (
+              <div className="space-y-2 mb-4">
+                {partners.map((partner) => (
+                  <div key={partner.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4 py-2.5">
+                    <span className="flex-1 text-sm text-gray-900 dark:text-gray-100 font-medium">{partner.name}</span>
+                    <span className="text-sm text-gray-600 dark:text-gray-400 font-mono">
+                      <Sensitive>{partner.share_pct}%</Sensitive>
+                    </span>
+                    <button type="button" onClick={() => setConfirmDeletePartner(partner)}
+                      className="p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Remover">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {config && (
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome do Socio</label>
+                  <input type="text"
+                    className={`input-field ${isDemoMode ? "sensitive-blur" : ""}`}
+                    value={newPartner.name} onChange={(e) => setNewPartner({ ...newPartner, name: e.target.value })}
+                    placeholder="Nome do socio" />
+                </div>
+                <div className="w-32">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">% Participacao</label>
+                  <input type="number" className="input-field" value={newPartner.share_pct}
+                    onChange={(e) => setNewPartner({ ...newPartner, share_pct: e.target.value })}
+                    min="0" max="100" step="0.01" placeholder="0.00" />
+                </div>
+                <button type="button" onClick={handleAddPartner} disabled={addingPartner}
+                  className="bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark px-4 py-2 flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 h-[42px]">
+                  <Plus className="w-4 h-4" /> {addingPartner ? "..." : "Adicionar"}
+                </button>
+              </div>
             )}
           </div>
 
-          {config.partners.length === 0 ? (
-            <p className="text-sm text-gray-400 mb-4">Nenhum sócio cadastrado.</p>
-          ) : (
-            <div className="space-y-2 mb-4">
-              {config.partners.map(p => (
-                <div key={p.id} className="flex items-center gap-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4 py-2.5">
-                  <span className="flex-1 text-sm font-medium text-gray-900 dark:text-gray-100">{p.name}</span>
-                  <span className="text-sm text-gray-500">{p.share_pct}%</span>
-                  <span className={`inline-block w-2 h-2 rounded-full ${p.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
-                  <button onClick={() => setDelPartner(p)} className="p-1 text-gray-400 hover:text-red-500">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {showAddPartner ? (
-            <div className="flex items-end gap-3 bg-gray-50 dark:bg-gray-700/20 rounded-lg p-3">
-              <div className="flex-1">
-                <label className={lbl}>Nome</label>
-                <input
-                  type="text"
-                  value={newPartnerName}
-                  onChange={e => setNewPartnerName(e.target.value)}
-                  className="input-field"
-                  placeholder="Nome do sócio"
-                />
-              </div>
-              <div className="w-28">
-                <label className={lbl}>Part. (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newPartnerPct}
-                  onChange={e => setNewPartnerPct(e.target.value)}
-                  className="input-field"
-                  placeholder="50"
-                />
-              </div>
-              <button
-                onClick={handleAddPartner}
-                disabled={addingPartner || !newPartnerName.trim() || !newPartnerPct.trim()}
-                className="px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60 text-sm whitespace-nowrap"
-              >
-                {addingPartner ? 'Adicionando...' : 'Adicionar'}
-              </button>
-              <button
-                onClick={() => { setShowAddPartner(false); setNewPartnerName(''); setNewPartnerPct(''); }}
-                className="p-2 text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowAddPartner(true)}
-              className="flex items-center gap-2 text-sm text-accent-gold hover:text-accent-gold-dark font-medium"
-            >
-              <Plus className="w-4 h-4" /> Adicionar sócio
+          <div className="flex justify-end pt-2">
+            <button type="submit" disabled={saving}
+              className="bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark px-6 py-2 text-sm font-medium transition-colors disabled:opacity-50">
+              {saving ? "Salvando..." : "Salvar Configuracao"}
             </button>
-          )}
+          </div>
         </div>
-
-        <div className="flex justify-end">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-6 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark disabled:opacity-60"
-          >
-            {saving ? 'Salvando...' : 'Salvar Configuração'}
-          </button>
-        </div>
-      </div>
+      </form>
 
       <ConfirmDialog
-        open={!!delPartner}
-        title="Remover Sócio"
-        description={`Remover "${delPartner?.name || ''}" da distribuição?`}
+        open={!!confirmDeletePartner}
+        title="Remover Socio"
+        description={`Deseja remover o socio "${confirmDeletePartner?.name}"?`}
         onConfirm={handleDeletePartner}
-        onCancel={() => setDelPartner(null)}
-        danger
+        onCancel={() => setConfirmDeletePartner(null)}
       />
     </div>
   );
