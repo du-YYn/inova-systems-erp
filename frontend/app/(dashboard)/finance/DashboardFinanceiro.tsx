@@ -308,9 +308,14 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
 
       {/* ─── Section 2: DRE 12 Meses (planilha) ──────────────────────────── */}
       <section>
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          DRE — {year}
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">DRE — {year}</h3>
+          <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/finance/fin-dashboard/dre-pdf/?year=${year}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent-gold border border-accent-gold/30 rounded-lg hover:bg-accent-gold/5 transition-colors">
+            Exportar PDF
+          </a>
+        </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-3">

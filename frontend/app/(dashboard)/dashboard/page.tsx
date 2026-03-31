@@ -35,6 +35,8 @@ interface Stats {
   proposals_sent_count: number;
   proposals_sent_value: number;
   proposals_approved_count: number;
+  ebitda: number;
+  resultado: number;
 }
 
 interface CashFlowDay {
@@ -238,12 +240,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const [contractsData, projectsData, financeData, proposalsData] = await Promise.all([
+        const [contractsData, projectsData, financeData, proposalsData, finDashData] = await Promise.all([
           api.get<Record<string, number>>('/sales/contracts/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<Record<string, number>>('/projects/projects/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<Record<string, number>>('/finance/invoices/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<Record<string, number>>('/sales/proposals/dashboard/').catch(() => ({} as Record<string, number>)),
+          api.get<{ indicators?: Record<string, number> }>('/finance/fin-dashboard/').catch(() => ({ indicators: {} })),
         ]);
+        const ind = finDashData.indicators || {};
         setStats({
           mrr:                      contractsData.mrr || 0,
           active_contracts:         contractsData.active_contracts || 0,
@@ -255,6 +259,8 @@ export default function DashboardPage() {
           proposals_sent_count:     proposalsData.sent_count || 0,
           proposals_sent_value:     proposalsData.sent_value || 0,
           proposals_approved_count: proposalsData.approved_count || 0,
+          ebitda:                   ind.ebitda || 0,
+          resultado:                ind.resultado || 0,
         });
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -432,6 +438,36 @@ export default function DashboardPage() {
           } : undefined}
         />
       </div>
+
+      {/* ─── Financial Indicators ─────────────────────────────────────────── */}
+      {(stats.ebitda !== 0 || stats.resultado !== 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-accent-gold/10 rounded-xl flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-accent-gold" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">EBITDA</p>
+                <p className="text-xl font-bold text-gray-900 dark:text-gray-100"><Sensitive>{formatCurrency(stats.ebitda)}</Sensitive></p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">Lucro operacional antes de depreciação e financeiro</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.resultado >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/25' : 'bg-red-50 dark:bg-red-900/25'}`}>
+                {stats.resultado >= 0 ? <ArrowUpRight className="w-5 h-5 text-emerald-600" /> : <ArrowDownRight className="w-5 h-5 text-red-500" />}
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-semibold">Resultado Líquido</p>
+                <p className={`text-xl font-bold ${stats.resultado >= 0 ? 'text-emerald-600' : 'text-red-500'}`}><Sensitive>{formatCurrency(stats.resultado)}</Sensitive></p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">Resultado final do mês após todas as deduções</p>
+          </div>
+        </div>
+      )}
 
       {/* ─── Charts Row 1 ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">

@@ -753,3 +753,88 @@ class FinanceDashboardView(viewsets.ViewSet):
             'active_customers': active_customers.count(),
             'churned_customers': churned.count(),
         })
+
+    @action(detail=False, methods=['get'], url_path='dre-pdf')
+    def dre_pdf(self, request):
+        """Exporta DRE 12 meses em PDF."""
+        import io
+        from datetime import date
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import (
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        )
+        from reportlab.lib.units import cm
+        from sales.models import Customer
+        from django.http import HttpResponse
+
+        year = int(request.query_params.get('year', date.today().year))
+        active_customers = Customer.objects.filter(is_active=True)
+        rob_f = sum(float(c.contract_value) for c in active_customers if c.contract_value) or 0
+        churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
+        churn_val = float(sum(float(c.contract_value) for c in churned))
+
+        months = []
+        for m in range(1, 13):
+            months.append(_calc_dre_month(year, m, active_customers, rob_f, churn_val))
+
+        month_labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+                        'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+        rows_def = [
+            ('Receita Bruta (ROB)', 'rob'), ('(-) Churn', 'churn'),
+            ('(-) Deduções', 'deducoes'), ('= ROL', 'rol'),
+            ('(-) Custos Variáveis', 'custos_variaveis'),
+            ('= Lucro Bruto', 'lucro_bruto'),
+            ('(-) Desp. Operacionais', 'despesas_operacionais'),
+            ('= EBITDA', 'ebitda'), ('(-) Depreciação', 'depreciacao'),
+            ('(-) Desp. Financeiras', 'despesas_financeiras'),
+            ('= EBIT', 'ebit'), ('= Resultado Líquido', 'resultado_liquido'),
+        ]
+
+        # Build table data
+        header = ['Descrição'] + month_labels
+        data = [header]
+        bold_keys = {'rob', 'rol', 'lucro_bruto', 'ebitda', 'ebit', 'resultado_liquido'}
+        for label, key in rows_def:
+            row = [label]
+            for dm in months:
+                v = dm['realizado'].get(key, 0)
+                row.append(f"R$ {v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+            data.append(row)
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                                rightMargin=1 * cm, leftMargin=1 * cm,
+                                topMargin=1.5 * cm, bottomMargin=1 * cm)
+        styles = getSampleStyleSheet()
+        story = []
+        story.append(Paragraph(f'DRE — {year}', styles['Title']))
+        story.append(Paragraph('Inova Systems Solutions', styles['Normal']))
+        story.append(Spacer(1, 0.5 * cm))
+
+        col_widths = [4.5 * cm] + [1.9 * cm] * 12
+        table = Table(data, colWidths=col_widths)
+        style_cmds = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#A6864A')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 7),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9F9F9')]),
+            ('PADDING', (0, 0), (-1, -1), 4),
+        ]
+        # Bold rows
+        for i, (_, key) in enumerate(rows_def):
+            if key in bold_keys:
+                style_cmds.append(('FONTNAME', (0, i + 1), (-1, i + 1), 'Helvetica-Bold'))
+                style_cmds.append(('BACKGROUND', (0, i + 1), (-1, i + 1), colors.HexColor('#F0EDE6')))
+        table.setStyle(TableStyle(style_cmds))
+        story.append(table)
+        doc.build(story)
+
+        buffer.seek(0)
+        response = HttpResponse(buffer, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="dre-{year}.pdf"'
+        return response

@@ -246,8 +246,45 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.save()
         if proposal.prospect_id:
             Prospect.objects.filter(pk=proposal.prospect_id).update(status='won')
+
+        # Gerar comissões automaticamente
+        self._generate_commissions(proposal, request.user)
+
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
+
+    @staticmethod
+    def _generate_commissions(proposal, user):
+        """Gera ClientCost de comissão Closer/SDR ao aprovar proposta."""
+        from finance.models import ClientCost
+
+        total = float(proposal.total_value or 0)
+        if total <= 0:
+            return
+
+        customer = proposal.customer
+        if not customer and proposal.prospect_id:
+            # Busca customer vinculado ao prospect
+            customer = Customer.objects.filter(
+                company_name=proposal.prospect.company_name
+            ).first() if proposal.prospect else None
+
+        if not customer:
+            return
+
+        ref_month = timezone.now().date().replace(day=1)
+        CLOSER_PCT = 10  # 10% para Closer
+        SDR_PCT = 5      # 5% para SDR
+
+        for cost_type, pct in [('commission_closer', CLOSER_PCT), ('commission_sdr', SDR_PCT)]:
+            ClientCost.objects.create(
+                customer=customer,
+                cost_type=cost_type,
+                value=round(total * pct / 100, 2),
+                reference_month=ref_month,
+                notes=f'Comissão automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
+                created_by=user,
+            )
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
