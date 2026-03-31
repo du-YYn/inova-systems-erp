@@ -305,6 +305,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.check_invoice_overdue',
         'schedule': 86400,
     },
+    # Gera faturas automáticas de despesas fixas recorrentes (1x por mês)
+    'generate-recurring-invoices': {
+        'task': 'finance.tasks.generate_recurring_invoices',
+        'schedule': 86400,  # 24h — roda diário mas só cria faturas que não existem no mês
+    },
+    # Recalcula budgets ativos (diário)
+    'recalculate-budgets': {
+        'task': 'finance.tasks.recalculate_all_active_budgets',
+        'schedule': 86400,
+    },
     # Alerta de SLA em risco (a cada hora)
     'check-sla-warnings': {
         'task': 'notifications.tasks.check_sla_warnings',
