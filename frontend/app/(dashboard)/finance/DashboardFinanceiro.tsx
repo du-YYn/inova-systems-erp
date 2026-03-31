@@ -71,7 +71,7 @@ interface DashboardCustomer {
 interface DashboardResponse {
   period: string;
   indicators: DashboardIndicators;
-  dre: DashboardDRE;
+  dre: { realizado: DashboardDRE; planejado: DashboardDRE };
   customers: DashboardCustomer[];
   active_customers: number;
   churned_customers: number;
@@ -204,25 +204,25 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
 
   // ── DRE rows config ─────────────────────────────────────────────────────────
 
-  const dreRows = data
-    ? [
-        { label: 'ROB', value: data.dre.rob, bold: true, isCurrency: true },
-        { label: '(-) Churn', value: data.dre.churn, bold: false, isCurrency: true },
-        { label: '(-) Deduções', value: data.dre.deducoes, bold: false, isCurrency: true },
-        { label: '= ROL', value: data.dre.rol, bold: true, isCurrency: true },
-        { label: '(-) Custos Variáveis', value: data.dre.custos_variaveis, bold: false, isCurrency: true },
-        { label: '= Lucro Bruto', value: data.dre.lucro_bruto, bold: true, isCurrency: true },
-        { label: 'Margem Contrib %', value: data.dre.margem_contribuicao, bold: false, isCurrency: false, isPercent: true },
-        { label: '(-) Desp. Operacionais', value: data.dre.despesas_operacionais, bold: false, isCurrency: true },
-        { label: '= EBITDA', value: data.dre.ebitda, bold: true, isCurrency: true },
-        { label: 'Margem EBITDA %', value: data.dre.margem_ebitda, bold: false, isCurrency: false, isPercent: true },
-        { label: '(-) Depreciação', value: data.dre.depreciacao, bold: false, isCurrency: true },
-        { label: '(-) Desp. Financeiras', value: data.dre.despesas_financeiras, bold: false, isCurrency: true },
-        { label: '= EBIT', value: data.dre.ebit, bold: true, isCurrency: true },
-        { label: '(-) IR/CSLL', value: data.dre.ir_csll, bold: false, isCurrency: true },
-        { label: '= Resultado Líquido', value: data.dre.resultado_liquido, bold: true, isCurrency: true },
-      ]
-    : [];
+  const r = data?.dre?.realizado;
+  const p = data?.dre?.planejado;
+  const dreKeys: { label: string; key: keyof DashboardDRE; bold: boolean; isCurrency: boolean; isPercent?: boolean }[] = [
+    { label: 'Receita Bruta (ROB)', key: 'rob', bold: true, isCurrency: true },
+    { label: '(-) Churn', key: 'churn', bold: false, isCurrency: true },
+    { label: '(-) Deduções', key: 'deducoes', bold: false, isCurrency: true },
+    { label: '= Receita Líquida (ROL)', key: 'rol', bold: true, isCurrency: true },
+    { label: '(-) Custos Variáveis', key: 'custos_variaveis', bold: false, isCurrency: true },
+    { label: '= Lucro Bruto', key: 'lucro_bruto', bold: true, isCurrency: true },
+    { label: 'Margem Contribuição', key: 'margem_contribuicao', bold: false, isCurrency: false, isPercent: true },
+    { label: '(-) Desp. Operacionais', key: 'despesas_operacionais', bold: false, isCurrency: true },
+    { label: '= EBITDA', key: 'ebitda', bold: true, isCurrency: true },
+    { label: 'Margem EBITDA', key: 'margem_ebitda', bold: false, isCurrency: false, isPercent: true },
+    { label: '(-) Depreciação', key: 'depreciacao', bold: false, isCurrency: true },
+    { label: '(-) Desp. Financeiras', key: 'despesas_financeiras', bold: false, isCurrency: true },
+    { label: '= EBIT', key: 'ebit', bold: true, isCurrency: true },
+    { label: '(-) IR/CSLL', key: 'ir_csll', bold: false, isCurrency: true },
+    { label: '= Resultado Líquido', key: 'resultado_liquido', bold: true, isCurrency: true },
+  ];
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -322,56 +322,22 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
                 </tr>
               </thead>
               <tbody>
-                {dreRows.map((row) => {
-                  const planejado = 0;
-                  const realizado = row.value;
-                  const evolucao = planejado > 0
-                    ? ((realizado - planejado) / planejado) * 100
-                    : 0;
+                {dreKeys.map((row) => {
+                  const planejado = p ? p[row.key] : 0;
+                  const realizado = r ? r[row.key] : 0;
+                  const evolucao = planejado > 0 ? ((realizado - planejado) / planejado) * 100 : 0;
+                  const fmtVal = (v: number) => row.isPercent ? fmtPercent(v) : row.isCurrency ? fmtCurrency(v) : String(v);
 
                   return (
-                    <tr
-                      key={row.label}
-                      className={
-                        row.bold
-                          ? 'bg-gray-50 dark:bg-gray-700/40 font-semibold'
-                          : ''
-                      }
-                    >
-                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
-                        {row.label}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400">
-                        <Sensitive>
-                          {row.isCurrency
-                            ? fmtCurrency(planejado)
-                            : 'isPercent' in row && row.isPercent
-                              ? fmtPercent(planejado)
-                              : planejado}
-                        </Sensitive>
-                      </td>
+                    <tr key={row.key} className={row.bold ? 'bg-gray-50 dark:bg-gray-700/40 font-semibold' : ''}>
+                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">{row.label}</td>
+                      <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><Sensitive>{fmtVal(planejado)}</Sensitive></td>
                       <td className="px-4 py-3 text-sm text-right text-gray-800 dark:text-gray-200">
-                        <Sensitive>
-                          <span className={realizado < 0 ? 'text-red-500' : ''}>
-                            {row.isCurrency
-                              ? fmtCurrency(realizado)
-                              : 'isPercent' in row && row.isPercent
-                                ? fmtPercent(realizado)
-                                : realizado}
-                          </span>
-                        </Sensitive>
+                        <Sensitive><span className={realizado < 0 ? 'text-red-500' : ''}>{fmtVal(realizado)}</span></Sensitive>
                       </td>
                       <td className="px-4 py-3 text-sm text-right">
                         <Sensitive>
-                          <span
-                            className={
-                              evolucao > 0
-                                ? 'text-emerald-500'
-                                : evolucao < 0
-                                  ? 'text-red-500'
-                                  : 'text-gray-400'
-                            }
-                          >
+                          <span className={evolucao > 0 ? 'text-emerald-500' : evolucao < 0 ? 'text-red-500' : 'text-gray-400'}>
                             {evolucao !== 0 ? `${evolucao > 0 ? '+' : ''}${evolucao.toFixed(1)}%` : '—'}
                           </span>
                         </Sensitive>

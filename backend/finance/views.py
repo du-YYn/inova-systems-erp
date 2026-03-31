@@ -727,6 +727,28 @@ class FinanceDashboardView(viewsets.ViewSet):
                 'is_active': c.is_active,
             })
 
+        # ── DRE PLANEJADO ─────────────────────────────────────────────────
+        # Planejado = projeção baseada nos cadastros fixos (o que se espera)
+        # ROB planejado = soma de todos os clientes ativos (contract_value)
+        plan_rob = rob_f
+        # Churn planejado = 0 (não se planeja perder clientes)
+        plan_churn = 0
+        # Deduções planejadas = mesmo que cadastrado em impostos do mês
+        plan_deducoes = float(deducoes)
+        plan_rol = plan_rob - plan_churn - plan_deducoes
+        # Custos variáveis planejados = custos por cliente cadastrados
+        plan_cv = float(custos_variaveis)
+        plan_lucro_bruto = plan_rol - plan_cv
+        plan_margem_contrib = (plan_lucro_bruto / plan_rob * 100) if plan_rob > 0 else 0
+        # Despesas operacionais planejadas = despesas fixas ativas
+        plan_desp_op = float(desp_operacionais)
+        plan_ebitda = plan_lucro_bruto - plan_desp_op
+        plan_margem_ebitda = (plan_ebitda / plan_rol * 100) if plan_rol > 0 else 0
+        plan_depreciacao = float(depreciacao)
+        plan_desp_fin = float(desp_financeiras)
+        plan_ebit = plan_ebitda - plan_depreciacao - plan_desp_fin
+        plan_resultado = plan_ebit
+
         return Response({
             'period': f"{month:02d}/{year}",
             'indicators': {
@@ -742,21 +764,40 @@ class FinanceDashboardView(viewsets.ViewSet):
                 'break_even': round(break_even, 2),
             },
             'dre': {
-                'rob': round(float(rob), 2),
-                'churn': round(float(churn_value), 2),
-                'deducoes': round(float(deducoes), 2),
-                'rol': round(rol, 2),
-                'custos_variaveis': round(float(custos_variaveis), 2),
-                'lucro_bruto': round(lucro_bruto, 2),
-                'margem_contribuicao': round(margem_contrib, 2),
-                'despesas_operacionais': round(float(desp_operacionais), 2),
-                'ebitda': round(ebitda, 2),
-                'margem_ebitda': round(margem_ebitda, 2),
-                'depreciacao': round(float(depreciacao), 2),
-                'despesas_financeiras': round(float(desp_financeiras), 2),
-                'ebit': round(ebit, 2),
-                'ir_csll': 0,
-                'resultado_liquido': round(resultado, 2),
+                'realizado': {
+                    'rob': round(float(rob), 2),
+                    'churn': round(float(churn_value), 2),
+                    'deducoes': round(float(deducoes), 2),
+                    'rol': round(rol, 2),
+                    'custos_variaveis': round(float(custos_variaveis), 2),
+                    'lucro_bruto': round(lucro_bruto, 2),
+                    'margem_contribuicao': round(margem_contrib, 2),
+                    'despesas_operacionais': round(float(desp_operacionais), 2),
+                    'ebitda': round(ebitda, 2),
+                    'margem_ebitda': round(margem_ebitda, 2),
+                    'depreciacao': round(float(depreciacao), 2),
+                    'despesas_financeiras': round(float(desp_financeiras), 2),
+                    'ebit': round(ebit, 2),
+                    'ir_csll': 0,
+                    'resultado_liquido': round(resultado, 2),
+                },
+                'planejado': {
+                    'rob': round(plan_rob, 2),
+                    'churn': round(plan_churn, 2),
+                    'deducoes': round(plan_deducoes, 2),
+                    'rol': round(plan_rol, 2),
+                    'custos_variaveis': round(plan_cv, 2),
+                    'lucro_bruto': round(plan_lucro_bruto, 2),
+                    'margem_contribuicao': round(plan_margem_contrib, 2),
+                    'despesas_operacionais': round(plan_desp_op, 2),
+                    'ebitda': round(plan_ebitda, 2),
+                    'margem_ebitda': round(plan_margem_ebitda, 2),
+                    'depreciacao': round(plan_depreciacao, 2),
+                    'despesas_financeiras': round(plan_desp_fin, 2),
+                    'ebit': round(plan_ebit, 2),
+                    'ir_csll': 0,
+                    'resultado_liquido': round(plan_resultado, 2),
+                },
             },
             'customers': customers_data,
             'active_customers': active_customers.count(),
