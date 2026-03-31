@@ -98,7 +98,13 @@ export default function ImpostosSection({ isDemoMode }: ImpostosSectionProps) {
     });
   };
 
-  const openNew = () => { setEditing(null); setForm({ ...EMPTY_FORM }); setShowModal(true); };
+  const openNew = () => {
+    const today = new Date();
+    const refMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+    setEditing(null);
+    setForm({ ...EMPTY_FORM, reference_month: refMonth });
+    setShowModal(true);
+  };
 
   const openEdit = (tax: Tax) => {
     setEditing(tax);
@@ -108,9 +114,18 @@ export default function ImpostosSection({ isDemoMode }: ImpostosSectionProps) {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.reference_month) { toast.error('Informe o mês de referência.'); return; }
+    if (!form.value && !form.rate) { toast.error('Informe o valor ou alíquota + base.'); return; }
     setSaving(true);
     try {
-      const payload = { ...form, rate: form.rate || null, base_amount: form.base_amount || null };
+      const payload: Record<string, unknown> = {
+        tax_type: form.tax_type,
+        reference_month: form.reference_month,
+        rate: form.rate ? Number(form.rate) : 0,
+        base_amount: form.base_amount ? Number(form.base_amount) : 0,
+        value: form.value ? Number(form.value) : 0,
+        notes: form.notes || '',
+      };
       if (editing) {
         await api.patch(`/finance/taxes/${editing.id}/`, payload);
       } else {

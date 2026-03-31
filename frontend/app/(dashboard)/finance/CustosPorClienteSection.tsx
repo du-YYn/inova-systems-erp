@@ -86,9 +86,16 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.customer) { toast.error('Selecione um cliente.'); return; }
+    if (!form.reference_month) { toast.error('Informe o mês de referência.'); return; }
+    if (!form.value) { toast.error('Informe o valor.'); return; }
     setSaving(true);
     try {
-      const payload = { ...form, customer: Number(form.customer) };
+      const payload = {
+        customer: Number(form.customer), cost_type: form.cost_type,
+        value: Number(form.value), reference_month: form.reference_month,
+        notes: form.notes || '',
+      };
       if (editing) await api.patch(`/finance/client-costs/${editing.id}/`, payload);
       else await api.post('/finance/client-costs/', payload);
       toast.success('Salvo!');

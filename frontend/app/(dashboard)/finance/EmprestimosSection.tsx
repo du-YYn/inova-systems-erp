@@ -65,12 +65,18 @@ export default function EmprestimosSection({ isDemoMode }: { isDemoMode: boolean
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.partner.trim()) { toast.error('Informe o sócio.'); return; }
+    if (!form.total_amount || Number(form.total_amount) <= 0) { toast.error('Informe o valor total.'); return; }
+    if (!form.num_installments || Number(form.num_installments) <= 0) { toast.error('Informe o número de parcelas.'); return; }
+    if (!form.start_date) { toast.error('Informe a data de início.'); return; }
     setSaving(true);
     try {
       const payload = {
-        ...form,
-        total_amount: form.total_amount,
+        partner: form.partner, card_bank: form.card_bank || '',
+        description: form.description || '', notes: form.notes || '',
+        total_amount: Number(form.total_amount),
         num_installments: Number(form.num_installments),
+        start_date: form.start_date,
       };
       await api.post('/finance/loans/', payload);
       toast.success('Empréstimo criado!');

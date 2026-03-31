@@ -86,9 +86,15 @@ export default function DespesasFixasSection({ isDemoMode }: { isDemoMode: boole
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.description.trim()) { toast.error('Informe a descrição.'); return; }
+    if (!form.value) { toast.error('Informe o valor.'); return; }
     setSaving(true);
     try {
-      const payload = { ...form, due_day: Number(form.due_day) };
+      const payload = {
+        expense_category: form.expense_category, description: form.description,
+        value: Number(form.value), due_day: Number(form.due_day) || 1,
+        is_recurring: form.is_recurring, is_active: form.is_active, notes: form.notes || '',
+      };
       if (editing) await api.patch(`/finance/recurring-expenses/${editing.id}/`, payload);
       else await api.post('/finance/recurring-expenses/', payload);
       toast.success('Salvo!');
