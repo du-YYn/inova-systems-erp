@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
-    TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
+    TaxConfig, TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
     Asset, ProfitDistConfig, ProfitDistPartner,
 )
 
@@ -134,6 +134,13 @@ class BudgetSerializer(serializers.ModelSerializer):
         if data.get('start_date') and data.get('end_date') and data['start_date'] > data['end_date']:
             raise serializers.ValidationError('Data de início deve ser anterior à data de término.')
         return data
+
+
+class TaxConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxConfig
+        fields = ['id', 'das_rate', 'inss_base', 'inss_rate', 'bank_fees', 'asaas_fees', 'updated_at']
+        read_only_fields = ['id', 'updated_at']
 
 
 class TaxEntrySerializer(serializers.ModelSerializer):

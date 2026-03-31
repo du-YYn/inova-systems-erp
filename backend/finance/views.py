@@ -14,15 +14,15 @@ from decimal import Decimal
 
 from .models import (
     BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
-    TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
+    TaxConfig, TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
     Asset, ProfitDistConfig, ProfitDistPartner,
 )
 from .serializers import (
     BankAccountSerializer, CategorySerializer, InvoiceSerializer,
     TransactionSerializer, CostCenterSerializer, BudgetSerializer,
-    TaxEntrySerializer, ClientCostSerializer, RecurringExpenseSerializer,
-    LoanSerializer, LoanInstallmentSerializer, AssetSerializer,
-    ProfitDistConfigSerializer, ProfitDistPartnerSerializer,
+    TaxConfigSerializer, TaxEntrySerializer, ClientCostSerializer,
+    RecurringExpenseSerializer, LoanSerializer, LoanInstallmentSerializer,
+    AssetSerializer, ProfitDistConfigSerializer, ProfitDistPartnerSerializer,
 )
 from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
 
@@ -465,6 +465,28 @@ class BudgetViewSet(viewsets.ModelViewSet):
 
 
 @extend_schema(tags=['finance'])
+class TaxConfigViewSet(viewsets.ModelViewSet):
+    queryset = TaxConfig.objects.all()
+    serializer_class = TaxConfigSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def list(self, request, *args, **kwargs):
+        config = TaxConfig.objects.first()
+        if not config:
+            config = TaxConfig.objects.create()
+        return Response(TaxConfigSerializer(config).data)
+
+    def create(self, request, *args, **kwargs):
+        config = TaxConfig.objects.first()
+        if config:
+            ser = TaxConfigSerializer(config, data=request.data, partial=True)
+            ser.is_valid(raise_exception=True)
+            ser.save()
+            return Response(ser.data)
+        return super().create(request, *args, **kwargs)
+
+
+@extend_schema(tags=['finance'])
 class TaxEntryViewSet(viewsets.ModelViewSet):
     queryset = TaxEntry.objects.all()
     serializer_class = TaxEntrySerializer
@@ -643,12 +665,17 @@ class ProfitDistConfigViewSet(viewsets.ModelViewSet):
         })
 
 
-def _calc_dre_month(year, month, active_customers, rob_f, churn_value):
+def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_config=None):
     """Calcula DRE para um mês específico. Retorna dict com planejado e realizado."""
     from datetime import date
     ref = date(year, month, 1)
 
-    deducoes = float(TaxEntry.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
+    # Deduções: calculadas automaticamente via TaxConfig
+    if tax_config:
+        tax_data = tax_config.calculate(rob_f)
+        deducoes = tax_data['total']
+    else:
+        deducoes = float(TaxEntry.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
     cv = float(ClientCost.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
     desp_op = float(RecurringExpense.objects.filter(is_active=True).aggregate(t=Sum('value'))['t'] or 0)
     deprec = float(Asset.objects.filter(is_active=True).aggregate(t=Sum('monthly_depreciation'))['t'] or 0)
@@ -716,9 +743,10 @@ class FinanceDashboardView(viewsets.ViewSet):
         churn_rate = (churn_value / rob_f * 100) if rob_f > 0 else 0
 
         # ── DRE 12 meses ──────────────────────────────────────────────────
+        tax_cfg = TaxConfig.objects.first()
         dre_months = []
         for m in range(1, 13):
-            dre_months.append(_calc_dre_month(year, m, active_customers, rob_f, churn_value))
+            dre_months.append(_calc_dre_month(year, m, active_customers, rob_f, churn_value, tax_cfg))
 
         # ── Indicadores do mês selecionado
         cur = next((d for d in dre_months if d['month'] == f"{year}-{current_month:02d}"), dre_months[0])

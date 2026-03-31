@@ -909,7 +909,6 @@ export default function FinancePage() {
     { key: 'invoices', label: 'Faturas', icon: <Receipt className="w-4 h-4" /> },
     { key: 'transactions', label: 'Transações', icon: <ArrowLeftRight className="w-4 h-4" /> },
     { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
-    { key: 'taxes', label: 'Impostos', icon: <FileText className="w-4 h-4" /> },
     { key: 'client_costs', label: 'Custos por Cliente', icon: <CreditCard className="w-4 h-4" /> },
     { key: 'fixed_expenses', label: 'Despesas Fixas', icon: <Building className="w-4 h-4" /> },
     { key: 'loans', label: 'Empréstimos', icon: <Landmark className="w-4 h-4" /> },
@@ -1003,7 +1002,7 @@ export default function FinancePage() {
           </div>
 
           {/* New sections */}
-          {subTab === 'taxes' && <ImpostosSection isDemoMode={isDemoMode} />}
+          {/* Impostos agora é automático via TaxConfig em Configurações */}
           {subTab === 'client_costs' && <CustosPorClienteSection isDemoMode={isDemoMode} customers={financeCustomers.map(c => ({ id: c.id, company_name: c.company_name, name: c.name }))} />}
           {subTab === 'fixed_expenses' && <DespesasFixasSection isDemoMode={isDemoMode} />}
           {subTab === 'loans' && <EmprestimosSection isDemoMode={isDemoMode} />}

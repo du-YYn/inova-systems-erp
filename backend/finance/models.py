@@ -196,8 +196,41 @@ class Transaction(models.Model):
         return f"{self.transaction_type} - {self.amount} - {self.description}"
 
 
+class TaxConfig(models.Model):
+    """Configuração de tributação (singleton). Alíquotas e taxas fixas."""
+    das_rate = models.DecimalField(max_digits=5, decimal_places=2, default=6, help_text='Alíquota DAS %')
+    inss_base = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Base INSS pro labore')
+    inss_rate = models.DecimalField(max_digits=5, decimal_places=2, default=11, help_text='Alíquota INSS %')
+    bank_fees = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Taxas bancárias/mês')
+    asaas_fees = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Taxas ASAAS/mês')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tax_config'
+
+    def __str__(self):
+        return f"DAS {self.das_rate}% | INSS {self.inss_rate}%"
+
+    def calculate(self, rob_current_month, rob_previous_month=None):
+        """Calcula deduções automáticas. DAS usa receita do mês anterior."""
+        base_das = float(rob_previous_month) if rob_previous_month else float(rob_current_month)
+        das = base_das * float(self.das_rate) / 100
+        inss = float(self.inss_base) * float(self.inss_rate) / 100
+        return {
+            'das': round(das, 2),
+            'das_base': round(base_das, 2),
+            'das_rate': float(self.das_rate),
+            'inss': round(inss, 2),
+            'inss_base': float(self.inss_base),
+            'inss_rate': float(self.inss_rate),
+            'bank_fees': float(self.bank_fees),
+            'asaas_fees': float(self.asaas_fees),
+            'total': round(das + inss + float(self.bank_fees) + float(self.asaas_fees), 2),
+        }
+
+
 class TaxEntry(models.Model):
-    """Impostos e deduções mensais (DAS, INSS, taxas)."""
+    """Impostos e deduções mensais (DAS, INSS, taxas) — histórico."""
     TYPE_CHOICES = [
         ('das', 'DAS Faturamento'),
         ('das_parcelamento', 'DAS Parcelamento'),

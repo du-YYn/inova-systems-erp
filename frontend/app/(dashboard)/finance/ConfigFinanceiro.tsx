@@ -46,6 +46,10 @@ export default function ConfigFinanceiro({ isDemoMode }: { isDemoMode: boolean }
   const [addingPartner, setAddingPartner] = useState(false);
   const [confirmDeletePartner, setConfirmDeletePartner] = useState<Partner | null>(null);
 
+  // Tax config
+  const [taxForm, setTaxForm] = useState({ das_rate: '6', inss_base: '0', inss_rate: '11', bank_fees: '0', asaas_fees: '0' });
+  const [savingTax, setSavingTax] = useState(false);
+
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
@@ -73,7 +77,33 @@ export default function ConfigFinanceiro({ isDemoMode }: { isDemoMode: boolean }
     }
   }, [toast]);
 
-  useEffect(() => { fetchConfig(); }, [fetchConfig]);
+  useEffect(() => { fetchConfig(); fetchTaxConfig(); }, [fetchConfig]);
+
+  const fetchTaxConfig = async () => {
+    try {
+      const data = await api.get<{ das_rate?: string; inss_base?: string; inss_rate?: string; bank_fees?: string; asaas_fees?: string }>('/finance/tax-config/');
+      if (data) {
+        setTaxForm({
+          das_rate: String(data.das_rate || 6), inss_base: String(data.inss_base || 0),
+          inss_rate: String(data.inss_rate || 11), bank_fees: String(data.bank_fees || 0),
+          asaas_fees: String(data.asaas_fees || 0),
+        });
+      }
+    } catch { /* first load, no config yet */ }
+  };
+
+  const handleSaveTax = async () => {
+    setSavingTax(true);
+    try {
+      await api.post('/finance/tax-config/', {
+        das_rate: Number(taxForm.das_rate), inss_base: Number(taxForm.inss_base),
+        inss_rate: Number(taxForm.inss_rate), bank_fees: Number(taxForm.bank_fees),
+        asaas_fees: Number(taxForm.asaas_fees),
+      });
+      toast.success('Tributação salva!');
+    } catch { toast.error('Erro ao salvar tributação.'); }
+    finally { setSavingTax(false); }
+  };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,6 +291,62 @@ export default function ConfigFinanceiro({ isDemoMode }: { isDemoMode: boolean }
           </div>
         </div>
       </form>
+
+      {/* ── Tributação ─────────────────────────────────────────────────── */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+            <Settings className="w-5 h-5 text-red-600 dark:text-red-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Tributação</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Alíquotas aplicadas automaticamente sobre a receita</p>
+          </div>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Alíquota DAS (%)</label>
+              <input type="number" step="0.01" min="0" max="100" value={taxForm.das_rate}
+                onChange={e => setTaxForm({ ...taxForm, das_rate: e.target.value })}
+                className="input-field" />
+              <p className="text-[10px] text-gray-400 mt-1">Aplicado sobre faturamento do mês</p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Base INSS Pro labore (R$)</label>
+              <input type="number" step="0.01" min="0" value={taxForm.inss_base}
+                onChange={e => setTaxForm({ ...taxForm, inss_base: e.target.value })}
+                className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Alíquota INSS (%)</label>
+              <input type="number" step="0.01" min="0" max="100" value={taxForm.inss_rate}
+                onChange={e => setTaxForm({ ...taxForm, inss_rate: e.target.value })}
+                className="input-field" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Taxas bancárias/mês (R$)</label>
+              <input type="number" step="0.01" min="0" value={taxForm.bank_fees}
+                onChange={e => setTaxForm({ ...taxForm, bank_fees: e.target.value })}
+                className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Taxas ASAAS/mês (R$)</label>
+              <input type="number" step="0.01" min="0" value={taxForm.asaas_fees}
+                onChange={e => setTaxForm({ ...taxForm, asaas_fees: e.target.value })}
+                className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={handleSaveTax} disabled={savingTax}
+              className="px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60 text-sm font-medium">
+              {savingTax ? 'Salvando...' : 'Salvar Tributação'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <ConfirmDialog
         open={!!confirmDeletePartner}
