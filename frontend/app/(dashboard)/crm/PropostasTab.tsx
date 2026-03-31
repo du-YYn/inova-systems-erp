@@ -106,19 +106,22 @@ export default function PropostasTab() {
     try {
       const params: Record<string, string> = { page: String(page), page_size: String(PAGE_SIZE) };
       if (search) params.search = search;
-      const [propData, prospData] = await Promise.all([
-        api.get<{ results: Proposal[]; count: number }>('/sales/proposals/', params),
-        api.get<{ results: ProspectOption[] }>('/sales/prospects/', { page_size: '200' }),
-      ]);
+      const propData = await api.get<{ results: Proposal[]; count: number }>('/sales/proposals/', params);
       const pList = propData.results || propData;
-      const prList = prospData.results || prospData;
       setProposals(Array.isArray(pList) ? pList : []);
       setTotal(propData.count ?? (Array.isArray(pList) ? pList.length : 0));
-      setProspects(Array.isArray(prList) ? prList : []);
     } catch {
-      toast.error('Erro ao carregar propostas');
+      toast.error('Erro ao carregar propostas.');
     } finally {
       setLoading(false);
+    }
+    // Prospects carregados separadamente — falha não trava a tab
+    try {
+      const prospData = await api.get<{ results: ProspectOption[] }>('/sales/prospects/', { page_size: '200' });
+      const prList = prospData.results || prospData;
+      setProspects(Array.isArray(prList) ? prList : []);
+    } catch {
+      console.error('[PropostasTab] prospects fetch error');
     }
   }, [page, search]);
 

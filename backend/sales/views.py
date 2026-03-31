@@ -413,12 +413,6 @@ class ContractViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrManagerOrOperatorStrict]
 
     def get_queryset(self):
-        # Auto-expire contracts whose end_date has passed
-        today = timezone.now().date()
-        Contract.objects.filter(
-            status='active', end_date__isnull=False, end_date__lt=today
-        ).update(status='expired')
-
         queryset = super().get_queryset()
         contract_status = self.request.query_params.get('status', None)
         search = self.request.query_params.get('search', None)
@@ -544,6 +538,15 @@ class ContractViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
+        # Auto-expire contracts (runs only on dashboard, not every list call)
+        try:
+            today = timezone.now().date()
+            Contract.objects.filter(
+                status='active', end_date__isnull=False, end_date__lt=today
+            ).update(status='expired')
+        except Exception:
+            logger.warning("Falha ao auto-expirar contratos", exc_info=True)
+
         qs = self.get_queryset()
         active_statuses = Q(status='active') | Q(status='renewed')
         stats = qs.aggregate(

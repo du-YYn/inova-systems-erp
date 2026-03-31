@@ -311,37 +311,40 @@ export default function ContratosTab() {
       if (search) params.search = search;
       if (filterStatus) params.status = filterStatus;
 
-      // Contracts + stats: may fail together
-      const [contractsData, statsData] = await Promise.all([
-        api.get<{ results: Contract[]; count: number }>('/sales/contracts/', params),
-        api.get<DashboardStats>('/sales/contracts/dashboard/').catch(() => ({} as DashboardStats)),
-      ]);
+      const contractsData = await api.get<{ results: Contract[]; count: number }>('/sales/contracts/', params);
       const cList = contractsData.results || contractsData;
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
-      if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
     } catch {
       toast.error('Erro ao carregar contratos.');
     } finally {
       setLoading(false);
     }
 
-    // Customers + prospects: load independently so contract errors don't block them
+    // Dashboard stats — falha silenciosa, não trava a tab
+    try {
+      const statsData = await api.get<DashboardStats>('/sales/contracts/dashboard/');
+      if (statsData && !(statsData as unknown as Record<string, unknown>).detail) setStats(statsData);
+    } catch {
+      console.error('[ContratosTab] dashboard stats error');
+    }
+
+    // Customers — falha silenciosa
     try {
       const customersData = await api.get<{ results: Customer[]; count: number } | Customer[]>('/sales/customers/', { page_size: '200' });
       const kList = (customersData as { results: Customer[] }).results ?? customersData;
       setCustomers(Array.isArray(kList) ? kList : []);
-    } catch (err) {
-      console.error('[ContratosTab] customers fetch error:', err);
+    } catch {
+      console.error('[ContratosTab] customers fetch error');
     }
 
+    // Prospects — falha silenciosa
     try {
       const prospectsData = await api.get<{ results: Prospect[]; count: number } | Prospect[]>('/sales/prospects/', { page_size: '200' });
       const pList = (prospectsData as { results: Prospect[] }).results ?? prospectsData;
       setProspects(Array.isArray(pList) ? pList : []);
-    } catch (err) {
-      console.error('[ContratosTab] prospects fetch error:', err);
-      toast.error('Não foi possível carregar os leads do funil.');
+    } catch {
+      console.error('[ContratosTab] prospects fetch error');
     }
   }, [page, search, filterStatus]);
 
