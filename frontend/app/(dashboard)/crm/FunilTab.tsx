@@ -835,17 +835,37 @@ export default function FunilTab() {
 
   const handleWonSubmit = async () => {
     if (!wonModalProspect) return;
+    // Validação: nome obrigatório
+    const hasName = wonForm.customer_type === 'PJ'
+      ? wonForm.company_name.trim().length >= 2
+      : wonForm.name.trim().length >= 2;
+    if (!hasName) { toast.error('Preencha o nome do cliente (mínimo 2 caracteres).'); return; }
+    // Validação: status válido para fechar
+    const invalidStatuses = ['lost', 'disqualified'];
+    if (invalidStatuses.includes(wonModalProspect.status)) {
+      toast.error('Este lead não pode ser fechado (status inválido).');
+      return;
+    }
     setSavingWon(true);
     try {
-      // 1. Criar o cliente com os dados preenchidos
+      // 1. Mover lead para "Fechado" primeiro (se falhar, não cria cliente órfão)
+      await api.patch(`/sales/prospects/${wonModalProspect.id}/`, { status: 'won' });
+
+      // 2. Criar o cliente com os dados preenchidos
       const body: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(wonForm)) {
         if (v !== '') body[k] = v;
       }
-      await api.post('/sales/customers/', body);
-
-      // 2. Mover lead para "Fechado"
-      await api.patch(`/sales/prospects/${wonModalProspect.id}/`, { status: 'won' });
+      try {
+        await api.post('/sales/customers/', body);
+      } catch {
+        // Lead fechado mas cliente não criado — notificar e permitir criar depois
+        toast.error('Lead fechado, mas houve erro ao criar o cliente. Cadastre manualmente no Financeiro.');
+        setWonModalProspect(null);
+        fetchProspects();
+        fetchAllProspects();
+        return;
+      }
 
       toast.success('Lead fechado e cliente cadastrado!');
       setWonModalProspect(null);
@@ -871,7 +891,8 @@ export default function FunilTab() {
         notes: proposalForm.notes,
       };
       if (proposalForm.total_value) body.total_value = proposalForm.total_value;
-      if (proposalForm.valid_until) body.valid_until = proposalForm.valid_until;
+      if (!proposalForm.valid_until) { toast.error('Informe a data de validade da proposta.'); setSavingProposal(false); return; }
+      body.valid_until = proposalForm.valid_until;
       await api.post('/sales/proposals/', body);
       toast.success('Proposta criada! Veja na aba Propostas.');
       setProposalModalProspect(null);
@@ -2572,7 +2593,7 @@ export default function FunilTab() {
                 <button type="button" onClick={() => setWonModalProspect(null)} className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                   Cancelar
                 </button>
-                <button type="button" onClick={handleWonSubmit} disabled={savingWon || (!wonForm.company_name && !wonForm.name)}
+                <button type="button" onClick={handleWonSubmit} disabled={savingWon || (wonForm.customer_type === 'PJ' ? wonForm.company_name.trim().length < 2 : wonForm.name.trim().length < 2)}
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60">
                   {savingWon ? 'Salvando...' : 'Fechar Lead e Criar Cliente'}
                 </button>
