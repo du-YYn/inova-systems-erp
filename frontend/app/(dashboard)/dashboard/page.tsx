@@ -248,7 +248,7 @@ export default function DashboardPage() {
           api.get<Record<string, number>>('/sales/proposals/dashboard/').catch(() => ({} as Record<string, number>)),
           api.get<{ indicators?: Record<string, number> }>('/finance/fin-dashboard/').catch(() => ({ indicators: {} })),
         ]);
-        const ind = finDashData.indicators || {};
+        const ind = (finDashData.indicators || {}) as Record<string, number>;
         setStats({
           mrr:                      contractsData.mrr || 0,
           active_contracts:         contractsData.active_contracts || 0,
