@@ -1,20 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, FileText, ScrollText, Building2, Activity } from 'lucide-react';
+import { Target, FileText, ScrollText, Activity } from 'lucide-react';
 import FunilTab from './FunilTab';
 import PropostasTab from './PropostasTab';
 import ContratosTab from './ContratosTab';
-import ContasTab from './ContasTab';
 import AtividadesTab from './AtividadesTab';
 
-type Tab = 'funil' | 'propostas' | 'contratos' | 'contas' | 'atividades';
+type Tab = 'funil' | 'propostas' | 'contratos' | 'atividades';
 
 const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'funil', label: 'Funil', icon: Target },
   { key: 'propostas', label: 'Propostas', icon: FileText },
   { key: 'contratos', label: 'Contratos', icon: ScrollText },
-  { key: 'contas', label: 'Contas', icon: Building2 },
   { key: 'atividades', label: 'Atividades', icon: Activity },
 ];
 
@@ -58,7 +56,6 @@ export default function CRMPage() {
       {activeTab === 'funil' && <FunilTab />}
       {activeTab === 'propostas' && <PropostasTab />}
       {activeTab === 'contratos' && <ContratosTab />}
-      {activeTab === 'contas' && <ContasTab />}
       {activeTab === 'atividades' && <AtividadesTab />}
     </div>
   );

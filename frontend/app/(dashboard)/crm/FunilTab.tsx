@@ -484,6 +484,16 @@ export default function FunilTab() {
   });
   const [savingFollowUp, setSavingFollowUp] = useState(false);
 
+  // Modal de cadastro de cliente (quando lead fecha)
+  const [wonModalProspect, setWonModalProspect] = useState<Prospect | null>(null);
+  const [wonForm, setWonForm] = useState({
+    customer_type: 'PJ', company_name: '', trading_name: '', name: '',
+    document: '', email: '', phone: '', segment: '',
+    address: '', city: '', state: '', cep: '',
+    contract_value: '', billing_frequency: 'monthly', notes: '',
+  });
+  const [savingWon, setSavingWon] = useState(false);
+
   // Atividades do lead (drawer)
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -725,6 +735,25 @@ export default function FunilTab() {
       setFollowUpForm({ reason: '', next_contact_date: '', notes: '' });
       return;
     }
+    // Bloquear movimentação para Fechado — abrir modal de cadastro de cliente
+    if (newStatus === 'won') {
+      setWonModalProspect(prospect);
+      setWonForm({
+        customer_type: 'PJ',
+        company_name: prospect.company_name || '',
+        trading_name: '',
+        name: prospect.contact_name || '',
+        document: '',
+        email: prospect.contact_email || '',
+        phone: prospect.contact_phone || '',
+        segment: '',
+        address: '', city: '', state: '', cep: '',
+        contract_value: prospect.estimated_value ? String(prospect.estimated_value) : '',
+        billing_frequency: 'monthly',
+        notes: '',
+      });
+      return;
+    }
     // Optimistic UI — atualiza local antes da API
     const prevStatus = prospect.status;
     setAllProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: newStatus } : p));
@@ -801,6 +830,31 @@ export default function FunilTab() {
       toast.error('Erro ao registrar follow-up.');
     } finally {
       setSavingFollowUp(false);
+    }
+  };
+
+  const handleWonSubmit = async () => {
+    if (!wonModalProspect) return;
+    setSavingWon(true);
+    try {
+      // 1. Criar o cliente com os dados preenchidos
+      const body: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(wonForm)) {
+        if (v !== '') body[k] = v;
+      }
+      await api.post('/sales/customers/', body);
+
+      // 2. Mover lead para "Fechado"
+      await api.patch(`/sales/prospects/${wonModalProspect.id}/`, { status: 'won' });
+
+      toast.success('Lead fechado e cliente cadastrado!');
+      setWonModalProspect(null);
+      fetchProspects();
+      fetchAllProspects();
+    } catch {
+      toast.error('Erro ao fechar lead.');
+    } finally {
+      setSavingWon(false);
     }
   };
 
@@ -2384,6 +2438,144 @@ export default function FunilTab() {
                 >
                   Confirmar Follow-Up
                 </Button>
+              </div>
+            </div>
+          </div>
+          </FocusTrap>
+        </div>
+      )}
+
+      {/* ── Modal: Cadastro de Cliente (Lead Fechado) ──────────────────────── */}
+      {wonModalProspect && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <FocusTrap onClose={() => setWonModalProspect(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cadastrar Cliente</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Lead fechado — complete os dados para criar o cliente</p>
+              </div>
+              <button onClick={() => setWonModalProspect(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {/* Dados do lead (readonly) */}
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/30 rounded-xl p-4 mb-6">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-300 uppercase tracking-wide mb-2">Dados do Lead</p>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div><span className="text-gray-500 dark:text-gray-400">Empresa:</span> <span className="text-gray-900 dark:text-gray-100 font-medium"><Sensitive>{wonModalProspect.company_name}</Sensitive></span></div>
+                <div><span className="text-gray-500 dark:text-gray-400">Contato:</span> <span className="text-gray-900 dark:text-gray-100"><Sensitive>{wonModalProspect.contact_name}</Sensitive></span></div>
+                <div><span className="text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100"><Sensitive>{wonModalProspect.contact_email}</Sensitive></span></div>
+                <div><span className="text-gray-500 dark:text-gray-400">Telefone:</span> <span className="text-gray-900 dark:text-gray-100"><Sensitive>{wonModalProspect.contact_phone}</Sensitive></span></div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Tipo */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo *</label>
+                <select value={wonForm.customer_type} onChange={e => setWonForm({ ...wonForm, customer_type: e.target.value })} className="input-field bg-white dark:bg-gray-800">
+                  <option value="PJ">Pessoa Jurídica</option>
+                  <option value="PF">Pessoa Física</option>
+                </select>
+              </div>
+
+              {/* Nome */}
+              {wonForm.customer_type === 'PJ' ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Razão Social *</label>
+                    <input type="text" required value={wonForm.company_name} onChange={e => setWonForm({ ...wonForm, company_name: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome Fantasia</label>
+                    <input type="text" value={wonForm.trading_name} onChange={e => setWonForm({ ...wonForm, trading_name: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome Completo *</label>
+                  <input type="text" required value={wonForm.name} onChange={e => setWonForm({ ...wonForm, name: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+              )}
+
+              {/* Documento + Segmento */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{wonForm.customer_type === 'PJ' ? 'CNPJ' : 'CPF'}</label>
+                  <input type="text" value={wonForm.document} onChange={e => setWonForm({ ...wonForm, document: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Segmento</label>
+                  <select value={wonForm.segment} onChange={e => setWonForm({ ...wonForm, segment: e.target.value })} className="input-field bg-white dark:bg-gray-800">
+                    <option value="">Selecione</option>
+                    <option value="startup">Startup</option><option value="smb">Pequena/Média</option><option value="enterprise">Enterprise</option>
+                    <option value="government">Governo</option><option value="education">Educação</option><option value="health">Saúde</option>
+                    <option value="finance">Financeiro</option><option value="retail">Varejo</option><option value="industry">Indústria</option>
+                    <option value="tech">Tecnologia</option><option value="other">Outro</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Contato */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">E-mail</label>
+                  <input type="email" value={wonForm.email} onChange={e => setWonForm({ ...wonForm, email: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Telefone</label>
+                  <input type="text" value={wonForm.phone} onChange={e => setWonForm({ ...wonForm, phone: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                </div>
+              </div>
+
+              {/* Financeiro */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Dados Financeiros</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor do Contrato (R$)</label>
+                    <input type="number" step="0.01" min="0" value={wonForm.contract_value} onChange={e => setWonForm({ ...wonForm, contract_value: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Frequência</label>
+                    <select value={wonForm.billing_frequency} onChange={e => setWonForm({ ...wonForm, billing_frequency: e.target.value })} className="input-field bg-white dark:bg-gray-800">
+                      <option value="one_time">Pagamento Único</option><option value="monthly">Mensal</option>
+                      <option value="quarterly">Trimestral</option><option value="semiannual">Semestral</option><option value="yearly">Anual</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Endereço */}
+              <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Endereço</p>
+                <div className="space-y-3">
+                  <input type="text" placeholder="Rua, número, complemento" value={wonForm.address} onChange={e => setWonForm({ ...wonForm, address: e.target.value })} className="input-field" />
+                  <div className="grid grid-cols-3 gap-3">
+                    <input type="text" placeholder="Cidade" value={wonForm.city} onChange={e => setWonForm({ ...wonForm, city: e.target.value })} className="input-field" />
+                    <input type="text" placeholder="UF" maxLength={2} value={wonForm.state} onChange={e => setWonForm({ ...wonForm, state: e.target.value.toUpperCase() })} className="input-field" />
+                    <input type="text" placeholder="CEP" maxLength={9} value={wonForm.cep} onChange={e => setWonForm({ ...wonForm, cep: e.target.value })} className="input-field" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Observações */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Observações</label>
+                <textarea rows={2} value={wonForm.notes} onChange={e => setWonForm({ ...wonForm, notes: e.target.value })} className="input-field resize-none" />
+              </div>
+
+              {/* Botões */}
+              <div className="flex gap-3 pt-4">
+                <button type="button" onClick={() => setWonModalProspect(null)} className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="button" onClick={handleWonSubmit} disabled={savingWon || (!wonForm.company_name && !wonForm.name)}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-60">
+                  {savingWon ? 'Salvando...' : 'Fechar Lead e Criar Cliente'}
+                </button>
               </div>
             </div>
           </div>
