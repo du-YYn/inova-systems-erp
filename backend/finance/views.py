@@ -643,9 +643,54 @@ class ProfitDistConfigViewSet(viewsets.ModelViewSet):
         })
 
 
+def _calc_dre_month(year, month, active_customers, rob_f, churn_value):
+    """Calcula DRE para um mês específico. Retorna dict com planejado e realizado."""
+    from datetime import date
+    ref = date(year, month, 1)
+
+    deducoes = float(TaxEntry.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
+    cv = float(ClientCost.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
+    desp_op = float(RecurringExpense.objects.filter(is_active=True).aggregate(t=Sum('value'))['t'] or 0)
+    deprec = float(Asset.objects.filter(is_active=True).aggregate(t=Sum('monthly_depreciation'))['t'] or 0)
+    desp_fin = float(LoanInstallment.objects.filter(due_date__year=year, due_date__month=month, loan__is_active=True).aggregate(t=Sum('value'))['t'] or 0)
+
+    rol = rob_f - churn_value - deducoes
+    lucro_bruto = rol - cv
+    mc = (lucro_bruto / rob_f * 100) if rob_f > 0 else 0
+    ebitda = lucro_bruto - desp_op
+    me = (ebitda / rol * 100) if rol > 0 else 0
+    ebit = ebitda - deprec - desp_fin
+    resultado = ebit
+
+    def row(rob, churn, ded, r, c_v, lb, m_c, do, eb, m_e, dep, df, ebi, res):
+        return {
+            'rob': round(rob, 2), 'churn': round(churn, 2), 'deducoes': round(ded, 2),
+            'rol': round(r, 2), 'custos_variaveis': round(c_v, 2), 'lucro_bruto': round(lb, 2),
+            'margem_contribuicao': round(m_c, 2), 'despesas_operacionais': round(do, 2),
+            'ebitda': round(eb, 2), 'margem_ebitda': round(m_e, 2), 'depreciacao': round(dep, 2),
+            'despesas_financeiras': round(df, 2), 'ebit': round(ebi, 2),
+            'ir_csll': 0, 'resultado_liquido': round(res, 2),
+        }
+
+    # Planejado = projeção (sem churn, custos fixos esperados)
+    p_rol = rob_f - deducoes
+    p_lb = p_rol - cv
+    p_mc = (p_lb / rob_f * 100) if rob_f > 0 else 0
+    p_ebitda = p_lb - desp_op
+    p_me = (p_ebitda / p_rol * 100) if p_rol > 0 else 0
+    p_ebit = p_ebitda - deprec - desp_fin
+
+    return {
+        'month': f"{year}-{month:02d}",
+        'label': f"{month:02d}/{year}",
+        'realizado': row(rob_f, churn_value, deducoes, rol, cv, lucro_bruto, mc, desp_op, ebitda, me, deprec, desp_fin, ebit, resultado),
+        'planejado': row(rob_f, 0, deducoes, p_rol, cv, p_lb, p_mc, desp_op, p_ebitda, p_me, deprec, desp_fin, p_ebit, p_ebit),
+    }
+
+
 @extend_schema(tags=['finance'])
 class FinanceDashboardView(viewsets.ViewSet):
-    """Dashboard financeiro consolidado — DRE, indicadores, MRR, distribuição."""
+    """Dashboard financeiro consolidado — DRE 12 meses, indicadores, MRR, distribuição."""
     permission_classes = [IsAdminOrManager]
 
     def list(self, request):
@@ -654,151 +699,52 @@ class FinanceDashboardView(viewsets.ViewSet):
 
         today = date.today()
         year = int(request.query_params.get('year', today.year))
-        month = int(request.query_params.get('month', today.month))
-        ref_date = date(year, month, 1)
+        current_month = int(request.query_params.get('month', today.month))
+        ref_date = date(year, current_month, 1)
 
-        # ── ROB: soma tickets dos clientes ativos com frequência mensal
         active_customers = Customer.objects.filter(is_active=True)
         rob = sum(float(c.contract_value) for c in active_customers if c.contract_value)
-
-        # ── MRR: só clientes mensais
-        mrr = sum(
-            float(c.contract_value) for c in active_customers
-            if c.contract_value and c.billing_frequency == 'monthly'
-        )
-
-        # ── Churn: clientes inativos que tinham contrato
-        churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
-        churn_value = sum(float(c.contract_value) for c in churned)
-        churn_rate = (churn_value / rob * 100) if rob > 0 else 0
-
-        # ── Deduções: impostos do mês
-        deducoes = TaxEntry.objects.filter(reference_month=ref_date).aggregate(
-            total=Sum('value')
-        )['total'] or 0
-
-        # ── Custos Variáveis: custos por cliente do mês
-        custos_variaveis = ClientCost.objects.filter(reference_month=ref_date).aggregate(
-            total=Sum('value')
-        )['total'] or 0
-
-        # ── Despesas Operacionais: despesas fixas ativas
-        desp_operacionais = RecurringExpense.objects.filter(is_active=True).aggregate(
-            total=Sum('value')
-        )['total'] or 0
-
-        # ── Depreciação: soma de ativos ativos
-        depreciacao = Asset.objects.filter(is_active=True).aggregate(
-            total=Sum('monthly_depreciation')
-        )['total'] or 0
-
-        # ── Despesas Financeiras: parcelas de empréstimos do mês
-        desp_financeiras = LoanInstallment.objects.filter(
-            due_date__year=year, due_date__month=month, loan__is_active=True
-        ).aggregate(total=Sum('value'))['total'] or 0
-
-        # ── Cálculos DRE (com guardas de divisão por zero)
         rob_f = float(rob) if rob else 0
-        rol = rob_f - float(churn_value) - float(deducoes)
-        lucro_bruto = rol - float(custos_variaveis)
-        margem_contrib = (lucro_bruto / rob_f * 100) if rob_f > 0 else 0
-        ebitda = lucro_bruto - float(desp_operacionais)
-        margem_ebitda = (ebitda / rol * 100) if rol > 0 else 0
-        ebit = ebitda - float(depreciacao) - float(desp_financeiras)
-        resultado = ebit  # Simples Nacional: IR/CSLL = 0
+        mrr = sum(float(c.contract_value) for c in active_customers if c.contract_value and c.billing_frequency == 'monthly')
 
-        # ── Break-even (guarda divisão por zero)
-        custos_fixos_total = float(desp_operacionais) + float(desp_financeiras) + float(depreciacao)
-        break_even = (custos_fixos_total / (margem_contrib / 100)) if margem_contrib > 0 else 0
+        churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
+        churn_value = float(sum(float(c.contract_value) for c in churned))
+        churn_rate = (churn_value / rob_f * 100) if rob_f > 0 else 0
+
+        # ── DRE 12 meses ──────────────────────────────────────────────────
+        dre_months = []
+        for m in range(1, 13):
+            dre_months.append(_calc_dre_month(year, m, active_customers, rob_f, churn_value))
+
+        # ── Indicadores do mês selecionado
+        cur = next((d for d in dre_months if d['month'] == f"{year}-{current_month:02d}"), dre_months[0])
+        r = cur['realizado']
+
+        custos_fixos = r['despesas_operacionais'] + r['despesas_financeiras'] + r['depreciacao']
+        mc = r['margem_contribuicao']
+        break_even = (custos_fixos / (mc / 100)) if mc > 0 else 0
 
         # ── Clientes para Receita Recorrente
         customers_data = []
         for c in active_customers:
-            costs = ClientCost.objects.filter(customer=c, reference_month=ref_date).aggregate(
-                total=Sum('value')
-            )['total'] or 0
+            costs = float(ClientCost.objects.filter(customer=c, reference_month=ref_date).aggregate(t=Sum('value'))['t'] or 0)
             customers_data.append({
-                'id': c.id,
-                'name': c.company_name or c.name,
-                'ticket': float(c.contract_value or 0),
-                'costs': float(costs),
-                'margin': float(c.contract_value or 0) - float(costs),
-                'billing_frequency': c.billing_frequency,
-                'is_active': c.is_active,
+                'id': c.id, 'name': c.company_name or c.name,
+                'ticket': float(c.contract_value or 0), 'costs': costs,
+                'margin': float(c.contract_value or 0) - costs,
+                'billing_frequency': c.billing_frequency, 'is_active': c.is_active,
             })
 
-        # ── DRE PLANEJADO ─────────────────────────────────────────────────
-        # Planejado = projeção baseada nos cadastros fixos (o que se espera)
-        # ROB planejado = soma de todos os clientes ativos (contract_value)
-        plan_rob = rob_f
-        # Churn planejado = 0 (não se planeja perder clientes)
-        plan_churn = 0
-        # Deduções planejadas = mesmo que cadastrado em impostos do mês
-        plan_deducoes = float(deducoes)
-        plan_rol = plan_rob - plan_churn - plan_deducoes
-        # Custos variáveis planejados = custos por cliente cadastrados
-        plan_cv = float(custos_variaveis)
-        plan_lucro_bruto = plan_rol - plan_cv
-        plan_margem_contrib = (plan_lucro_bruto / plan_rob * 100) if plan_rob > 0 else 0
-        # Despesas operacionais planejadas = despesas fixas ativas
-        plan_desp_op = float(desp_operacionais)
-        plan_ebitda = plan_lucro_bruto - plan_desp_op
-        plan_margem_ebitda = (plan_ebitda / plan_rol * 100) if plan_rol > 0 else 0
-        plan_depreciacao = float(depreciacao)
-        plan_desp_fin = float(desp_financeiras)
-        plan_ebit = plan_ebitda - plan_depreciacao - plan_desp_fin
-        plan_resultado = plan_ebit
-
         return Response({
-            'period': f"{month:02d}/{year}",
+            'period': f"{current_month:02d}/{year}",
             'indicators': {
-                'rob': round(float(rob), 2),
-                'rol': round(rol, 2),
-                'ebitda': round(ebitda, 2),
-                'resultado': round(resultado, 2),
-                'mrr': round(mrr, 2),
-                'churn_rate': round(churn_rate, 2),
-                'churn_value': round(float(churn_value), 2),
-                'margem_contribuicao': round(margem_contrib, 2),
-                'margem_ebitda': round(margem_ebitda, 2),
-                'break_even': round(break_even, 2),
+                'rob': r['rob'], 'rol': r['rol'], 'ebitda': r['ebitda'],
+                'resultado': r['resultado_liquido'], 'mrr': round(mrr, 2),
+                'churn_rate': round(churn_rate, 2), 'churn_value': round(churn_value, 2),
+                'margem_contribuicao': r['margem_contribuicao'],
+                'margem_ebitda': r['margem_ebitda'], 'break_even': round(break_even, 2),
             },
-            'dre': {
-                'realizado': {
-                    'rob': round(float(rob), 2),
-                    'churn': round(float(churn_value), 2),
-                    'deducoes': round(float(deducoes), 2),
-                    'rol': round(rol, 2),
-                    'custos_variaveis': round(float(custos_variaveis), 2),
-                    'lucro_bruto': round(lucro_bruto, 2),
-                    'margem_contribuicao': round(margem_contrib, 2),
-                    'despesas_operacionais': round(float(desp_operacionais), 2),
-                    'ebitda': round(ebitda, 2),
-                    'margem_ebitda': round(margem_ebitda, 2),
-                    'depreciacao': round(float(depreciacao), 2),
-                    'despesas_financeiras': round(float(desp_financeiras), 2),
-                    'ebit': round(ebit, 2),
-                    'ir_csll': 0,
-                    'resultado_liquido': round(resultado, 2),
-                },
-                'planejado': {
-                    'rob': round(plan_rob, 2),
-                    'churn': round(plan_churn, 2),
-                    'deducoes': round(plan_deducoes, 2),
-                    'rol': round(plan_rol, 2),
-                    'custos_variaveis': round(plan_cv, 2),
-                    'lucro_bruto': round(plan_lucro_bruto, 2),
-                    'margem_contribuicao': round(plan_margem_contrib, 2),
-                    'despesas_operacionais': round(plan_desp_op, 2),
-                    'ebitda': round(plan_ebitda, 2),
-                    'margem_ebitda': round(plan_margem_ebitda, 2),
-                    'depreciacao': round(plan_depreciacao, 2),
-                    'despesas_financeiras': round(plan_desp_fin, 2),
-                    'ebit': round(plan_ebit, 2),
-                    'ir_csll': 0,
-                    'resultado_liquido': round(plan_resultado, 2),
-                },
-            },
+            'dre_months': dre_months,
             'customers': customers_data,
             'active_customers': active_customers.count(),
             'churned_customers': churned.count(),

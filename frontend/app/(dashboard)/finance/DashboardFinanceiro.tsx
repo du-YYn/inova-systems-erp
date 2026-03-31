@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -68,10 +68,17 @@ interface DashboardCustomer {
   is_active: boolean;
 }
 
+interface DreMonth {
+  month: string;
+  label: string;
+  realizado: DashboardDRE;
+  planejado: DashboardDRE;
+}
+
 interface DashboardResponse {
   period: string;
   indicators: DashboardIndicators;
-  dre: { realizado: DashboardDRE; planejado: DashboardDRE };
+  dre_months: DreMonth[];
   customers: DashboardCustomer[];
   active_customers: number;
   churned_customers: number;
@@ -204,8 +211,8 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
 
   // ── DRE rows config ─────────────────────────────────────────────────────────
 
-  const r = data?.dre?.realizado;
-  const p = data?.dre?.planejado;
+  const dreMonths = data?.dre_months || [];
+  const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   const dreKeys: { label: string; key: keyof DashboardDRE; bold: boolean; isCurrency: boolean; isPercent?: boolean }[] = [
     { label: 'Receita Bruta (ROB)', key: 'rob', bold: true, isCurrency: true },
     { label: '(-) Churn', key: 'churn', bold: false, isCurrency: true },
@@ -299,12 +306,12 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
         )}
       </section>
 
-      {/* ─── Section 2: DRE 12 Meses ────────────────────────────────────────── */}
+      {/* ─── Section 2: DRE 12 Meses (planilha) ──────────────────────────── */}
       <section>
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          DRE 12 Meses
+          DRE — {year}
         </h3>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-x-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-3">
               {Array.from({ length: 15 }).map((_, i) => (
@@ -312,41 +319,62 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
               ))}
             </div>
           ) : (
-            <table className="w-full table-premium">
-              <thead>
-                <tr>
-                  <th className="text-left px-4 py-3">Descrição</th>
-                  <th className="text-right px-4 py-3">Planejado</th>
-                  <th className="text-right px-4 py-3">Realizado</th>
-                  <th className="text-right px-4 py-3">Evolução</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dreKeys.map((row) => {
-                  const planejado = p ? p[row.key] : 0;
-                  const realizado = r ? r[row.key] : 0;
-                  const evolucao = planejado > 0 ? ((realizado - planejado) / planejado) * 100 : 0;
-                  const fmtVal = (v: number) => row.isPercent ? fmtPercent(v) : row.isCurrency ? fmtCurrency(v) : String(v);
-
-                  return (
-                    <tr key={row.key} className={row.bold ? 'bg-gray-50 dark:bg-gray-700/40 font-semibold' : ''}>
-                      <td className="px-4 py-3 text-sm text-gray-800 dark:text-gray-200">{row.label}</td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-500 dark:text-gray-400"><Sensitive>{fmtVal(planejado)}</Sensitive></td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-800 dark:text-gray-200">
-                        <Sensitive><span className={realizado < 0 ? 'text-red-500' : ''}>{fmtVal(realizado)}</span></Sensitive>
+            <div className="overflow-x-auto">
+              <table className="w-max min-w-full text-xs">
+                <thead>
+                  <tr className="border-b-2 border-accent-gold/20">
+                    <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800 text-left px-3 py-2.5 text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide min-w-[180px]">Descrição</th>
+                    {dreMonths.map((dm, i) => (
+                      <th key={dm.month} colSpan={3} className={`text-center px-1 py-2.5 text-[10px] font-semibold uppercase tracking-wide ${i === month - 1 ? 'text-accent-gold bg-accent-gold/5' : 'text-gray-500 dark:text-gray-400'}`}>
+                        {MONTH_LABELS[i]}
+                      </th>
+                    ))}
+                  </tr>
+                  <tr className="border-b border-gray-100 dark:border-gray-700">
+                    <th className="sticky left-0 z-10 bg-gray-50 dark:bg-gray-800"></th>
+                    {dreMonths.map((dm) => (
+                      <React.Fragment key={dm.month + '-sub'}>
+                        <th className="text-right px-1.5 py-1 text-[9px] text-gray-400 font-medium w-[70px]">Plan</th>
+                        <th className="text-right px-1.5 py-1 text-[9px] text-gray-400 font-medium w-[70px]">Real</th>
+                        <th className="text-right px-1.5 py-1 text-[9px] text-gray-400 font-medium w-[50px]">Evol</th>
+                      </React.Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {dreKeys.map((row) => (
+                    <tr key={row.key} className={row.bold ? 'bg-gray-50/80 dark:bg-gray-700/30 font-semibold' : 'hover:bg-gray-50/50 dark:hover:bg-gray-700/20'}>
+                      <td className="sticky left-0 z-10 bg-white dark:bg-gray-800 px-3 py-2 text-xs text-gray-800 dark:text-gray-200 whitespace-nowrap border-r border-gray-100 dark:border-gray-700">
+                        {row.bold && <span className="bg-gray-50 dark:bg-gray-700/30 absolute inset-0 -z-10" />}
+                        {row.label}
                       </td>
-                      <td className="px-4 py-3 text-sm text-right">
-                        <Sensitive>
-                          <span className={evolucao > 0 ? 'text-emerald-500' : evolucao < 0 ? 'text-red-500' : 'text-gray-400'}>
-                            {evolucao !== 0 ? `${evolucao > 0 ? '+' : ''}${evolucao.toFixed(1)}%` : '—'}
-                          </span>
-                        </Sensitive>
-                      </td>
+                      {dreMonths.map((dm, i) => {
+                        const plan = dm.planejado[row.key];
+                        const real = dm.realizado[row.key];
+                        const evol = plan > 0 ? ((real - plan) / plan) * 100 : 0;
+                        const fv = (v: number) => row.isPercent ? `${v.toFixed(0)}%` : new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+                        const isCur = i === month - 1;
+                        return (
+                          <React.Fragment key={dm.month + row.key}>
+                            <td className={`text-right px-1.5 py-2 text-gray-400 dark:text-gray-500 ${isCur ? 'bg-accent-gold/5' : ''}`}>
+                              <Sensitive>{fv(plan)}</Sensitive>
+                            </td>
+                            <td className={`text-right px-1.5 py-2 ${real < 0 ? 'text-red-500' : 'text-gray-800 dark:text-gray-200'} ${isCur ? 'bg-accent-gold/5' : ''}`}>
+                              <Sensitive>{fv(real)}</Sensitive>
+                            </td>
+                            <td className={`text-right px-1.5 py-2 ${isCur ? 'bg-accent-gold/5' : ''}`}>
+                              <span className={evol > 0 ? 'text-emerald-500' : evol < 0 ? 'text-red-500' : 'text-gray-300 dark:text-gray-600'}>
+                                {evol !== 0 ? `${evol > 0 ? '+' : ''}${evol.toFixed(0)}%` : '—'}
+                              </span>
+                            </td>
+                          </React.Fragment>
+                        );
+                      })}
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </section>
