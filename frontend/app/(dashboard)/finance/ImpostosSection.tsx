@@ -118,9 +118,14 @@ export default function ImpostosSection({ isDemoMode }: ImpostosSectionProps) {
     if (!form.value && !form.rate) { toast.error('Informe o valor ou alíquota + base.'); return; }
     setSaving(true);
     try {
+      // Garante formato YYYY-MM-DD para o backend DateField
+      let refMonth = form.reference_month;
+      if (refMonth && !refMonth.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        refMonth = refMonth + '-01';
+      }
       const payload: Record<string, unknown> = {
         tax_type: form.tax_type,
-        reference_month: form.reference_month,
+        reference_month: refMonth,
         rate: form.rate ? Number(form.rate) : 0,
         base_amount: form.base_amount ? Number(form.base_amount) : 0,
         value: form.value ? Number(form.value) : 0,
@@ -134,8 +139,10 @@ export default function ImpostosSection({ isDemoMode }: ImpostosSectionProps) {
       toast.success(editing ? 'Imposto atualizado!' : 'Imposto criado!');
       setShowModal(false);
       fetchTaxes();
-    } catch {
-      toast.error('Erro ao salvar imposto.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar imposto.';
+      toast.error(msg);
+      console.error('[ImpostosSection] save error:', err);
     } finally {
       setSaving(false);
     }

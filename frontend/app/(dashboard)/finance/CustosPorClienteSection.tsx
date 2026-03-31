@@ -91,9 +91,11 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
     if (!form.value) { toast.error('Informe o valor.'); return; }
     setSaving(true);
     try {
+      let refMonth = form.reference_month;
+      if (refMonth && !refMonth.match(/^\d{4}-\d{2}-\d{2}$/)) refMonth += '-01';
       const payload = {
         customer: Number(form.customer), cost_type: form.cost_type,
-        value: Number(form.value), reference_month: form.reference_month,
+        value: Number(form.value), reference_month: refMonth,
         notes: form.notes || '',
       };
       if (editing) await api.patch(`/finance/client-costs/${editing.id}/`, payload);
