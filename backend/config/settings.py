@@ -289,38 +289,42 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos por task
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Uma task por vez (bom para tasks longas)
 
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BEAT_SCHEDULE = {
-    # Verifica contratos vencendo e auto-renova (diário às 08:00)
+    # Verifica contratos vencendo e auto-renova — diário às 08:00
     'check-contract-renewals': {
         'task': 'sales.tasks.check_contract_renewals',
-        'schedule': 86400,  # 24 horas
+        'schedule': crontab(hour=8, minute=0),
     },
-    # Alerta de tarefas com prazo próximo (diário às 07:00)
+    # Alerta de tarefas com prazo próximo — diário às 07:00
     'check-task-deadlines': {
         'task': 'notifications.tasks.check_task_deadlines',
-        'schedule': 86400,
+        'schedule': crontab(hour=7, minute=0),
     },
-    # Marca invoices vencidas e envia alertas (diário às 09:00)
+    # Marca invoices vencidas e envia alertas — diário às 09:00
     'check-invoice-overdue': {
         'task': 'notifications.tasks.check_invoice_overdue',
-        'schedule': 86400,
+        'schedule': crontab(hour=9, minute=0),
     },
-    # Gera faturas automáticas de despesas fixas recorrentes (1x por mês)
+    # Gera faturas de despesas fixas recorrentes — dia 1 de cada mês às 06:00
     'generate-recurring-invoices': {
         'task': 'finance.tasks.generate_recurring_invoices',
-        'schedule': 86400,  # 24h — roda diário mas só cria faturas que não existem no mês
+        'schedule': crontab(hour=6, minute=0, day_of_month='1'),
     },
-    # Recalcula budgets ativos (diário)
+    # Recalcula budgets ativos — diário às 06:30
     'recalculate-budgets': {
         'task': 'finance.tasks.recalculate_all_active_budgets',
-        'schedule': 86400,
+        'schedule': crontab(hour=6, minute=30),
     },
-    # Alerta de SLA em risco (a cada hora)
+    # Alerta de SLA em risco — a cada hora
     'check-sla-warnings': {
         'task': 'notifications.tasks.check_sla_warnings',
-        'schedule': 3600,
+        'schedule': crontab(minute=0),  # a cada hora cheia
     },
 }
+
+CELERY_RESULT_EXPIRES = 3600  # Limpa resultados após 1 hora
 
 # ─── SWAGGER / OpenAPI ──────────────────────────────────────────────────────
 

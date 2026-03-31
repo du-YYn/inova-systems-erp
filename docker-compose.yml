@@ -102,13 +102,25 @@ services:
       - DB_PORT=5432
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DJANGO_SETTINGS_MODULE=config.settings
       - DEBUG=${DEBUG:-false}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - WEBSITE_API_KEY=${WEBSITE_API_KEY}
+      - N8N_API_KEY=${N8N_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.resend.com}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-true}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-resend}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-noreply@inovasystemssolutions.com}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    stop_grace_period: 60s
     command: celery -A config worker --loglevel=info --concurrency=2
 
   celery_beat:
@@ -126,13 +138,25 @@ services:
       - DB_PORT=5432
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
+      - DJANGO_SETTINGS_MODULE=config.settings
       - DEBUG=${DEBUG:-false}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - WEBSITE_API_KEY=${WEBSITE_API_KEY}
+      - N8N_API_KEY=${N8N_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.resend.com}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-true}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-resend}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-noreply@inovasystemssolutions.com}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    stop_grace_period: 30s
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
   frontend:
