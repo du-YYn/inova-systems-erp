@@ -652,7 +652,11 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value):
     cv = float(ClientCost.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
     desp_op = float(RecurringExpense.objects.filter(is_active=True).aggregate(t=Sum('value'))['t'] or 0)
     deprec = float(Asset.objects.filter(is_active=True).aggregate(t=Sum('monthly_depreciation'))['t'] or 0)
-    desp_fin = float(LoanInstallment.objects.filter(due_date__year=year, due_date__month=month, loan__is_active=True).aggregate(t=Sum('value'))['t'] or 0)
+    desp_fin = float(
+        LoanInstallment.objects.filter(
+            due_date__year=year, due_date__month=month, loan__is_active=True
+        ).aggregate(t=Sum('value'))['t'] or 0
+    )
 
     rol = rob_f - churn_value - deducoes
     lucro_bruto = rol - cv
