@@ -229,15 +229,22 @@ class ContractSerializer(serializers.ModelSerializer):
 
 class ProspectActivitySerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
+    prospect_name = serializers.SerializerMethodField()
 
     def get_created_by_name(self, obj):
         return obj.created_by.username if obj.created_by_id else None
+
+    def get_prospect_name(self, obj):
+        if obj.prospect_id:
+            return obj.prospect.company_name or obj.prospect.contact_name or ''
+        return ''
 
     class Meta:
         model = ProspectActivity
         fields = [
             "id",
             "prospect",
+            "prospect_name",
             "activity_type",
             "subject",
             "description",

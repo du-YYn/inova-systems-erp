@@ -575,8 +575,18 @@ class ProspectActivityViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         prospect_id = self.request.query_params.get('prospect', None)
+        activity_type = self.request.query_params.get('activity_type', None)
+        search = self.request.query_params.get('search', None)
         if prospect_id:
             queryset = queryset.filter(prospect_id=prospect_id)
+        if activity_type:
+            queryset = queryset.filter(activity_type=activity_type)
+        if search:
+            queryset = queryset.filter(
+                Q(subject__icontains=search) |
+                Q(description__icontains=search) |
+                Q(prospect__company_name__icontains=search)
+            )
         return queryset
 
     def perform_create(self, serializer):
