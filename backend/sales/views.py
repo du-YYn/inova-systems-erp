@@ -83,6 +83,13 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won')
+        if instance.status in hot_statuses and instance.temperature != 'hot':
+            instance.temperature = 'hot'
+            instance.save(update_fields=['temperature'])
+
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
@@ -137,6 +144,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.meeting_scheduled_at = meeting_scheduled_at
         prospect.meeting_link = meeting_link
         prospect.status = 'scheduled'
+        prospect.temperature = 'hot'
         prospect.save()
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
