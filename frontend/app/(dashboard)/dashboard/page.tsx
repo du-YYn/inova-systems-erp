@@ -228,6 +228,7 @@ export default function DashboardPage() {
     mrr: 0, active_contracts: 0, expiring_contracts: 0,
     total_projects: 0, active_projects: 0, received_this_month: 0, paid_this_month: 0,
     proposals_sent_count: 0, proposals_sent_value: 0, proposals_approved_count: 0,
+    ebitda: 0, resultado: 0,
   });
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
