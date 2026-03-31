@@ -385,6 +385,43 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
           <Users className="w-5 h-5 inline-block mr-2 text-accent-gold" />
           Receita Recorrente
         </h3>
+
+        {/* Gráfico MRR 12 meses */}
+        {!loading && dreMonths.length > 0 && (() => {
+          const mrrValues = dreMonths.map(dm => dm.realizado.rob);
+          const maxMrr = Math.max(...mrrValues, 1);
+          return (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 mb-4">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">MRR — Receita Mensal ({year})</p>
+                <p className="text-xs text-gray-400">Máx: <Sensitive>{fmtCurrency(maxMrr)}</Sensitive></p>
+              </div>
+              <div className="flex items-end gap-2 h-32">
+                {mrrValues.map((v, i) => {
+                  const pct = maxMrr > 0 ? (v / maxMrr) * 100 : 0;
+                  const isCurrent = i === month - 1;
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <span className={`text-[9px] font-medium ${v > 0 ? 'text-gray-600 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600'}`}>
+                        {v > 0 ? new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(v) : ''}
+                      </span>
+                      <div className="w-full flex-1 flex items-end">
+                        <div
+                          className={`w-full rounded-t transition-all ${isCurrent ? 'bg-accent-gold' : v > 0 ? 'bg-accent-gold/40' : 'bg-gray-100 dark:bg-gray-700'}`}
+                          style={{ height: `${Math.max(pct, 2)}%` }}
+                        />
+                      </div>
+                      <span className={`text-[9px] ${isCurrent ? 'text-accent-gold font-bold' : 'text-gray-400'}`}>
+                        {MONTH_LABELS[i]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-x-auto">
           {loading ? (
             <div className="p-6 space-y-3">
