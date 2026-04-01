@@ -315,8 +315,8 @@ export default function ContratosTab() {
       const cList = contractsData.results || contractsData;
       setContracts(Array.isArray(cList) ? cList : []);
       setTotal(contractsData.count ?? (Array.isArray(cList) ? cList.length : 0));
-    } catch {
-      toast.error('Erro ao carregar contratos.');
+    } catch (err) {
+      console.error('[ContratosTab] contracts error:', err);
     } finally {
       setLoading(false);
     }

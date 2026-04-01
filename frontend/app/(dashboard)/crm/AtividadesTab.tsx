@@ -93,8 +93,8 @@ export default function AtividadesTab() {
       const data = await api.get<{ results?: Activity[]; count?: number }>('/sales/prospect-activities/', params);
       setActivities(Array.isArray(data.results ?? data) ? (data.results ?? data) as Activity[] : []);
       setTotal(data.count ?? 0);
-    } catch {
-      toast.error('Erro ao carregar atividades.');
+    } catch (err) {
+      console.error('[AtividadesTab] activities error:', err);
     } finally {
       setLoading(false);
     }

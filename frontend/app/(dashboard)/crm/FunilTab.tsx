@@ -514,8 +514,8 @@ export default function FunilTab() {
       const data = await api.get<{ results?: Prospect[]; count?: number }>('/sales/prospects/', params);
       setProspects(Array.isArray(data.results ?? data) ? (data.results ?? data) as Prospect[] : []);
       setTotal(data.count ?? (data.results ?? data as unknown as Prospect[]).length);
-    } catch {
-      toast.error('Erro ao carregar prospects');
+    } catch (err) {
+      console.error('[FunilTab] prospects error:', err);
     } finally {
       setLoading(false);
     }

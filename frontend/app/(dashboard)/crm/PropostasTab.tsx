@@ -110,8 +110,8 @@ export default function PropostasTab() {
       const pList = propData.results || propData;
       setProposals(Array.isArray(pList) ? pList : []);
       setTotal(propData.count ?? (Array.isArray(pList) ? pList.length : 0));
-    } catch {
-      toast.error('Erro ao carregar propostas.');
+    } catch (err) {
+      console.error('[PropostasTab] proposals error:', err);
     } finally {
       setLoading(false);
     }
