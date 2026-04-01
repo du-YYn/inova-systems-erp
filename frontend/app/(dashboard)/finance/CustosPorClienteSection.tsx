@@ -79,14 +79,14 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
     setModalCustomer('');
     setCart([]);
     setSelectedCat(null);
-    setItemDesc(''); setItemValue(''); setItemRecurring(true);
+    setItemDesc(''); setItemValue(''); setItemFrequency('monthly');
     setShowModal(true);
   };
 
   const addToCart = () => {
     if (!selectedCat || !itemDesc.trim() || !itemValue) { toast.error('Preencha categoria, descrição e valor.'); return; }
     setCart(prev => [...prev, { cost_category: selectedCat, description: itemDesc.trim(), value: itemValue, frequency: itemFrequency }]);
-    setItemDesc(''); setItemValue(''); setItemRecurring(true);
+    setItemDesc(''); setItemValue(''); setItemFrequency('monthly');
     setSelectedCat(null);
   };
 
