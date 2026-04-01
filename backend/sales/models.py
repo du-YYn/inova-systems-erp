@@ -378,10 +378,26 @@ class ProspectActivity(models.Model):
         ('demo', 'Demonstração'),
         ('linkedin', 'LinkedIn'),
         ('other', 'Outro'),
+        # Tipos automáticos (gerados pelo sistema)
+        ('lead_created', 'Lead Recebido'),
+        ('status_changed', 'Status Alterado'),
+        ('qualified', 'Qualificado'),
+        ('disqualified', 'Não Qualificado'),
+        ('meeting_scheduled', 'Reunião Agendada'),
+        ('no_show', 'Não Compareceu'),
+        ('meeting_done', 'Reunião Realizada'),
+        ('proposal_created', 'Proposta Criada'),
+        ('proposal_sent', 'Proposta Enviada'),
+        ('proposal_approved', 'Proposta Aprovada'),
+        ('proposal_rejected', 'Proposta Rejeitada'),
+        ('won', 'Lead Fechado'),
+        ('lost', 'Lead Perdido'),
+        ('follow_up', 'Follow-up'),
+        ('contract_created', 'Contrato Criado'),
     ]
 
     prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='activities')
-    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, default='call')
+    activity_type = models.CharField(max_length=30, choices=ACTIVITY_TYPE_CHOICES, default='call')
     subject = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     outcome = models.TextField(blank=True)

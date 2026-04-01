@@ -34,6 +34,17 @@ from .serializers import (
 logger = logging.getLogger('sales')
 
 
+def log_crm_activity(prospect, activity_type, subject, user, description=''):
+    """Registra atividade automática no histórico do CRM."""
+    ProspectActivity.objects.create(
+        prospect=prospect,
+        activity_type=activity_type,
+        subject=subject,
+        description=description,
+        created_by=user,
+    )
+
+
 class DynamicPageSizePagination(PageNumberPagination):
     """Permite que o cliente controle o tamanho da página via ?page_size=N."""
     page_size_query_param = 'page_size'
@@ -81,10 +92,17 @@ class ProspectViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        prospect = serializer.save(created_by=self.request.user)
+        log_crm_activity(prospect, 'lead_created', f'Lead recebido — {prospect.company_name}', self.request.user)
 
     def perform_update(self, serializer):
+        old_status = serializer.instance.status if serializer.instance else None
         instance = serializer.save()
+        # Log status change
+        if old_status and old_status != instance.status:
+            from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
+            to_label = dict(Prospect.STATUS_CHOICES).get(instance.status, instance.status)
+            log_crm_activity(instance, 'status_changed', f'{from_label} → {to_label}', self.request.user)
         hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won')
         if instance.status in hot_statuses and instance.temperature != 'hot':
             instance.temperature = 'hot'
@@ -128,6 +146,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.qualification_score = score
         prospect.status = 'qualified' if score >= 3 else 'disqualified'
         prospect.save()
+        act_type = 'qualified' if score >= 3 else 'disqualified'
+        log_crm_activity(prospect, act_type, f'Score {score}/4', request.user)
         logger.info(f"Prospect {prospect.id} qualificado (score {score}/4) por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -146,6 +166,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.status = 'scheduled'
         prospect.temperature = 'hot'
         prospect.save()
+        log_crm_activity(prospect, 'meeting_scheduled', f'Reunião agendada — {meeting_scheduled_at}', request.user)
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -157,6 +178,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.status = 'no_show'
         prospect.follow_up_reason = 'nao_compareceu'
         prospect.save()
+        log_crm_activity(prospect, 'no_show', 'Não compareceu à reunião', request.user)
         logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -167,6 +189,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.meeting_attended = True
         prospect.status = 'meeting_done'
         prospect.save()
+        log_crm_activity(prospect, 'meeting_done', 'Reunião realizada', request.user)
         logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -214,6 +237,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 Prospect.objects.filter(pk=proposal.prospect_id).exclude(
                     status__in=['won', 'lost', 'not_closed'],
                 ).update(status='proposal')
+                log_crm_activity(proposal.prospect, 'proposal_created', f'Proposta #{next_number} criada — R$ {proposal.total_value}', self.request.user)
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):
@@ -231,6 +255,8 @@ class ProposalViewSet(viewsets.ModelViewSet):
             Prospect.objects.filter(pk=proposal.prospect_id).exclude(
                 status__in=['won', 'lost', 'not_closed'],
             ).update(status='proposal')
+        if proposal.prospect:
+            log_crm_activity(proposal.prospect, 'proposal_sent', f'Proposta #{proposal.number} enviada', request.user)
         logger.info(f"Proposta {proposal.id} enviada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
@@ -250,6 +276,8 @@ class ProposalViewSet(viewsets.ModelViewSet):
         # Gerar comissões automaticamente
         self._generate_commissions(proposal, request.user)
 
+        if proposal.prospect:
+            log_crm_activity(proposal.prospect, 'proposal_approved', f'Proposta #{proposal.number} aprovada — R$ {proposal.total_value}', request.user)
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
@@ -297,6 +325,8 @@ class ProposalViewSet(viewsets.ModelViewSet):
             )
         proposal.status = 'rejected'
         proposal.save()
+        if proposal.prospect:
+            log_crm_activity(proposal.prospect, 'proposal_rejected', f'Proposta #{proposal.number} rejeitada', request.user)
         logger.info(f"Proposta {proposal.id} rejeitada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
