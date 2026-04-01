@@ -12,7 +12,7 @@ const fmt = (v: number | string) => new Intl.NumberFormat('pt-BR', { style: 'cur
 interface ClientCost {
   id: number; customer: number; customer_name: string;
   cost_category: string; cost_category_display: string;
-  description: string; value: string; is_recurring: boolean;
+  description: string; value: string; frequency: string;
   reference_month: string; notes: string;
 }
 
@@ -40,7 +40,8 @@ const CAT_ICONS: Record<string, { icon: typeof Monitor; color: string }> = Objec
 
 const lbl = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1';
 
-interface CartItem { cost_category: string; description: string; value: string; is_recurring: boolean; }
+const FREQ_LABELS: Record<string, string> = { one_time: 'Único', monthly: 'Mensal', quarterly: 'Trimestral', semiannual: 'Semestral', yearly: 'Anual' };
+interface CartItem { cost_category: string; description: string; value: string; frequency: string; }
 
 export default function CustosPorClienteSection({ isDemoMode, customers }: Props) {
   const toast = useToast();
@@ -60,7 +61,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [itemDesc, setItemDesc] = useState('');
   const [itemValue, setItemValue] = useState('');
-  const [itemRecurring, setItemRecurring] = useState(true);
+  const [itemFrequency, setItemFrequency] = useState('monthly');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -84,7 +85,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
 
   const addToCart = () => {
     if (!selectedCat || !itemDesc.trim() || !itemValue) { toast.error('Preencha categoria, descrição e valor.'); return; }
-    setCart(prev => [...prev, { cost_category: selectedCat, description: itemDesc.trim(), value: itemValue, is_recurring: itemRecurring }]);
+    setCart(prev => [...prev, { cost_category: selectedCat, description: itemDesc.trim(), value: itemValue, frequency: itemFrequency }]);
     setItemDesc(''); setItemValue(''); setItemRecurring(true);
     setSelectedCat(null);
   };
@@ -104,7 +105,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
           cost_category: item.cost_category,
           description: item.description,
           value: Number(item.value),
-          is_recurring: item.is_recurring,
+          frequency: item.frequency,
           reference_month: refDate,
         });
       }
@@ -198,7 +199,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
                                 </td>
                                 <td className="py-2.5">
                                   <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{item.description}</p>
-                                  <p className="text-[10px] text-gray-400">{item.cost_category_display}{item.is_recurring ? ' • Recorrente' : ' • Pontual'}</p>
+                                  <p className="text-[10px] text-gray-400">{item.cost_category_display} • {FREQ_LABELS[item.frequency] || item.frequency}</p>
                                 </td>
                                 <td className="px-4 py-2.5 text-right text-xs font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{fmt(item.value)}</Sensitive></td>
                                 <td className="px-4 py-2.5 w-10">
@@ -252,7 +253,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] font-medium text-gray-400 uppercase">{catInfo?.label}</span>
                             <span className="text-xs font-medium text-gray-900 dark:text-gray-100">{item.description}</span>
-                            {item.is_recurring && <span className="text-[9px] text-accent-gold">🔄</span>}
+                            <span className="text-[9px] text-gray-400">{FREQ_LABELS[item.frequency] || ''}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-semibold text-gray-900 dark:text-gray-100">{fmt(item.value)}</span>
@@ -314,11 +315,11 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
                           <label className={lbl}>Valor (R$) *</label>
                           <input type="number" step="0.01" min="0" value={itemValue} onChange={e => setItemValue(e.target.value)} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                         </div>
-                        <div className="flex items-end pb-1">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={itemRecurring} onChange={e => setItemRecurring(e.target.checked)} className="w-4 h-4 rounded text-accent-gold" />
-                            <span className="text-xs text-gray-500 dark:text-gray-400">Recorrente (mensal)</span>
-                          </label>
+                        <div>
+                          <label className={lbl}>Frequência</label>
+                          <select value={itemFrequency} onChange={e => setItemFrequency(e.target.value)} className="input-field bg-white dark:bg-gray-800">
+                            {Object.entries(FREQ_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                          </select>
                         </div>
                       </div>
 

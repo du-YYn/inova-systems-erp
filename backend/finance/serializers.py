@@ -170,7 +170,7 @@ class ClientCostSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientCost
         fields = ['id', 'customer', 'customer_name', 'cost_category', 'cost_category_display',
-                  'description', 'value', 'is_recurring', 'reference_month', 'notes',
+                  'description', 'value', 'frequency', 'reference_month', 'notes',
                   'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
 

@@ -267,11 +267,19 @@ class ClientCost(models.Model):
         ('outro', 'Outro'),
     ]
 
+    FREQUENCY_CHOICES = [
+        ('one_time', 'Único'),
+        ('monthly', 'Mensal'),
+        ('quarterly', 'Trimestral'),
+        ('semiannual', 'Semestral'),
+        ('yearly', 'Anual'),
+    ]
+
     customer = models.ForeignKey('sales.Customer', on_delete=models.CASCADE, related_name='client_costs')
     cost_category = models.CharField(max_length=30, choices=COST_CATEGORY_CHOICES, default='sistemas')
     description = models.CharField(max_length=200, help_text='Nome do custo')
     value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    is_recurring = models.BooleanField(default=True, help_text='Custo mensal recorrente')
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES, default='monthly')
     reference_month = models.DateField(help_text='Primeiro dia do mês de referência')
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='client_costs')
