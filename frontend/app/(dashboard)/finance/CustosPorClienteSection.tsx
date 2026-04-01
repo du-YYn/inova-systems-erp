@@ -23,13 +23,13 @@ interface Props {
 
 const CATEGORIES = [
   { key: 'sistemas', label: 'Sistemas', icon: Monitor, color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30',
-    presets: ['Licença White Label', 'BotConversa', 'Z-API', 'Reserva Z-API', 'Hosting/Servidor'] },
+    presets: ['Licença White Label', 'BotConversa', 'Z-API', 'Reserva Z-API', 'Hosting/Servidor', 'Make (automação)', 'ChatGPT / IA', 'CRM/ERP'] },
   { key: 'pessoas', label: 'Pessoas', icon: UsersIcon, color: 'text-purple-600 bg-purple-50 dark:bg-purple-900/30',
-    presets: ['Desenvolvedor', 'Designer', 'Gerente de Projeto', 'Suporte/CS'] },
+    presets: ['Desenvolvedor Backend', 'Desenvolvedor Frontend', 'Desenvolvedor Full Stack', 'Desenvolvedor Mobile', 'Designer UI/UX', 'Designer Gráfico', 'Gerente de Projeto', 'Scrum Master', 'Product Owner', 'Analista de Requisitos', 'QA / Tester', 'DevOps / Infra', 'Suporte / CS', 'Social Media', 'Gestor de Tráfego', 'Copywriter', 'Editor de Vídeo', 'Consultor'] },
   { key: 'infraestrutura', label: 'Infraestrutura', icon: Server, color: 'text-green-600 bg-green-50 dark:bg-green-900/30',
-    presets: ['Servidor/Cloud', 'Domínio', 'CDN', 'SSL'] },
+    presets: ['Servidor/Cloud (AWS, GCP, Azure)', 'Domínio', 'CDN', 'SSL/Certificado', 'VPS', 'Backup', 'E-mail corporativo'] },
   { key: 'comercial', label: 'Comercial', icon: DollarSign, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/30',
-    presets: ['Comissão Closer', 'Comissão SDR', 'MIV (custo de lead)', 'Designer (arte)'] },
+    presets: ['Comissão Closer', 'Comissão SDR', 'MIV (custo de lead)', 'Designer (arte de venda)', 'Anúncios/Tráfego pago', 'Bônus por meta'] },
   { key: 'outro', label: 'Outro', icon: Package, color: 'text-gray-600 bg-gray-50 dark:bg-gray-700/50',
     presets: [] },
 ];
@@ -295,10 +295,10 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
 
                       {/* Presets */}
                       {(CATEGORIES.find(c => c.key === selectedCat)?.presets || []).length > 0 && (
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
                           {CATEGORIES.find(c => c.key === selectedCat)!.presets.map(preset => (
                             <button key={preset} type="button" onClick={() => setItemDesc(preset)}
-                              className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${itemDesc === preset ? 'border-accent-gold bg-accent-gold/10 text-accent-gold' : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300'}`}>
+                              className={`text-[11px] px-2.5 py-1.5 rounded-lg border text-left transition-colors ${itemDesc === preset ? 'border-accent-gold bg-accent-gold/10 text-accent-gold font-medium' : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-300'}`}>
                               {preset}
                             </button>
                           ))}
