@@ -62,6 +62,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   const [itemDesc, setItemDesc] = useState('');
   const [itemValue, setItemValue] = useState('');
   const [itemFrequency, setItemFrequency] = useState('monthly');
+  const [customDesc, setCustomDesc] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -86,7 +87,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   const addToCart = () => {
     if (!selectedCat || !itemDesc.trim() || !itemValue) { toast.error('Preencha categoria, descrição e valor.'); return; }
     setCart(prev => [...prev, { cost_category: selectedCat, description: itemDesc.trim(), value: itemValue, frequency: itemFrequency }]);
-    setItemDesc(''); setItemValue(''); setItemFrequency('monthly');
+    setItemDesc(''); setItemValue(''); setItemFrequency('monthly'); setCustomDesc(false);
     setSelectedCat(null);
   };
 
@@ -293,21 +294,26 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
                         <button onClick={() => setSelectedCat(null)} className="text-[10px] text-gray-400 hover:text-gray-600">← Trocar categoria</button>
                       </div>
 
-                      {/* Presets */}
-                      {(CATEGORIES.find(c => c.key === selectedCat)?.presets || []).length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
-                          {CATEGORIES.find(c => c.key === selectedCat)!.presets.map(preset => (
-                            <button key={preset} type="button" onClick={() => setItemDesc(preset)}
-                              className={`text-[11px] px-2.5 py-1.5 rounded-lg border text-left transition-colors ${itemDesc === preset ? 'border-accent-gold bg-accent-gold/10 text-accent-gold font-medium' : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-300'}`}>
-                              {preset}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {/* Presets + Personalizado */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                        {(CATEGORIES.find(c => c.key === selectedCat)?.presets || []).map(preset => (
+                          <button key={preset} type="button" onClick={() => { setItemDesc(preset); setCustomDesc(false); }}
+                            className={`text-[11px] px-2.5 py-1.5 rounded-lg border text-left transition-colors ${itemDesc === preset && !customDesc ? 'border-accent-gold bg-accent-gold/10 text-accent-gold font-medium' : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+                            {preset}
+                          </button>
+                        ))}
+                        <button type="button" onClick={() => { setItemDesc(''); setCustomDesc(true); }}
+                          className={`text-[11px] px-2.5 py-1.5 rounded-lg border text-left transition-colors ${customDesc ? 'border-accent-gold bg-accent-gold/10 text-accent-gold font-medium' : 'border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-accent-gold hover:text-accent-gold'}`}>
+                          + Personalizado
+                        </button>
+                      </div>
 
+                      {/* Campo descrição: sempre visível se personalizado, ou editável se preset */}
                       <div>
-                        <label className={lbl}>Descrição *</label>
-                        <input type="text" value={itemDesc} onChange={e => setItemDesc(e.target.value)} className="input-field" placeholder="Nome do custo ou selecione acima" />
+                        <label className={lbl}>{customDesc ? 'Nome personalizado *' : 'Descrição *'}</label>
+                        <input type="text" value={itemDesc} onChange={e => setItemDesc(e.target.value)}
+                          className="input-field" placeholder={customDesc ? 'Digite o nome do custo...' : 'Selecione acima ou digite'}
+                          autoFocus={customDesc} />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
