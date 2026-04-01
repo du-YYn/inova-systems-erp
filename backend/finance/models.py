@@ -258,22 +258,20 @@ class TaxEntry(models.Model):
 
 
 class ClientCost(models.Model):
-    """Custos variáveis por cliente (licenças, comissões)."""
-    COST_TYPE_CHOICES = [
-        ('license_erp', 'Licença Sistema Parceiro'),
-        ('license_botconversa', 'Licença BotConversa'),
-        ('license_zapi', 'Licença Z-API'),
-        ('reserve_zapi', 'Reserva Limite Z-API'),
-        ('commission_closer', 'Comissão Closer'),
-        ('commission_sdr', 'Comissão SDR'),
-        ('miv', 'MIV - Custo de Lead'),
-        ('designer', 'Designer'),
-        ('other', 'Outro'),
+    """Custos variáveis por cliente — qualquer tipo de custo associado."""
+    COST_CATEGORY_CHOICES = [
+        ('sistemas', 'Sistemas'),
+        ('pessoas', 'Pessoas'),
+        ('infraestrutura', 'Infraestrutura'),
+        ('comercial', 'Comercial'),
+        ('outro', 'Outro'),
     ]
 
     customer = models.ForeignKey('sales.Customer', on_delete=models.CASCADE, related_name='client_costs')
-    cost_type = models.CharField(max_length=30, choices=COST_TYPE_CHOICES)
+    cost_category = models.CharField(max_length=30, choices=COST_CATEGORY_CHOICES, default='sistemas')
+    description = models.CharField(max_length=200, help_text='Nome do custo')
     value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_recurring = models.BooleanField(default=True, help_text='Custo mensal recorrente')
     reference_month = models.DateField(help_text='Primeiro dia do mês de referência')
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='client_costs')
@@ -281,10 +279,10 @@ class ClientCost(models.Model):
 
     class Meta:
         db_table = 'client_costs'
-        ordering = ['-reference_month', 'customer__company_name']
+        ordering = ['-reference_month', 'customer__company_name', 'cost_category']
 
     def __str__(self):
-        return f"{self.customer} - {self.get_cost_type_display()} - {self.reference_month.strftime('%m/%Y')}"
+        return f"{self.customer} - {self.description} - {self.reference_month.strftime('%m/%Y')}"
 
 
 class RecurringExpense(models.Model):

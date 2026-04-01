@@ -165,12 +165,13 @@ class TaxEntrySerializer(serializers.ModelSerializer):
 
 class ClientCostSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
-    cost_type_display = serializers.CharField(source='get_cost_type_display', read_only=True)
+    cost_category_display = serializers.CharField(source='get_cost_category_display', read_only=True)
 
     class Meta:
         model = ClientCost
-        fields = ['id', 'customer', 'customer_name', 'cost_type', 'cost_type_display',
-                  'value', 'reference_month', 'notes', 'created_by', 'created_at']
+        fields = ['id', 'customer', 'customer_name', 'cost_category', 'cost_category_display',
+                  'description', 'value', 'is_recurring', 'reference_month', 'notes',
+                  'created_by', 'created_at']
         read_only_fields = ['id', 'created_by', 'created_at']
 
     def get_customer_name(self, obj):
