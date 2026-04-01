@@ -670,7 +670,12 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
         deducoes = tax_data['total']
     else:
         deducoes = float(TaxEntry.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
-    cv = float(ClientCost.objects.filter(reference_month=ref).aggregate(t=Sum('value'))['t'] or 0)
+    # Custos variáveis: converte para valor mensal equivalente conforme frequência
+    freq_divisor = {'one_time': 0, 'monthly': 1, 'quarterly': 3, 'semiannual': 6, 'yearly': 12}
+    cv = 0.0
+    for cc in ClientCost.objects.filter(reference_month=ref):
+        divisor = freq_divisor.get(cc.frequency, 1)
+        cv += float(cc.value) / divisor if divisor > 0 else float(cc.value)
     desp_op = float(RecurringExpense.objects.filter(is_active=True).aggregate(t=Sum('value'))['t'] or 0)
     deprec = float(Asset.objects.filter(is_active=True).aggregate(t=Sum('monthly_depreciation'))['t'] or 0)
     desp_fin = float(
@@ -750,10 +755,14 @@ class FinanceDashboardView(viewsets.ViewSet):
         mc = r['margem_contribuicao']
         break_even = (custos_fixos / (mc / 100)) if mc > 0 else 0
 
-        # ── Clientes para Receita Recorrente
+        # ── Clientes para Receita Recorrente (custos convertidos para mensal)
+        freq_div = {'one_time': 0, 'monthly': 1, 'quarterly': 3, 'semiannual': 6, 'yearly': 12}
         customers_data = []
         for c in active_customers:
-            costs = float(ClientCost.objects.filter(customer=c, reference_month=ref_date).aggregate(t=Sum('value'))['t'] or 0)
+            costs = 0.0
+            for cc in ClientCost.objects.filter(customer=c, reference_month=ref_date):
+                d = freq_div.get(cc.frequency, 1)
+                costs += float(cc.value) / d if d > 0 else float(cc.value)
             customers_data.append({
                 'id': c.id, 'name': c.company_name or c.name,
                 'ticket': float(c.contract_value or 0), 'costs': costs,
