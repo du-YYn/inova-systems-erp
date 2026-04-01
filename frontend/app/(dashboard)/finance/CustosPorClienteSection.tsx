@@ -76,8 +76,8 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   }, [refMonth]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const openModal = () => {
-    setModalCustomer('');
+  const openModal = (presetCustomer?: string) => {
+    if (!presetCustomer) setModalCustomer('');
     setCart([]);
     setSelectedCat(null);
     setItemDesc(''); setItemValue(''); setItemFrequency('monthly');
@@ -159,7 +159,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
         </div>
         <div className="flex items-center gap-3">
           <input type="month" value={refMonth} onChange={e => setRefMonth(e.target.value)} className="input-field w-40 text-sm" />
-          <button onClick={openModal} className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark text-sm font-medium">
+          <button onClick={() => openModal()} className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark text-sm font-medium">
             <Plus className="w-4 h-4" /> Novo Custo
           </button>
         </div>
@@ -271,7 +271,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
               })}
 
               {/* Botão adicionar */}
-              <button onClick={() => { setModalCustomer(String(viewingCustomer)); setViewingCustomer(null); openModal(); }}
+              <button onClick={() => { const cid = String(viewingCustomer); setModalCustomer(cid); setViewingCustomer(null); openModal(cid); }}
                 className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-accent-gold/30 text-accent-gold rounded-xl hover:bg-accent-gold/5 text-sm font-medium transition-colors">
                 <Plus className="w-4 h-4" /> Adicionar Custo
               </button>
