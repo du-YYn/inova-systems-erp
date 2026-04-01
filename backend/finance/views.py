@@ -593,18 +593,12 @@ class AssetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         asset = serializer.save(created_by=self.request.user)
-        if asset.useful_life_months and asset.useful_life_months > 0:
-            asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
-        else:
-            asset.monthly_depreciation = 0
+        asset.monthly_depreciation = asset.calc_monthly_depreciation()
         asset.save(update_fields=['monthly_depreciation'])
 
     def perform_update(self, serializer):
         asset = serializer.save()
-        if asset.useful_life_months and asset.useful_life_months > 0:
-            asset.monthly_depreciation = (asset.unit_value * asset.quantity) / asset.useful_life_months
-        else:
-            asset.monthly_depreciation = 0
+        asset.monthly_depreciation = asset.calc_monthly_depreciation()
         asset.save(update_fields=['monthly_depreciation'])
 
 

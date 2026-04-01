@@ -359,11 +359,31 @@ class LoanInstallment(models.Model):
 
 
 class Asset(models.Model):
-    """Ativos com depreciação."""
+    """Ativos patrimoniais — bens físicos, software/white label, licenças anuais."""
+    ASSET_TYPE_CHOICES = [
+        ('physical', 'Bem Físico'),
+        ('software', 'Software / White Label'),
+        ('annual_license', 'Licença Anual'),
+    ]
+
+    asset_type = models.CharField(max_length=20, choices=ASSET_TYPE_CHOICES, default='physical')
     name = models.CharField(max_length=200)
+
+    # Bem Físico
     quantity = models.IntegerField(default=1)
-    unit_value = models.DecimalField(max_digits=12, decimal_places=2)
-    useful_life_months = models.IntegerField(help_text='Vida útil em meses')
+    unit_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    useful_life_months = models.IntegerField(default=0, help_text='Vida útil em meses (bem físico)')
+
+    # Software / White Label
+    setup_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Custo de aquisição/setup')
+    amortization_months = models.IntegerField(default=0, help_text='Amortização em meses (0 = sem)')
+    license_unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Custo por licença (informativo)')
+
+    # Licença Anual
+    annual_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text='Valor anual da licença')
+    renewal_date = models.DateField(null=True, blank=True, help_text='Data de renovação')
+
+    # Comum
     acquisition_date = models.DateField()
     monthly_depreciation = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
@@ -375,8 +395,20 @@ class Asset(models.Model):
         db_table = 'assets'
         ordering = ['name']
 
+    def calc_monthly_depreciation(self):
+        if self.asset_type == 'physical':
+            if self.useful_life_months and self.useful_life_months > 0:
+                return (self.unit_value * self.quantity) / self.useful_life_months
+        elif self.asset_type == 'software':
+            if self.amortization_months and self.amortization_months > 0:
+                return self.setup_cost / self.amortization_months
+        elif self.asset_type == 'annual_license':
+            if self.annual_cost and self.annual_cost > 0:
+                return self.annual_cost / 12
+        return 0
+
     def __str__(self):
-        return f"{self.name} ({self.quantity}x)"
+        return f"{self.name} ({self.get_asset_type_display()})"
 
 
 class ProfitDistConfig(models.Model):

@@ -237,25 +237,44 @@ class LoanSerializer(serializers.ModelSerializer):
 
 
 class AssetSerializer(serializers.ModelSerializer):
+    asset_type_display = serializers.CharField(source='get_asset_type_display', read_only=True)
     total_value = serializers.SerializerMethodField()
     life_used_months = serializers.SerializerMethodField()
 
     class Meta:
         model = Asset
-        fields = ['id', 'name', 'quantity', 'unit_value', 'useful_life_months',
-                  'acquisition_date', 'monthly_depreciation', 'total_value',
-                  'life_used_months', 'is_active', 'notes', 'created_by', 'created_at']
+        fields = [
+            'id', 'asset_type', 'asset_type_display', 'name',
+            'quantity', 'unit_value', 'useful_life_months',
+            'setup_cost', 'amortization_months', 'license_unit_cost',
+            'annual_cost', 'renewal_date',
+            'acquisition_date', 'monthly_depreciation', 'total_value',
+            'life_used_months', 'is_active', 'notes', 'created_by', 'created_at',
+        ]
         read_only_fields = ['id', 'monthly_depreciation', 'created_by', 'created_at']
 
     def get_total_value(self, obj):
-        return float(obj.unit_value * obj.quantity)
+        if obj.asset_type == 'physical':
+            return float(obj.unit_value * obj.quantity)
+        elif obj.asset_type == 'software':
+            return float(obj.setup_cost or 0)
+        elif obj.asset_type == 'annual_license':
+            return float(obj.annual_cost or 0)
+        return 0
 
     def get_life_used_months(self, obj):
         from django.utils import timezone
-        if obj.acquisition_date:
-            delta = timezone.now().date() - obj.acquisition_date
-            return min(delta.days // 30, obj.useful_life_months)
-        return 0
+        if not obj.acquisition_date:
+            return 0
+        delta = timezone.now().date() - obj.acquisition_date
+        months_used = delta.days // 30
+        if obj.asset_type == 'physical' and obj.useful_life_months:
+            return min(months_used, obj.useful_life_months)
+        if obj.asset_type == 'software' and obj.amortization_months:
+            return min(months_used, obj.amortization_months)
+        if obj.asset_type == 'annual_license':
+            return min(months_used, 12)
+        return months_used
 
 
 class ProfitDistPartnerSerializer(serializers.ModelSerializer):
