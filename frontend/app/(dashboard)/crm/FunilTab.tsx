@@ -715,8 +715,10 @@ export default function FunilTab() {
       setShowModal(false);
       fetchProspects();
       fetchAllProspects();
-    } catch {
-      toast.error('Erro ao salvar prospect.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao salvar prospect.';
+      toast.error(msg);
+      console.error('[FunilTab] save error:', err);
     } finally {
       setSaving(false);
     }

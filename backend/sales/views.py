@@ -36,13 +36,16 @@ logger = logging.getLogger('sales')
 
 def log_crm_activity(prospect, activity_type, subject, user, description=''):
     """Registra atividade automática no histórico do CRM."""
-    ProspectActivity.objects.create(
-        prospect=prospect,
-        activity_type=activity_type,
-        subject=subject,
-        description=description,
-        created_by=user,
-    )
+    try:
+        ProspectActivity.objects.create(
+            prospect=prospect,
+            activity_type=activity_type,
+            subject=subject[:200],
+            description=description,
+            created_by=user,
+        )
+    except Exception as e:
+        logger.warning(f"Falha ao registrar atividade CRM: {e}")
 
 
 class DynamicPageSizePagination(PageNumberPagination):
@@ -237,7 +240,11 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 Prospect.objects.filter(pk=proposal.prospect_id).exclude(
                     status__in=['won', 'lost', 'not_closed'],
                 ).update(status='proposal')
-                log_crm_activity(proposal.prospect, 'proposal_created', f'Proposta #{next_number} criada — R$ {proposal.total_value}', self.request.user)
+                log_crm_activity(
+                    proposal.prospect, 'proposal_created',
+                    f'Proposta #{next_number} — R$ {proposal.total_value}',
+                    self.request.user,
+                )
 
     @action(detail=True, methods=['post'])
     def send(self, request, pk=None):
@@ -277,7 +284,11 @@ class ProposalViewSet(viewsets.ModelViewSet):
         self._generate_commissions(proposal, request.user)
 
         if proposal.prospect:
-            log_crm_activity(proposal.prospect, 'proposal_approved', f'Proposta #{proposal.number} aprovada — R$ {proposal.total_value}', request.user)
+            log_crm_activity(
+                proposal.prospect, 'proposal_approved',
+                f'Proposta #{proposal.number} aprovada — R$ {proposal.total_value}',
+                request.user,
+            )
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
 
