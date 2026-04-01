@@ -77,10 +77,10 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const openModal = (presetCustomer?: string) => {
-    if (!presetCustomer) setModalCustomer('');
+    setModalCustomer(presetCustomer || '');
     setCart([]);
     setSelectedCat(null);
-    setItemDesc(''); setItemValue(''); setItemFrequency('monthly');
+    setItemDesc(''); setItemValue(''); setItemFrequency('monthly'); setCustomDesc(false);
     setShowModal(true);
   };
 
@@ -271,7 +271,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
               })}
 
               {/* Botão adicionar */}
-              <button onClick={() => { const cid = String(viewingCustomer); setModalCustomer(cid); setViewingCustomer(null); openModal(cid); }}
+              <button onClick={() => { const cid = String(viewingCustomer); setViewingCustomer(null); openModal(cid); }}
                 className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-accent-gold/30 text-accent-gold rounded-xl hover:bg-accent-gold/5 text-sm font-medium transition-colors">
                 <Plus className="w-4 h-4" /> Adicionar Custo
               </button>
