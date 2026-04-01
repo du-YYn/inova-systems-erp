@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Trash2, X, Monitor, Users as UsersIcon, Server, DollarSign, Package, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, X, Monitor, Users as UsersIcon, Server, DollarSign, Package } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
@@ -49,7 +49,7 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
   const [loading, setLoading] = useState(true);
   const [refMonth, setRefMonth] = useState(new Date().toISOString().slice(0, 7));
   const [delTarget, setDelTarget] = useState<ClientCost | null>(null);
-  const [expandedCustomers, setExpandedCustomers] = useState<Record<number, boolean>>({});
+  const [viewingCustomer, setViewingCustomer] = useState<number | null>(null);
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -123,8 +123,6 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
     catch { toast.error('Erro.'); }
   };
 
-  const toggleCustomer = (id: number) => setExpandedCustomers(prev => ({ ...prev, [id]: !prev[id] }));
-
   // Group items by customer
   const grouped: Record<number, { name: string; items: ClientCost[]; total: number }> = {};
   items.forEach(item => {
@@ -132,6 +130,17 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
     grouped[item.customer].items.push(item);
     grouped[item.customer].total += Number(item.value);
   });
+
+  // Group by category for drawer
+  const viewingData = viewingCustomer ? grouped[viewingCustomer] : null;
+  const viewingByCategory: Record<string, ClientCost[]> = {};
+  if (viewingData) {
+    viewingData.items.forEach(item => {
+      const cat = item.cost_category || 'outro';
+      if (!viewingByCategory[cat]) viewingByCategory[cat] = [];
+      viewingByCategory[cat].push(item);
+    });
+  }
 
   const grandTotal = items.reduce((s, i) => s + Number(i.value), 0);
   const cartTotal = cart.reduce((s, i) => s + Number(i.value || 0), 0);
@@ -156,72 +165,120 @@ export default function CustosPorClienteSection({ isDemoMode, customers }: Props
         </div>
       </div>
 
-      {/* Lista agrupada por cliente */}
-      <div className="space-y-3">
-        {loading ? <div className="p-8 text-center text-gray-400">Carregando...</div> : Object.keys(grouped).length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-12 text-center text-gray-400">
-            <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /><p>Nenhum custo cadastrado para este mês.</p>
-          </div>
-        ) : (
-          <>
+      {/* Grid de cards por cliente */}
+      {loading ? <div className="p-8 text-center text-gray-400">Carregando...</div> : Object.keys(grouped).length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-12 text-center text-gray-400">
+          <DollarSign className="w-10 h-10 mx-auto mb-2 opacity-30" /><p>Nenhum custo cadastrado para este mês.</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(grouped).map(([custId, g]) => {
-              const isOpen = expandedCustomers[Number(custId)] !== false;
+              const catCounts: Record<string, number> = {};
+              g.items.forEach(i => { catCounts[i.cost_category] = (catCounts[i.cost_category] || 0) + 1; });
               return (
-                <div key={custId} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                  <button onClick={() => toggleCustomer(Number(custId))}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-accent-gold/10 rounded-full flex items-center justify-center">
-                        <span className="text-xs font-bold text-accent-gold">{g.name.charAt(0)}</span>
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{g.name}</Sensitive></p>
-                        <p className="text-[10px] text-gray-400">{g.items.length} custo{g.items.length > 1 ? 's' : ''}</p>
-                      </div>
+                <button key={custId} onClick={() => setViewingCustomer(Number(custId))}
+                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 text-left hover:border-accent-gold/50 hover:shadow-md transition-all group">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 bg-accent-gold/10 rounded-full flex items-center justify-center group-hover:bg-accent-gold/20 transition-colors">
+                      <span className="text-sm font-bold text-accent-gold">{g.name.charAt(0)}</span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100"><Sensitive>{fmt(g.total)}</Sensitive>/mês</span>
-                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{g.name}</Sensitive></p>
+                      <p className="text-[10px] text-gray-400">{g.items.length} custo{g.items.length > 1 ? 's' : ''}</p>
                     </div>
-                  </button>
-                  {isOpen && (
-                    <div className="border-t border-gray-100 dark:border-gray-700">
-                      <table className="w-full text-sm">
-                        <tbody>
-                          {g.items.map(item => {
-                            const catInfo = CAT_ICONS[item.cost_category] || CAT_ICONS.outro;
-                            const CatIcon = catInfo.icon;
-                            return (
-                              <tr key={item.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/20">
-                                <td className="px-4 py-2.5 w-8">
-                                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${catInfo.color}`}>
-                                    <CatIcon className="w-3.5 h-3.5" />
-                                  </div>
-                                </td>
-                                <td className="py-2.5">
-                                  <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{item.description}</p>
-                                  <p className="text-[10px] text-gray-400">{item.cost_category_display} • {FREQ_LABELS[item.frequency] || item.frequency}</p>
-                                </td>
-                                <td className="px-4 py-2.5 text-right text-xs font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{fmt(item.value)}</Sensitive></td>
-                                <td className="px-4 py-2.5 w-10">
-                                  <button onClick={() => setDelTarget(item)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {Object.entries(catCounts).map(([cat, count]) => {
+                      const catInfo = CAT_ICONS[cat] || CAT_ICONS.outro;
+                      return (
+                        <span key={cat} className={`text-[9px] font-medium px-1.5 py-0.5 rounded ${catInfo.color}`}>
+                          {CATEGORIES.find(c => c.key === cat)?.label} ({count})
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-lg font-bold text-gray-900 dark:text-gray-100"><Sensitive>{fmt(g.total)}</Sensitive><span className="text-xs font-normal text-gray-400">/mês</span></p>
+                </button>
               );
             })}
-            <div className="flex justify-end px-2">
-              <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Total Geral: <Sensitive>{fmt(grandTotal)}</Sensitive>/mês</span>
+          </div>
+          <div className="flex justify-end px-2">
+            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">Total Geral: <Sensitive>{fmt(grandTotal)}</Sensitive>/mês</span>
+          </div>
+        </>
+      )}
+
+      {/* Drawer — Detalhes do cliente */}
+      {viewingCustomer && viewingData && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setViewingCustomer(null)} />
+          <div className="relative w-full max-w-md bg-white dark:bg-gray-800 shadow-2xl overflow-y-auto animate-modal-in">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-accent-gold/10 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-bold text-accent-gold">{viewingData.name.charAt(0)}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{viewingData.name}</Sensitive></h3>
+                    <p className="text-xs text-gray-400">{viewingData.items.length} custos • <Sensitive>{fmt(viewingData.total)}</Sensitive>/mês</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewingCustomer(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
             </div>
-          </>
-        )}
-      </div>
+
+            {/* Custos agrupados por categoria */}
+            <div className="p-5 space-y-5">
+              {CATEGORIES.map(cat => {
+                const catItems = viewingByCategory[cat.key];
+                if (!catItems || catItems.length === 0) return null;
+                const CatIcon = cat.icon;
+                const catTotal = catItems.reduce((s, i) => s + Number(i.value), 0);
+                return (
+                  <div key={cat.key}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-6 h-6 rounded-md flex items-center justify-center ${cat.color}`}>
+                          <CatIcon className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">{cat.label}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500"><Sensitive>{fmt(catTotal)}</Sensitive></span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {catItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 rounded-lg px-3 py-2.5 group/item">
+                          <div>
+                            <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{item.description}</p>
+                            <p className="text-[10px] text-gray-400">{FREQ_LABELS[item.frequency] || item.frequency}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{fmt(item.value)}</Sensitive></span>
+                            <button onClick={() => { setDelTarget(item); }} className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Botão adicionar */}
+              <button onClick={() => { setModalCustomer(String(viewingCustomer)); setViewingCustomer(null); openModal(); }}
+                className="w-full flex items-center justify-center gap-2 py-3 border border-dashed border-accent-gold/30 text-accent-gold rounded-xl hover:bg-accent-gold/5 text-sm font-medium transition-colors">
+                <Plus className="w-4 h-4" /> Adicionar Custo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal — Carrinho de custos */}
       {showModal && (
