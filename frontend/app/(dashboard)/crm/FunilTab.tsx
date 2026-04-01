@@ -674,9 +674,8 @@ export default function FunilTab() {
     e.preventDefault();
     setSaving(true);
     try {
-      // Build payload — strip empty strings for optional fields
+      // Seção 1 — obrigatória
       const payload: Record<string, unknown> = {
-        // Seção 1
         company_name: formData.company_name,
         contact_name: formData.contact_name,
         contact_email: formData.contact_email,
@@ -684,27 +683,25 @@ export default function FunilTab() {
         source: formData.source,
         status: formData.status,
         service_interest: formData.service_interest,
-        // Seção 2
-        company_size: formData.company_size,
-        qualification_level: formData.qualification_level,
-        usage_type: formData.usage_type,
-        estimated_value: formData.estimated_value ? parseFloat(formData.estimated_value) : 0,
-        has_budget: formData.has_budget,
-        is_decision_maker: formData.is_decision_maker,
-        has_urgency: formData.has_urgency,
-        has_operation: formData.has_operation,
-        // Seção 3
-        description: formData.description,
-        temperature: formData.temperature,
-        next_action: formData.next_action,
-        next_action_date: formData.next_action_date || null,
-        // Seção 4
-        closer_name: formData.closer_name,
-        proposal_value: formData.proposal_value ? parseFloat(formData.proposal_value) : null,
-        meeting_scheduled_at: formData.meeting_scheduled_at || null,
-        meeting_link: formData.meeting_link,
-        meeting_transcript: formData.meeting_transcript,
       };
+      // Seções 2-4 — só inclui campos que foram preenchidos
+      if (formData.company_size) payload.company_size = formData.company_size;
+      if (formData.qualification_level) payload.qualification_level = formData.qualification_level;
+      if (formData.usage_type) payload.usage_type = formData.usage_type;
+      if (formData.estimated_value) payload.estimated_value = parseFloat(formData.estimated_value);
+      if (formData.has_budget !== null) payload.has_budget = formData.has_budget;
+      if (formData.is_decision_maker !== null) payload.is_decision_maker = formData.is_decision_maker;
+      if (formData.has_urgency !== null) payload.has_urgency = formData.has_urgency;
+      if (formData.has_operation !== null) payload.has_operation = formData.has_operation;
+      if (formData.description) payload.description = formData.description;
+      if (formData.temperature) payload.temperature = formData.temperature;
+      if (formData.next_action) payload.next_action = formData.next_action;
+      if (formData.next_action_date) payload.next_action_date = formData.next_action_date;
+      if (formData.closer_name) payload.closer_name = formData.closer_name;
+      if (formData.proposal_value) payload.proposal_value = parseFloat(formData.proposal_value);
+      if (formData.meeting_scheduled_at) payload.meeting_scheduled_at = formData.meeting_scheduled_at;
+      if (formData.meeting_link) payload.meeting_link = formData.meeting_link;
+      if (formData.meeting_transcript) payload.meeting_transcript = formData.meeting_transcript;
 
       if (editingProspect) {
         await api.patch(`/sales/prospects/${editingProspect.id}/`, payload);
