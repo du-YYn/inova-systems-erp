@@ -1030,10 +1030,10 @@ export default function FinancePage() {
         </>
       )}
 
-      {/* ─── LEGACY: Overview Tab (hidden, kept for data loading) ──────── */}
-      {mainTab === 'gestao' && activeTab === 'overview' && (
+      {/* ─── Invoices/Transactions/etc tabs only when subTab matches ── */}
+      {false && mainTab === 'gestao' && activeTab === 'overview' && (
         <>
-          {/* Stats Cards */}
+          {/* REMOVED: Legacy overview cards — replaced by DashboardFinanceiro */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             {loading ? (
               Array.from({ length: 4 }).map((_, i) => <CardSkeleton key={i} />)
