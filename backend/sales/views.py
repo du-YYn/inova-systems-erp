@@ -276,13 +276,14 @@ class ProposalViewSet(viewsets.ModelViewSet):
         CLOSER_PCT = 10  # 10% para Closer
         SDR_PCT = 5      # 5% para SDR
 
-        for cost_type, pct in [('commission_closer', CLOSER_PCT), ('commission_sdr', SDR_PCT)]:
+        for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
             ClientCost.objects.create(
                 customer=customer,
-                cost_type=cost_type,
+                cost_category='comercial',
+                description=desc,
                 value=round(total * pct / 100, 2),
                 reference_month=ref_month,
-                notes=f'Comissão automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
+                notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
                 created_by=user,
             )
 
