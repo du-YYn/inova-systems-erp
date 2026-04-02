@@ -3,14 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
   Users,
   Building2,
   FolderKanban,
   LogOut,
   DollarSign,
-  FileText,
-  ScrollText,
   ShieldCheck,
   X,
   BarChart2,
@@ -50,9 +47,11 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: 'GERAL',
+    title: 'DASHBOARD',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { href: '/dashboard/comercial',   label: 'Comercial',   icon: BarChart2       },
+      { href: '/dashboard/operacional', label: 'Operacional', icon: BarChart2       },
+      { href: '/dashboard/financeiro',  label: 'Financeiro',  icon: BarChart2       },
     ],
   },
   {
@@ -72,12 +71,6 @@ const navSections: NavSection[] = [
     title: 'FINANCEIRO',
     items: [
       { href: '/finance',    label: 'Financeiro',  icon: DollarSign  },
-    ],
-  },
-  {
-    title: 'ANÁLISE',
-    items: [
-      { href: '/relatorios', label: 'Relatórios',  icon: BarChart2   },
     ],
   },
   {
