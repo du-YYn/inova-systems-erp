@@ -907,11 +907,11 @@ export default function FinancePage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const subTabs: { key: SubTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'invoices', label: 'Faturas', icon: <Receipt className="w-4 h-4" /> },
     { key: 'transactions', label: 'Transações', icon: <ArrowLeftRight className="w-4 h-4" /> },
     { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
     { key: 'client_costs', label: 'Custos por Cliente', icon: <CreditCard className="w-4 h-4" /> },
     { key: 'fixed_expenses', label: 'Despesas Fixas', icon: <Building className="w-4 h-4" /> },
+    { key: 'invoices', label: 'Desp. Variáveis', icon: <Receipt className="w-4 h-4" /> },
     { key: 'loans', label: 'Empréstimos', icon: <Landmark className="w-4 h-4" /> },
     { key: 'assets', label: 'Ativos', icon: <PieChart className="w-4 h-4" /> },
     { key: 'budgets', label: 'Orçamentos', icon: <TrendingUp className="w-4 h-4" /> },
@@ -947,7 +947,7 @@ export default function FinancePage() {
         {mainTab === 'gestao' && subTab === 'invoices' && (
           <button onClick={openNewInvoice}
             className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors">
-            <Plus className="w-5 h-5" /> Nova Fatura
+            <Plus className="w-5 h-5" /> Nova Despesa
           </button>
         )}
         {mainTab === 'gestao' && subTab === 'transactions' && (

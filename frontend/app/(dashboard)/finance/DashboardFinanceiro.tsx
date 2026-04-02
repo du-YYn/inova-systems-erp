@@ -131,6 +131,11 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
   const [profitDistError, setProfitDistError] = useState<string | null>(null);
   const [profitDistLoading, setProfitDistLoading] = useState(false);
 
+  // Contas a pagar/receber
+  interface InvoiceItem { id: number; number: string; description: string; total: string; due_date: string; status: string; invoice_type: string; }
+  const [invoiceStats, setInvoiceStats] = useState({ pending_receivables: 0, pending_payables: 0, overdue_invoices: 0, received_this_month: 0, paid_this_month: 0 });
+  const [recentInvoices, setRecentInvoices] = useState<InvoiceItem[]>([]);
+
   // ── Fetch dashboard data ────────────────────────────────────────────────────
 
   const fetchDashboard = useCallback(async () => {
@@ -172,9 +177,29 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
     }
   }, []);
 
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const [statsData, invoicesData] = await Promise.all([
+        api.get<Record<string, number>>('/finance/invoices/dashboard/').catch(() => ({})),
+        api.get<{ results?: InvoiceItem[] }>('/finance/invoices/', { page_size: '5', status: 'pending' }).catch(() => ({ results: [] })),
+      ]);
+      const s = statsData as Record<string, number>;
+      setInvoiceStats({
+        pending_receivables: s.pending_receivables || 0,
+        pending_payables: s.pending_payables || 0,
+        overdue_invoices: s.overdue_invoices || 0,
+        received_this_month: s.received_this_month || 0,
+        paid_this_month: s.paid_this_month || 0,
+      });
+      const list = (invoicesData as { results?: InvoiceItem[] }).results ?? invoicesData;
+      setRecentInvoices(Array.isArray(list) ? list as InvoiceItem[] : []);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => {
     fetchDashboard();
-  }, [fetchDashboard]);
+    fetchInvoices();
+  }, [fetchDashboard, fetchInvoices]);
 
   useEffect(() => {
     if (data) {
@@ -615,6 +640,59 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
             </div>
           ) : null}
         </div>
+      </section>
+
+      {/* ─── Section 5: Contas a Pagar / Receber ──────────────────────────── */}
+      <section>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          Contas a Pagar / Receber
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">A Receber</p>
+            <p className="text-lg font-bold text-green-600 mt-1"><Sensitive>{fmtCurrency(invoiceStats.pending_receivables)}</Sensitive></p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">A Pagar</p>
+            <p className="text-lg font-bold text-red-500 mt-1"><Sensitive>{fmtCurrency(invoiceStats.pending_payables)}</Sensitive></p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Recebido no Mês</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-gray-100 mt-1"><Sensitive>{fmtCurrency(invoiceStats.received_this_month)}</Sensitive></p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Vencidas</p>
+            <p className={`text-lg font-bold mt-1 ${invoiceStats.overdue_invoices > 0 ? 'text-red-500' : 'text-gray-400'}`}>{invoiceStats.overdue_invoices}</p>
+          </div>
+        </div>
+        {recentInvoices.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase">Descrição</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase">Tipo</th>
+                  <th className="text-left px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase">Vencimento</th>
+                  <th className="text-right px-4 py-2.5 text-[10px] font-semibold text-gray-400 uppercase">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentInvoices.map(inv => (
+                  <tr key={inv.id} className="border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                    <td className="px-4 py-2.5 text-xs text-gray-900 dark:text-gray-100">{inv.description || inv.number}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${inv.invoice_type === 'receivable' ? 'bg-green-50 dark:bg-green-900/30 text-green-600' : 'bg-red-50 dark:bg-red-900/30 text-red-500'}`}>
+                        {inv.invoice_type === 'receivable' ? 'A Receber' : 'A Pagar'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-gray-500">{new Date(inv.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                    <td className="px-4 py-2.5 text-xs text-right font-medium text-gray-900 dark:text-gray-100"><Sensitive>{fmtCurrency(Number(inv.total))}</Sensitive></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
