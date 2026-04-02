@@ -79,6 +79,28 @@ class CustomerViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def destroy(self, request, *args, **kwargs):
+        customer = self.get_object()
+        active = customer.contracts.filter(
+            status__in=('active', 'pending_signature', 'renewed')
+        ).count()
+        if active:
+            return Response(
+                {'error': f'Não é possível excluir: {active} contrato(s) ativo(s).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        from finance.models import Invoice
+        pending = Invoice.objects.filter(
+            customer=customer, status__in=('pending', 'sent')
+        ).count()
+        if pending:
+            return Response(
+                {'error': f'Não é possível excluir: {pending} fatura(s) pendente(s).'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        logger.info(f"Cliente {customer.id} ({customer.company_name or customer.name}) excluído por {request.user.username}")
+        return super().destroy(request, *args, **kwargs)
+
 
 @extend_schema(tags=['sales'])
 class ProspectViewSet(viewsets.ModelViewSet):
@@ -436,17 +458,15 @@ class ProposalViewSet(viewsets.ModelViewSet):
             # Resolve customer — auto-create from prospect data if no customer linked
             customer = proposal.customer
             if not customer and proposal.prospect:
-                customer, _ = Customer.objects.get_or_create(
-                    email=proposal.prospect.contact_email,
-                    defaults={
-                        'customer_type': 'PJ',
-                        'company_name': proposal.prospect.company_name,
-                        'name': proposal.prospect.contact_name,
-                        'phone': proposal.prospect.contact_phone,
-                        'source': 'crm',
-                        'created_by': request.user,
-                    }
-                )
+                # Busca cliente existente por email — NÃO recria se foi excluído
+                customer = Customer.objects.filter(
+                    email=proposal.prospect.contact_email
+                ).first()
+                if not customer:
+                    return Response(
+                        {'error': 'Cliente não encontrado. Feche o lead no funil primeiro para cadastrar o cliente.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 Prospect.objects.filter(pk=proposal.prospect_id).update(customer=customer)
                 Proposal.objects.filter(pk=proposal.pk).update(customer=customer)
 

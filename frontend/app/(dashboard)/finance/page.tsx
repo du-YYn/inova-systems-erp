@@ -838,8 +838,9 @@ export default function FinancePage() {
       toast.success('Cliente removido.');
       setConfirmDeleteCustomer(null);
       fetchFinanceCustomers();
-    } catch {
-      toast.error('Erro ao remover cliente.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao remover cliente.';
+      toast.error(msg);
     }
   };
 
