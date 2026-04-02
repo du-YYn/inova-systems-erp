@@ -191,8 +191,15 @@ class ProspectViewSet(viewsets.ModelViewSet):
             entrada = round(total * pct / 100, 2)
             entrega = round(total - entrada, 2)
             make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
-            make_invoice(f'{desc_base} — Entrega ({100 - pct}%)', entrega,
-                         due.replace(month=due.month + 3) if due.month <= 9 else due.replace(year=due.year + 1, month=(due.month + 3) % 12 or 12))
+            # Entrega: 3 meses depois
+            em = due.month + 3
+            ey = due.year + (em - 1) // 12
+            em = (em - 1) % 12 + 1
+            entrega_due = date(ey, em, min(due.day, 28))
+            make_invoice(
+                f'{desc_base} — Entrega ({100 - pct}%)',
+                entrega, entrega_due,
+            )
 
         elif pay_type == 'installments':
             n = prospect.payment_installments or 1

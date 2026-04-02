@@ -415,6 +415,7 @@ class ProspectActivity(models.Model):
         ('proposal_approved', 'Proposta Aprovada'),
         ('proposal_rejected', 'Proposta Rejeitada'),
         ('won', 'Lead Fechado'),
+        ('production', 'Em Produção'),
         ('lost', 'Lead Perdido'),
         ('follow_up', 'Follow-up'),
         ('contract_created', 'Contrato Criado'),

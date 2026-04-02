@@ -187,6 +187,7 @@ const PIPELINE_COLUMNS = [
   'meeting_done',
   'proposal',
   'won',
+  'production',
   'not_closed',
   'follow_up',
 ];
