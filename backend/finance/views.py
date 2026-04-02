@@ -722,14 +722,20 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
     ebit_r = ebitda_r - deprec - desp_fin
     res_r = ebit_r
 
-    # ── PLANEJADO: projeção baseada nos cadastros fixos ──
-    if tax_config:
-        tax_plan = tax_config.calculate(rob_f)
+    # ── PLANEJADO: só mostra receita planejada se tem faturas no mês ──
+    # Se não tem nenhuma fatura no mês, ROB planejado = 0
+    has_invoices = Invoice.objects.filter(
+        due_date__year=year, due_date__month=month,
+    ).exists()
+    plan_rob = rob_f if has_invoices else 0.0
+
+    if tax_config and plan_rob > 0:
+        tax_plan = tax_config.calculate(plan_rob)
         deducoes_plan = tax_plan['total']
     else:
         deducoes_plan = 0.0
 
-    p_rol = rob_f - deducoes_plan
+    p_rol = plan_rob - deducoes_plan
     p_lb = p_rol - cv
 
     def row(rob, churn, ded, r, c_v, lb, m_c, do, eb, m_e, dep, df, ebi, res):
@@ -746,7 +752,7 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
             'ebit': round(ebi, 2),
             'ir_csll': 0, 'resultado_liquido': round(res, 2),
         }
-    p_mc = (p_lb / rob_f * 100) if rob_f > 0 else 0
+    p_mc = (p_lb / plan_rob * 100) if plan_rob > 0 else 0
     p_ebitda = p_lb - desp_op
     p_me = (p_ebitda / p_rol * 100) if p_rol > 0 else 0
     p_ebit = p_ebitda - deprec - desp_fin
@@ -759,7 +765,7 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
             desp_op, ebitda_r, me_r, deprec, desp_fin, ebit_r, res_r,
         ),
         'planejado': row(
-            rob_f, 0, deducoes_plan, p_rol, cv, p_lb, p_mc,
+            plan_rob, 0, deducoes_plan, p_rol, cv, p_lb, p_mc,
             desp_op, p_ebitda, p_me, deprec, desp_fin, p_ebit, p_ebit,
         ),
     }
