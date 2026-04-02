@@ -243,12 +243,70 @@ class ProspectViewSet(viewsets.ModelViewSet):
             inv.save(update_fields=['status', 'paid_date', 'paid_amount'])
             log_crm_activity(prospect, 'won', f'Pagamento recebido — {inv.description}', user)
 
+    @action(detail=True, methods=['post'])
+    def conclude(self, request, pk=None):
+        """Conclui projeto — resolve faturas pendentes e desativa cliente."""
+        from finance.models import Invoice
+        prospect = self.get_object()
+        if prospect.status != 'production':
+            return Response(
+                {'error': 'Só projetos em produção podem ser concluídos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Resolver faturas pendentes conforme request
+        # body: { invoices: [{ id: 1, action: 'pay' }, { id: 2, action: 'cancel' }] }
+        invoice_actions = request.data.get('invoices', [])
+        for ia in invoice_actions:
+            try:
+                inv = Invoice.objects.get(id=ia.get('id'))
+                if ia.get('action') == 'pay':
+                    inv.status = 'paid'
+                    inv.paid_date = timezone.now().date()
+                    inv.paid_amount = inv.total
+                    inv.save(update_fields=['status', 'paid_date', 'paid_amount'])
+                elif ia.get('action') == 'cancel':
+                    inv.status = 'cancelled'
+                    inv.save(update_fields=['status'])
+            except Invoice.DoesNotExist:
+                continue
+
+        # Desativar cliente se solicitado
+        if request.data.get('deactivate_customer', True):
+            customer = Customer.objects.filter(
+                company_name__iexact=prospect.company_name,
+            ).first()
+            if customer:
+                customer.is_active = False
+                customer.save(update_fields=['is_active'])
+
+        # Mover para concluído
+        prospect.status = 'concluded'
+        prospect.save(update_fields=['status'])
+        log_crm_activity(
+            prospect, 'concluded',
+            f'Projeto concluído — {prospect.company_name}',
+            request.user,
+        )
+        return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['get'], url_path='pending-invoices')
+    def pending_invoices(self, request, pk=None):
+        """Lista faturas pendentes do prospect para o modal de conclusão."""
+        from finance.models import Invoice
+        prospect = self.get_object()
+        invoices = Invoice.objects.filter(
+            invoice_type='receivable', status='pending',
+            description__icontains=prospect.company_name,
+        ).values('id', 'number', 'description', 'total', 'due_date', 'status')
+        return Response(list(invoices))
+
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
             'new', 'qualifying', 'qualified', 'disqualified',
             'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
-            'proposal', 'won', 'production', 'not_closed', 'lost', 'follow_up',
+            'proposal', 'won', 'production', 'concluded',
+            'not_closed', 'lost', 'follow_up',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),

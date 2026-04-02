@@ -131,6 +131,7 @@ const statusLabels: Record<string, string> = {
   proposal: 'Proposta Enviada',
   won: 'Fechado',
   production: 'Em Produção',
+  concluded: 'Concluído',
   not_closed: 'Não Fechou',
   lost: 'Perdido',
   follow_up: 'Follow-Up',
@@ -148,6 +149,7 @@ const statusColors: Record<string, string> = {
   proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
   production: 'bg-emerald-100 text-emerald-800',
+  concluded: 'bg-sky-100 text-sky-800',
   not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   follow_up: 'bg-orange-100 text-orange-800',
@@ -165,6 +167,7 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   proposal: 'gold',
   won: 'success',
   production: 'success',
+  concluded: 'info',
   not_closed: 'warning',
   lost: 'neutral',
   follow_up: 'warning',
@@ -188,6 +191,7 @@ const PIPELINE_COLUMNS = [
   'proposal',
   'won',
   'production',
+  'concluded',
   'not_closed',
   'follow_up',
 ];
@@ -503,6 +507,13 @@ export default function FunilTab() {
   });
   const [savingWon, setSavingWon] = useState(false);
 
+  // Modal de conclusão (quando lead vai para concluído)
+  const [concludeProspect, setConcludeProspect] = useState<Prospect | null>(null);
+  const [pendingInvoices, setPendingInvoices] = useState<{ id: number; number: string; description: string; total: string; due_date: string }[]>([]);
+  const [invoiceActions, setInvoiceActions] = useState<Record<number, string>>({});
+  const [deactivateCustomer, setDeactivateCustomer] = useState(true);
+  const [savingConclude, setSavingConclude] = useState(false);
+
   // Atividades do lead (drawer)
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(false);
@@ -766,6 +777,18 @@ export default function FunilTab() {
       });
       return;
     }
+    // Bloquear movimentação para Concluído — abrir modal de conclusão
+    if (newStatus === 'concluded') {
+      setConcludeProspect(prospect);
+      setDeactivateCustomer(true);
+      setInvoiceActions({});
+      // Buscar faturas pendentes
+      api.get<{ id: number; number: string; description: string; total: string; due_date: string }[]>(
+        `/sales/prospects/${prospect.id}/pending-invoices/`
+      ).then(data => setPendingInvoices(Array.isArray(data) ? data : []))
+       .catch(() => setPendingInvoices([]));
+      return;
+    }
     // Optimistic UI — atualiza local antes da API
     const prevStatus = prospect.status;
     setAllProspects(prev => prev.map(p => p.id === prospect.id ? { ...p, status: newStatus } : p));
@@ -899,6 +922,26 @@ export default function FunilTab() {
       toast.error('Erro ao fechar lead.');
     } finally {
       setSavingWon(false);
+    }
+  };
+
+  const handleConclude = async () => {
+    if (!concludeProspect) return;
+    setSavingConclude(true);
+    try {
+      const invoices = Object.entries(invoiceActions).map(([id, action]) => ({ id: Number(id), action }));
+      await api.post(`/sales/prospects/${concludeProspect.id}/conclude/`, {
+        invoices,
+        deactivate_customer: deactivateCustomer,
+      });
+      toast.success('Projeto concluído!');
+      setConcludeProspect(null);
+      fetchProspects();
+      fetchAllProspects();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao concluir.');
+    } finally {
+      setSavingConclude(false);
     }
   };
 
@@ -2677,6 +2720,69 @@ export default function FunilTab() {
                   {savingWon ? 'Salvando...' : 'Fechar Lead e Criar Cliente'}
                 </button>
               </div>
+            </div>
+          </div>
+          </FocusTrap>
+        </div>
+      )}
+
+      {/* ── Modal: Concluir Projeto ──────────────────────────────────── */}
+      {concludeProspect && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <FocusTrap onClose={() => setConcludeProspect(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Concluir Projeto</h2>
+                <p className="text-sm text-gray-500 mt-0.5"><Sensitive>{concludeProspect.company_name}</Sensitive></p>
+              </div>
+              <button onClick={() => setConcludeProspect(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {pendingInvoices.length > 0 ? (
+              <div className="space-y-3 mb-6">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Faturas pendentes</p>
+                {pendingInvoices.map(inv => (
+                  <div key={inv.id} className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{inv.description}</p>
+                        <p className="text-[10px] text-gray-400">{inv.number} • Venc. {new Date(inv.due_date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                      </div>
+                      <span className="text-sm font-bold text-gray-900 dark:text-gray-100"><Sensitive>R$ {Number(inv.total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</Sensitive></span>
+                    </div>
+                    <div className="flex gap-3">
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" name={`inv-${inv.id}`} checked={invoiceActions[inv.id] === 'pay'} onChange={() => setInvoiceActions(p => ({ ...p, [inv.id]: 'pay' }))} className="text-green-600" />
+                        <span className="text-xs text-gray-600 dark:text-gray-300">Marcar como Recebida</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" name={`inv-${inv.id}`} checked={invoiceActions[inv.id] === 'cancel'} onChange={() => setInvoiceActions(p => ({ ...p, [inv.id]: 'cancel' }))} className="text-red-500" />
+                        <span className="text-xs text-gray-600 dark:text-gray-300">Cancelar</span>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 mb-6 text-center">
+                <p className="text-sm text-green-700 dark:text-green-300">Todas as faturas já foram resolvidas.</p>
+              </div>
+            )}
+
+            <label className="flex items-center gap-2 cursor-pointer mb-6">
+              <input type="checkbox" checked={deactivateCustomer} onChange={e => setDeactivateCustomer(e.target.checked)} className="w-4 h-4 rounded text-accent-gold" />
+              <span className="text-sm text-gray-500 dark:text-gray-400">Desativar cliente após conclusão</span>
+            </label>
+
+            <div className="flex gap-3">
+              <button onClick={() => setConcludeProspect(null)} className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 rounded-lg">Cancelar</button>
+              <button onClick={handleConclude} disabled={savingConclude || (pendingInvoices.length > 0 && Object.keys(invoiceActions).length < pendingInvoices.length)}
+                className="flex-1 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-60">
+                {savingConclude ? 'Concluindo...' : 'Concluir Projeto'}
+              </button>
             </div>
           </div>
           </FocusTrap>

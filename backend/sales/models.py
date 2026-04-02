@@ -93,6 +93,7 @@ class Prospect(models.Model):
         ('proposal',      'Proposta Enviada'),     # proposta comercial enviada
         ('won',           'Fechado'),              # projeto contratado
         ('production',    'Em Produção'),          # cliente pagou, projeto em execução
+        ('concluded',     'Concluído'),            # projeto entregue, faturas resolvidas
         ('not_closed',    'Não Fechou'),           # reunião realizada mas sem fechamento
         ('lost',          'Perdido'),              # deal perdido (analytics)
         ('follow_up',     'Em Follow-up'),         # sequência de reativação
@@ -416,6 +417,7 @@ class ProspectActivity(models.Model):
         ('proposal_rejected', 'Proposta Rejeitada'),
         ('won', 'Lead Fechado'),
         ('production', 'Em Produção'),
+        ('concluded', 'Projeto Concluído'),
         ('lost', 'Lead Perdido'),
         ('follow_up', 'Follow-up'),
         ('contract_created', 'Contrato Criado'),
