@@ -135,18 +135,14 @@ function ContractForm({
               onChange={(e) => setForm({ ...form, customer: e.target.value })}
               className="w-full input-field bg-white dark:bg-gray-800">
               <option value="">
-                {customers.length === 0 && prospects.length === 0
-                  ? 'Nenhum cliente — use "Cadastrar novo" abaixo'
+                {customers.length === 0
+                  ? 'Nenhum cliente — feche um lead ou cadastre abaixo'
                   : 'Selecione um cliente'}
               </option>
-              {customers.length > 0 && (
-                <optgroup label="Clientes Cadastrados">
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              {prospects.length > 0 && (
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name || c.name}</option>
+              ))}
+              {false && prospects.length > 0 && (
                 <optgroup label="Do Funil (CRM)">
                   {prospects.map((p) => (
                     <option key={p.id} value={`prospect_${p.id}`}>{p.company_name || p.contact_name}</option>
