@@ -17,6 +17,33 @@ class ApiError extends Error {
   }
 }
 
+// Token refresh state — prevents multiple simultaneous refresh calls
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshToken(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}/accounts/refresh/`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureRefresh(): Promise<boolean> {
+  if (isRefreshing && refreshPromise) return refreshPromise;
+  isRefreshing = true;
+  refreshPromise = refreshToken().finally(() => {
+    isRefreshing = false;
+    refreshPromise = null;
+  });
+  return refreshPromise;
+}
+
 async function request<T = unknown>(
   endpoint: string,
   { body, params, headers: customHeaders, ...options }: RequestOptions = {}
@@ -43,7 +70,21 @@ async function request<T = unknown>(
     config.body = JSON.stringify(body);
   }
 
-  const res = await fetch(url.toString(), config);
+  let res = await fetch(url.toString(), config);
+
+  // Se 401 e não é a própria rota de refresh/login → tenta renovar token
+  if (res.status === 401 && !endpoint.includes('/accounts/refresh') && !endpoint.includes('/accounts/login')) {
+    const refreshed = await ensureRefresh();
+    if (refreshed) {
+      // Repete a requisição original com o novo token
+      res = await fetch(url.toString(), config);
+    } else {
+      // Refresh falhou — redireciona para login
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
+  }
 
   if (res.status === 204) {
     return undefined as T;
