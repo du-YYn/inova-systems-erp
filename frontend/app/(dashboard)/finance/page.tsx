@@ -439,7 +439,9 @@ export default function FinancePage() {
       if (statusF) params.status = statusF;
       const data = await api.get<{ results?: FullInvoice[] }>('/finance/invoices/', params);
       const list = data.results || data;
-      setInvoices(Array.isArray(list) ? list : []);
+      // Desp. Variáveis: exclui faturas geradas automaticamente de despesas fixas [REC]
+      const filtered = Array.isArray(list) ? list.filter((inv: FullInvoice) => !inv.description?.startsWith('[REC]')) : [];
+      setInvoices(filtered);
     } catch {
       toast.error('Erro ao carregar faturas.');
     } finally {
