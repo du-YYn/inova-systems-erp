@@ -107,6 +107,30 @@ async function request<T = unknown>(
   return res.json();
 }
 
+async function uploadFile<T = unknown>(endpoint: string, file: File, fieldName = 'contract_file'): Promise<T> {
+  const url = `${API_URL}${endpoint}`;
+  const form = new FormData();
+  form.append(fieldName, file);
+
+  let res = await fetch(url, { method: 'POST', credentials: 'include', body: form });
+
+  if (res.status === 401 && !endpoint.includes('/accounts/')) {
+    const refreshed = await ensureRefresh();
+    if (refreshed) {
+      res = await fetch(url, { method: 'POST', credentials: 'include', body: form });
+    }
+  }
+
+  if (!res.ok) {
+    let errorData: unknown = {};
+    try { errorData = await res.json(); } catch { /* */ }
+    const message = typeof errorData === 'object' && errorData !== null
+      ? Object.values(errorData as Record<string, unknown>).flat().join(' ') : 'Erro no upload';
+    throw new ApiError(message, res.status, errorData);
+  }
+  return res.json();
+}
+
 export const api = {
   get: <T = unknown>(endpoint: string, params?: Record<string, string>) =>
     request<T>(endpoint, { method: 'GET', params }),
@@ -122,6 +146,9 @@ export const api = {
 
   delete: <T = unknown>(endpoint: string) =>
     request<T>(endpoint, { method: 'DELETE' }),
+
+  upload: <T = unknown>(endpoint: string, file: File, fieldName?: string) =>
+    uploadFile<T>(endpoint, file, fieldName),
 };
 
 export { ApiError };

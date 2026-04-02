@@ -341,7 +341,8 @@ class Contract(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='contracts')
     number = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=200)
-    contract_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    service_types = models.JSONField(default=list, blank=True, help_text='Lista de tipos de serviço')
+    contract_type = models.CharField(max_length=20, choices=TYPE_CHOICES, blank=True, default='')
     billing_type = models.CharField(max_length=20, choices=BILLING_TYPE_CHOICES)
 
     start_date = models.DateField()
@@ -354,6 +355,7 @@ class Contract(models.Model):
     total_hours_monthly = models.DecimalField(max_digits=8, decimal_places=2, default=0)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    contract_file = models.FileField(upload_to='contracts/%Y/%m/', blank=True, null=True, help_text='PDF do contrato')
     notes = models.TextField(blank=True)
     terms = models.TextField(blank=True)
 

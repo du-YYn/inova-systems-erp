@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, ScrollText, TrendingUp, CheckCircle, AlertTriangle, Trash2, X, Edit2, FileSignature, RefreshCw } from 'lucide-react';
+import { Plus, Search, ScrollText, TrendingUp, CheckCircle, AlertTriangle, Trash2, X, Edit2, FileSignature, RefreshCw, Upload, Download } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 import api, { ApiError } from '@/lib/api';
 
 interface Contract {
@@ -17,7 +18,9 @@ interface Contract {
   customer: number | null;
   customer_name: string;
   proposal_title: string;
+  service_types: string[];
   contract_type: string;
+  contract_file: string | null;
   billing_type: string;
   start_date: string | null;
   end_date: string | null;
@@ -72,8 +75,19 @@ const formatCurrency = (v: string | number | null) =>
   v ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v)) : '—';
 const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
+const SERVICE_TYPE_OPTIONS = [
+  { value: 'software_dev', label: 'Desenvolvimento de Software' },
+  { value: 'automation', label: 'Automação de Processos' },
+  { value: 'ai', label: 'Inteligência Artificial' },
+  { value: 'consulting', label: 'Consultoria Técnica' },
+  { value: 'maintenance', label: 'Manutenção' },
+  { value: 'support', label: 'Suporte' },
+  { value: 'saas', label: 'SaaS/Assinatura' },
+  { value: 'mixed', label: 'Múltiplos Serviços' },
+];
+
 const EMPTY_FORM = {
-  title: '', customer: '', contract_type: 'software_dev', billing_type: 'fixed',
+  title: '', customer: '', service_types: [] as string[], contract_type: '', billing_type: 'fixed',
   start_date: new Date().toISOString().split('T')[0], end_date: '',
   monthly_value: '', hourly_rate: '', total_hours_monthly: '',
   auto_renew: false, renewal_days: '30', notes: '', terms: '',
@@ -171,16 +185,19 @@ function ContractForm({
         )}
       </div>
 
-      {/* Tipo / Cobrança */}
+      {/* Tipo de Serviço (múltipla seleção) */}
+      <div>
+        <label className={lbl}>Tipo de Serviço (múltipla seleção)</label>
+        <MultiSelect
+          options={SERVICE_TYPE_OPTIONS}
+          value={form.service_types}
+          onChange={(v) => setForm({ ...form, service_types: v })}
+          placeholder="Selecione os serviços..."
+        />
+      </div>
+
+      {/* Cobrança */}
       <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={lbl}>Tipo</label>
-          <select value={form.contract_type}
-            onChange={(e) => setForm({ ...form, contract_type: e.target.value })}
-            className="w-full input-field bg-white dark:bg-gray-800">
-            {Object.entries(contractTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
         <div>
           <label className={lbl}>Cobrança</label>
           <select value={form.billing_type}
@@ -379,7 +396,8 @@ export default function ContratosTab() {
   const buildBody = (f: FormData, customerId: number | null) => {
     const body: Record<string, unknown> = {
       title: f.title,
-      contract_type: f.contract_type,
+      service_types: f.service_types,
+      contract_type: f.service_types[0] || '',
       billing_type: f.billing_type,
       auto_renew: f.auto_renew,
       renewal_days: Number(f.renewal_days) || 30,
@@ -451,7 +469,8 @@ export default function ContratosTab() {
     setEditForm({
       title: c.title,
       customer: c.customer ? String(c.customer) : '',
-      contract_type: c.contract_type,
+      service_types: c.service_types || [],
+      contract_type: c.contract_type || '',
       billing_type: c.billing_type,
       start_date: c.start_date || '',
       end_date: c.end_date || '',
@@ -647,7 +666,12 @@ export default function ContratosTab() {
                     <p className="text-sm text-gray-900 dark:text-gray-100"><Sensitive>{c.customer_name || '—'}</Sensitive></p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-900 dark:text-gray-100">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {(c.service_types || []).length > 0
+                        ? c.service_types.map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-accent-gold/10 text-accent-gold font-medium">{contractTypeLabels[t] || t}</span>)
+                        : <p className="text-sm text-gray-900 dark:text-gray-100">{contractTypeLabels[c.contract_type] || c.contract_type}</p>
+                      }
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{billingTypeLabels[c.billing_type] || c.billing_type}</p>
                   </td>
                   <td className="px-6 py-4">
@@ -695,6 +719,25 @@ export default function ContratosTab() {
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/30 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors">
                           <RefreshCw className="w-3 h-3" /> Renovar
                         </button>
+                      )}
+                      {/* PDF Upload/Download */}
+                      {c.contract_file ? (
+                        <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/sales/contracts/${c.id}/download/`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="p-1.5 text-green-500 hover:text-green-600 transition-colors" title="Baixar PDF">
+                          <Download className="w-4 h-4" />
+                        </a>
+                      ) : (
+                        <label className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-500 transition-colors cursor-pointer" title="Anexar PDF">
+                          <Upload className="w-4 h-4" />
+                          <input type="file" accept=".pdf" className="hidden" onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try { await api.upload(`/sales/contracts/${c.id}/upload/`, file); toast.success('PDF anexado!'); fetchData(); }
+                            catch { toast.error('Erro ao anexar PDF.'); }
+                            e.target.value = '';
+                          }} />
+                        </label>
                       )}
                       {/* Edit */}
                       <button onClick={() => openEdit(c)}

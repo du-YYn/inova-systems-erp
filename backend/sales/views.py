@@ -623,6 +623,32 @@ class ContractViewSet(viewsets.ModelViewSet):
         logger.info(f"Contrato {contract.id} renovado → novo contrato {new_contract.id} por {request.user.username}")
         return Response(ContractSerializer(new_contract).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['get'], url_path='download')
+    def download_file(self, request, pk=None):
+        """Download autenticado do PDF do contrato."""
+        from django.http import FileResponse
+        contract = self.get_object()
+        if not contract.contract_file:
+            return Response({'error': 'Nenhum arquivo anexado.'}, status=status.HTTP_404_NOT_FOUND)
+        return FileResponse(contract.contract_file.open('rb'), as_attachment=True,
+                            filename=contract.contract_file.name.split('/')[-1])
+
+    @action(detail=True, methods=['post'], url_path='upload')
+    def upload_file(self, request, pk=None):
+        """Upload de PDF para contrato existente."""
+        contract = self.get_object()
+        file = request.FILES.get('contract_file')
+        if not file:
+            return Response({'error': 'Nenhum arquivo enviado.'}, status=status.HTTP_400_BAD_REQUEST)
+        if file.size > 10 * 1024 * 1024:
+            return Response({'error': 'Máximo 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not file.name.lower().endswith('.pdf'):
+            return Response({'error': 'Apenas PDF.'}, status=status.HTTP_400_BAD_REQUEST)
+        contract.contract_file = file
+        contract.save(update_fields=['contract_file'])
+        logger.info(f"PDF anexado ao contrato {contract.id} por {request.user.username}")
+        return Response(ContractSerializer(contract).data)
+
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         # Auto-expire contracts (runs only on dashboard, not every list call)

@@ -207,6 +207,7 @@ class ContractSerializer(serializers.ModelSerializer):
             "customer_name",
             "number",
             "title",
+            "service_types",
             "contract_type",
             "billing_type",
             "start_date",
@@ -217,6 +218,7 @@ class ContractSerializer(serializers.ModelSerializer):
             "hourly_rate",
             "total_hours_monthly",
             "status",
+            "contract_file",
             "notes",
             "terms",
             "created_by",
@@ -225,6 +227,14 @@ class ContractSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
+
+    def validate_contract_file(self, value):
+        if value:
+            if value.size > 10 * 1024 * 1024:
+                raise serializers.ValidationError('Arquivo muito grande. Máximo 10MB.')
+            if not value.name.lower().endswith('.pdf'):
+                raise serializers.ValidationError('Apenas arquivos PDF são permitidos.')
+        return value
 
 
 class ProspectActivitySerializer(serializers.ModelSerializer):
