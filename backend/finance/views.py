@@ -684,19 +684,28 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
         divisor = freq_divisor.get(cc.frequency, 1)
         cv += float(cc.value) / divisor if divisor > 0 else float(cc.value)
 
-    # Desp. operacionais (fixas — aparecem em todos os meses)
-    desp_op = float(
-        RecurringExpense.objects.filter(is_active=True).aggregate(
-            t=Sum('value')
-        )['t'] or 0
-    )
+    # Desp. operacionais e depreciação: só aparecem a partir do mês atual
+    # Meses passados sem faturas = tudo zero
+    from datetime import date as _date
+    today = _date.today()
+    current_month_start = today.replace(day=1)
+    month_start = _date(year, month, 1)
+    is_current_or_future = month_start >= current_month_start
 
-    # Depreciação (fixa — aparece em todos os meses)
-    deprec = float(
-        Asset.objects.filter(is_active=True).aggregate(
-            t=Sum('monthly_depreciation')
-        )['t'] or 0
-    )
+    if is_current_or_future or rob_real > 0:
+        desp_op = float(
+            RecurringExpense.objects.filter(is_active=True).aggregate(
+                t=Sum('value')
+            )['t'] or 0
+        )
+        deprec = float(
+            Asset.objects.filter(is_active=True).aggregate(
+                t=Sum('monthly_depreciation')
+            )['t'] or 0
+        )
+    else:
+        desp_op = 0.0
+        deprec = 0.0
 
     # Desp. financeiras (parcelas do mês)
     desp_fin = float(
@@ -725,6 +734,7 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
     # ── PLANEJADO: só mostra receita planejada se tem faturas no mês ──
     # Se não tem nenhuma fatura no mês, ROB planejado = 0
     has_invoices = Invoice.objects.filter(
+        invoice_type='receivable',
         due_date__year=year, due_date__month=month,
     ).exists()
     plan_rob = rob_f if has_invoices else 0.0
@@ -788,7 +798,18 @@ class FinanceDashboardView(viewsets.ViewSet):
         active_customers = Customer.objects.filter(is_active=True)
         rob = sum(float(c.contract_value) for c in active_customers if c.contract_value)
         rob_f = float(rob) if rob else 0
-        mrr = sum(float(c.contract_value) for c in active_customers if c.contract_value and c.billing_frequency == 'monthly')
+        # MRR = faturas receivable do mês atual (realizado, não projeção)
+        from finance.models import Invoice
+        mrr_real = float(
+            Invoice.objects.filter(
+                invoice_type='receivable',
+                due_date__year=year, due_date__month=current_month,
+            ).aggregate(t=Sum('total'))['t'] or 0
+        )
+        mrr_plan = sum(
+            float(c.contract_value) for c in active_customers
+            if c.contract_value and c.billing_frequency == 'monthly'
+        )
 
         churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
         churn_value = float(sum(float(c.contract_value) for c in churned))
@@ -827,7 +848,7 @@ class FinanceDashboardView(viewsets.ViewSet):
             'period': f"{current_month:02d}/{year}",
             'indicators': {
                 'rob': r['rob'], 'rol': r['rol'], 'ebitda': r['ebitda'],
-                'resultado': r['resultado_liquido'], 'mrr': round(mrr, 2),
+                'resultado': r['resultado_liquido'], 'mrr': round(mrr_real, 2),
                 'churn_rate': round(churn_rate, 2), 'churn_value': round(churn_value, 2),
                 'margem_contribuicao': r['margem_contribuicao'],
                 'margem_ebitda': r['margem_ebitda'], 'break_even': round(break_even, 2),

@@ -39,7 +39,7 @@ import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
 import DashboardFinanceiro from './DashboardFinanceiro';
-import ImpostosSection from './ImpostosSection';
+// ImpostosSection removido — impostos agora são automáticos via TaxConfig
 import CustosPorClienteSection from './CustosPorClienteSection';
 import DespesasFixasSection from './DespesasFixasSection';
 import EmprestimosSection from './EmprestimosSection';
