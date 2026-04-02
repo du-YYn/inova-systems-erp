@@ -128,17 +128,120 @@ class ProspectViewSet(viewsets.ModelViewSet):
             from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
             to_label = dict(Prospect.STATUS_CHOICES).get(instance.status, instance.status)
             log_crm_activity(instance, 'status_changed', f'{from_label} → {to_label}', self.request.user)
-        hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won')
+        hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won', 'production')
         if instance.status in hot_statuses and instance.temperature != 'hot':
             instance.temperature = 'hot'
             instance.save(update_fields=['temperature'])
+        # Gerar faturas ao fechar lead
+        if old_status != 'won' and instance.status == 'won':
+            self._generate_receivables(instance, self.request.user)
+        # Marcar entrada como paga ao ir para produção
+        if old_status != 'production' and instance.status == 'production':
+            self._mark_entry_paid(instance, self.request.user)
+
+    @staticmethod
+    def _generate_receivables(prospect, user):
+        """Gera faturas A Receber ao fechar lead."""
+        from finance.models import Invoice
+        from django.db import transaction as db_tx
+        from datetime import date
+
+        total = float(prospect.proposal_value or prospect.estimated_value or 0)
+        if total <= 0:
+            return
+
+        customer = Customer.objects.filter(
+            company_name__iexact=prospect.company_name
+        ).first()
+
+        pay_type = prospect.payment_type or 'one_time'
+        due = prospect.payment_first_due or date.today()
+        method = prospect.payment_method or ''
+        desc_base = f'{prospect.company_name}'
+
+        def make_invoice(desc, value, due_date):
+            with db_tx.atomic():
+                last = Invoice.objects.select_for_update().filter(
+                    invoice_type='receivable'
+                ).order_by('-id').first()
+                seq = 0
+                if last:
+                    try:
+                        seq = int(last.number.split('-')[1])
+                    except (IndexError, ValueError):
+                        seq = 0
+                Invoice.objects.create(
+                    invoice_type='receivable',
+                    number=f"REC-{seq + 1:05d}",
+                    description=desc,
+                    customer=customer,
+                    value=value, discount=0, interest=0, tax=0, total=value,
+                    issue_date=date.today(), due_date=due_date,
+                    status='pending',
+                    payment_method=method,
+                    notes=f'Gerada do lead: {prospect.company_name}',
+                    created_by=user,
+                )
+
+        if pay_type == 'one_time':
+            make_invoice(f'{desc_base} — Pagamento único', total, due)
+
+        elif pay_type == 'split':
+            pct = prospect.payment_split_pct or 50
+            entrada = round(total * pct / 100, 2)
+            entrega = round(total - entrada, 2)
+            make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
+            make_invoice(f'{desc_base} — Entrega ({100 - pct}%)', entrega,
+                         due.replace(month=due.month + 3) if due.month <= 9 else due.replace(year=due.year + 1, month=(due.month + 3) % 12 or 12))
+
+        elif pay_type == 'installments':
+            n = prospect.payment_installments or 1
+            parcela = round(total / n, 2)
+            for i in range(n):
+                m = due.month + i
+                y = due.year + (m - 1) // 12
+                m = (m - 1) % 12 + 1
+                d = min(due.day, 28)
+                make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
+                             date(y, m, d))
+
+        elif pay_type == 'monthly':
+            mv = float(prospect.payment_monthly_value or total)
+            make_invoice(f'{desc_base} — Mensalidade', mv, due)
+
+        elif pay_type == 'setup_monthly':
+            setup = float(prospect.estimated_value or total)
+            mv = float(prospect.payment_monthly_value or 0)
+            make_invoice(f'{desc_base} — Setup', setup, due)
+            if mv > 0:
+                m2 = due.month + 1
+                y2 = due.year + (m2 - 1) // 12
+                m2 = (m2 - 1) % 12 + 1
+                make_invoice(f'{desc_base} — Mensalidade', mv,
+                             date(y2, m2, min(due.day, 28)))
+
+    @staticmethod
+    def _mark_entry_paid(prospect, user):
+        """Marca primeira fatura A Receber como paga ao ir para produção."""
+        from finance.models import Invoice
+        from django.utils import timezone
+        inv = Invoice.objects.filter(
+            invoice_type='receivable', status='pending',
+            description__icontains=prospect.company_name,
+        ).order_by('due_date').first()
+        if inv:
+            inv.status = 'paid'
+            inv.paid_date = timezone.now().date()
+            inv.paid_amount = inv.total
+            inv.save(update_fields=['status', 'paid_date', 'paid_amount'])
+            log_crm_activity(prospect, 'won', f'Pagamento recebido — {inv.description}', user)
 
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
             'new', 'qualifying', 'qualified', 'disqualified',
             'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
-            'proposal', 'won', 'not_closed', 'lost', 'follow_up',
+            'proposal', 'won', 'production', 'not_closed', 'lost', 'follow_up',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),

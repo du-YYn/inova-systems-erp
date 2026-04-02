@@ -130,6 +130,7 @@ const statusLabels: Record<string, string> = {
   meeting_done: 'Reunião Realizada',
   proposal: 'Proposta Enviada',
   won: 'Fechado',
+  production: 'Em Produção',
   not_closed: 'Não Fechou',
   lost: 'Perdido',
   follow_up: 'Follow-Up',
@@ -146,6 +147,7 @@ const statusColors: Record<string, string> = {
   meeting_done: 'bg-teal-100 text-teal-800',
   proposal: 'bg-amber-100 text-amber-800',
   won: 'bg-green-100 text-green-800',
+  production: 'bg-emerald-100 text-emerald-800',
   not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   follow_up: 'bg-orange-100 text-orange-800',
@@ -162,6 +164,7 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   meeting_done: 'success',
   proposal: 'gold',
   won: 'success',
+  production: 'success',
   not_closed: 'warning',
   lost: 'neutral',
   follow_up: 'warning',
@@ -491,6 +494,11 @@ export default function FunilTab() {
     document: '', email: '', phone: '', segment: '',
     address: '', city: '', state: '', cep: '',
     contract_value: '', billing_frequency: 'monthly', notes: '',
+    // Condições de pagamento
+    payment_method: 'pix', payment_type: 'one_time',
+    payment_split_pct: '50', payment_installments: '1',
+    payment_monthly_value: '', payment_due_day: '15',
+    payment_first_due: '',
   });
   const [savingWon, setSavingWon] = useState(false);
 
@@ -747,9 +755,13 @@ export default function FunilTab() {
         phone: prospect.contact_phone || '',
         segment: '',
         address: '', city: '', state: '', cep: '',
-        contract_value: prospect.estimated_value ? String(prospect.estimated_value) : '',
+        contract_value: prospect.proposal_value ? String(prospect.proposal_value) : prospect.estimated_value ? String(prospect.estimated_value) : '',
         billing_frequency: 'monthly',
         notes: '',
+        payment_method: 'pix', payment_type: 'one_time',
+        payment_split_pct: '50', payment_installments: '1',
+        payment_monthly_value: '', payment_due_day: '15',
+        payment_first_due: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       });
       return;
     }
@@ -847,8 +859,20 @@ export default function FunilTab() {
     }
     setSavingWon(true);
     try {
-      // 1. Mover lead para "Fechado" primeiro (se falhar, não cria cliente órfão)
-      await api.patch(`/sales/prospects/${wonModalProspect.id}/`, { status: 'won' });
+      // 1. Mover lead para "Fechado" + salvar condições de pagamento
+      const paymentData: Record<string, unknown> = { status: 'won' };
+      if (wonForm.payment_method) paymentData.payment_method = wonForm.payment_method;
+      if (wonForm.payment_type) paymentData.payment_type = wonForm.payment_type;
+      if (wonForm.payment_split_pct) paymentData.payment_split_pct = Number(wonForm.payment_split_pct);
+      if (wonForm.payment_installments) paymentData.payment_installments = Number(wonForm.payment_installments);
+      if (wonForm.payment_monthly_value) paymentData.payment_monthly_value = Number(wonForm.payment_monthly_value);
+      if (wonForm.payment_due_day) paymentData.payment_due_day = Number(wonForm.payment_due_day);
+      if (wonForm.payment_first_due) paymentData.payment_first_due = wonForm.payment_first_due;
+      if (wonForm.contract_value) {
+        paymentData.proposal_value = Number(wonForm.contract_value);
+        paymentData.estimated_value = Number(wonForm.contract_value);
+      }
+      await api.patch(`/sales/prospects/${wonModalProspect.id}/`, paymentData);
 
       // 2. Criar o cliente com os dados preenchidos
       const body: Record<string, unknown> = {};
@@ -2550,22 +2574,77 @@ export default function FunilTab() {
                 </div>
               </div>
 
-              {/* Financeiro */}
+              {/* Condições de Pagamento */}
               <div className="border-t border-gray-100 dark:border-gray-700 pt-4 mt-2">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Dados Financeiros</p>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Condições de Pagamento</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor do Contrato (R$)</label>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor Total (R$) *</label>
                     <input type="number" step="0.01" min="0" value={wonForm.contract_value} onChange={e => setWonForm({ ...wonForm, contract_value: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Frequência</label>
-                    <select value={wonForm.billing_frequency} onChange={e => setWonForm({ ...wonForm, billing_frequency: e.target.value })} className="input-field bg-white dark:bg-gray-800">
-                      <option value="one_time">Pagamento Único</option><option value="monthly">Mensal</option>
-                      <option value="quarterly">Trimestral</option><option value="semiannual">Semestral</option><option value="yearly">Anual</option>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Meio de Pagamento</label>
+                    <select value={wonForm.payment_method} onChange={e => setWonForm({ ...wonForm, payment_method: e.target.value })} className="input-field bg-white dark:bg-gray-800">
+                      <option value="pix">PIX</option>
+                      <option value="credit_card">Cartão de Crédito</option>
+                      <option value="boleto">Boleto Bancário</option>
+                      <option value="transfer">Transferência</option>
                     </select>
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Forma de Pagamento</label>
+                    <select value={wonForm.payment_type} onChange={e => setWonForm({ ...wonForm, payment_type: e.target.value })} className="input-field bg-white dark:bg-gray-800">
+                      <option value="one_time">Pagamento Único</option>
+                      <option value="split">Entrada + Entrega</option>
+                      <option value="installments">Parcelado</option>
+                      <option value="monthly">Recorrente Mensal</option>
+                      <option value="setup_monthly">Entrada + Mensal</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Vencimento</label>
+                    <input type="date" value={wonForm.payment_first_due} onChange={e => setWonForm({ ...wonForm, payment_first_due: e.target.value })} className="input-field" />
+                  </div>
+                </div>
+
+                {/* Campos condicionais */}
+                {wonForm.payment_type === 'split' && (
+                  <div className="mt-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-gray-400 uppercase mb-1">% Entrada</label>
+                        <input type="number" min="1" max="99" value={wonForm.payment_split_pct} onChange={e => setWonForm({ ...wonForm, payment_split_pct: e.target.value })} className="input-field" />
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 pt-5">
+                        Entrada: <strong>{wonForm.contract_value ? `R$ ${(Number(wonForm.contract_value) * Number(wonForm.payment_split_pct) / 100).toFixed(2)}` : '—'}</strong><br />
+                        Entrega: <strong>{wonForm.contract_value ? `R$ ${(Number(wonForm.contract_value) * (100 - Number(wonForm.payment_split_pct)) / 100).toFixed(2)}` : '—'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {wonForm.payment_type === 'installments' && (
+                  <div className="mt-3">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Número de Parcelas</label>
+                    <input type="number" min="2" value={wonForm.payment_installments} onChange={e => setWonForm({ ...wonForm, payment_installments: e.target.value })} className="input-field w-24" />
+                    {wonForm.contract_value && <p className="text-xs text-gray-400 mt-1">Parcela: R$ {(Number(wonForm.contract_value) / Number(wonForm.payment_installments || 1)).toFixed(2)}</p>}
+                  </div>
+                )}
+
+                {(wonForm.payment_type === 'monthly' || wonForm.payment_type === 'setup_monthly') && (
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Valor Mensal (R$)</label>
+                      <input type="number" step="0.01" min="0" value={wonForm.payment_monthly_value} onChange={e => setWonForm({ ...wonForm, payment_monthly_value: e.target.value })} className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Dia Vencimento</label>
+                      <input type="number" min="1" max="28" value={wonForm.payment_due_day} onChange={e => setWonForm({ ...wonForm, payment_due_day: e.target.value })} className="input-field w-20" />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Endereço */}

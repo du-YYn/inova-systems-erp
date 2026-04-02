@@ -114,6 +114,15 @@ class ProspectSerializer(serializers.ModelSerializer):
             # última mensagem
             "last_message",
             "last_message_at",
+            # pagamento
+            "payment_method",
+            "payment_type",
+            "payment_split_pct",
+            "payment_installments",
+            "payment_monthly_value",
+            "payment_due_day",
+            "payment_duration_months",
+            "payment_first_due",
             # meta
             "created_by",
             "created_by_name",

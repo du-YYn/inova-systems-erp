@@ -92,6 +92,7 @@ class Prospect(models.Model):
         ('meeting_done',  'Reunião Realizada'),    # reunião aconteceu com o Closer
         ('proposal',      'Proposta Enviada'),     # proposta comercial enviada
         ('won',           'Fechado'),              # projeto contratado
+        ('production',    'Em Produção'),          # cliente pagou, projeto em execução
         ('not_closed',    'Não Fechou'),           # reunião realizada mas sem fechamento
         ('lost',          'Perdido'),              # deal perdido (analytics)
         ('follow_up',     'Em Follow-up'),         # sequência de reativação
@@ -223,6 +224,27 @@ class Prospect(models.Model):
     # ── Última mensagem (SDR via n8n) ────────────────────────────────────────
     last_message = models.TextField(blank=True, help_text='Última mensagem do lead via WhatsApp')
     last_message_at = models.DateTimeField(null=True, blank=True)
+
+    # ── Condições de pagamento (preenchido ao fechar lead) ────────────────
+    PAYMENT_METHOD_CHOICES = [
+        ('pix', 'PIX'), ('credit_card', 'Cartão de Crédito'),
+        ('boleto', 'Boleto Bancário'), ('transfer', 'Transferência'),
+    ]
+    PAYMENT_TYPE_CHOICES = [
+        ('one_time', 'Pagamento Único'),
+        ('split', 'Entrada + Entrega'),
+        ('installments', 'Parcelado'),
+        ('monthly', 'Recorrente Mensal'),
+        ('setup_monthly', 'Entrada + Mensal'),
+    ]
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, blank=True)
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, blank=True)
+    payment_split_pct = models.IntegerField(default=50, help_text='% da entrada (para tipo split)')
+    payment_installments = models.IntegerField(default=1, help_text='Número de parcelas')
+    payment_monthly_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_due_day = models.IntegerField(default=15, help_text='Dia do vencimento')
+    payment_duration_months = models.IntegerField(default=12, help_text='Duração em meses')
+    payment_first_due = models.DateField(null=True, blank=True, help_text='Vencimento da primeira parcela/entrada')
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_prospects')
     created_at = models.DateTimeField(auto_now_add=True)
