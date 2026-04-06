@@ -680,6 +680,35 @@ class ProposalViewSet(viewsets.ModelViewSet):
             'approved_value': float(stats['approved_value'] or 0),
         })
 
+    @action(detail=True, methods=['post'], url_path='upload-pdf')
+    def upload_pdf(self, request, pk=None):
+        """Upload de PDF da proposta."""
+        import uuid
+        proposal = self.get_object()
+        file = request.FILES.get('proposal_file')
+        if not file:
+            return Response({'error': 'Nenhum arquivo.'}, status=status.HTTP_400_BAD_REQUEST)
+        if file.size > 10 * 1024 * 1024:
+            return Response({'error': 'Máximo 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not file.name.lower().endswith('.pdf'):
+            return Response({'error': 'Apenas PDF.'}, status=status.HTTP_400_BAD_REQUEST)
+        proposal.proposal_file = file
+        if not proposal.public_token:
+            proposal.public_token = uuid.uuid4()
+        proposal.save(update_fields=['proposal_file', 'public_token'])
+        return Response(ProposalSerializer(proposal).data)
+
+    @action(detail=True, methods=['get'], url_path='views-history')
+    def views_history(self, request, pk=None):
+        """Histórico de visualizações da proposta."""
+        proposal = self.get_object()
+        views = proposal.views.all()[:50]
+        return Response([{
+            'viewed_at': v.viewed_at.isoformat(),
+            'ip_address': v.ip_address,
+            'user_agent': v.user_agent[:100],
+        } for v in views])
+
 
 @extend_schema(tags=['sales'])
 class ContractViewSet(viewsets.ModelViewSet):

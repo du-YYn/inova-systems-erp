@@ -310,6 +310,10 @@ class Proposal(models.Model):
     notes = models.TextField(blank=True)
     terms = models.TextField(blank=True)
 
+    proposal_file = models.FileField(upload_to='proposals/%Y/%m/', blank=True, null=True, help_text='PDF da proposta')
+    public_token = models.UUIDField(default=None, null=True, blank=True, unique=True, help_text='Token para link público')
+    view_count = models.IntegerField(default=0)
+
     sent_at = models.DateTimeField(null=True, blank=True)
     viewed_at = models.DateTimeField(null=True, blank=True)
 
@@ -330,6 +334,21 @@ class Proposal(models.Model):
 
     def __str__(self):
         return f"Proposta #{self.number} - {self.title}"
+
+
+class ProposalView(models.Model):
+    """Registro de visualização pública de proposta."""
+    proposal = models.ForeignKey(Proposal, on_delete=models.CASCADE, related_name='views')
+    viewed_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = 'proposal_views'
+        ordering = ['-viewed_at']
+
+    def __str__(self):
+        return f"View {self.proposal.number} — {self.viewed_at}"
 
 
 class Contract(models.Model):

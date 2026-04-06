@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Plus, Search, Edit, Trash2, FileText, TrendingUp, CheckCircle,
   X, Send, ThumbsUp, ThumbsDown, ArrowRight, ChevronUp, ChevronDown,
+  Upload, Download, Link, Eye, Copy,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
@@ -32,6 +33,9 @@ interface Proposal {
   notes: string;
   hours_estimated: string;
   hourly_rate: string;
+  proposal_file: string | null;
+  public_token: string | null;
+  view_count: number;
   created_at: string;
 }
 
@@ -359,6 +363,41 @@ export default function PropostasTab() {
                             className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5 disabled:opacity-50">
                             <ArrowRight className="w-4 h-4" />
                           </button>
+                        )}
+                        {/* Upload/Download PDF */}
+                        {p.proposal_file ? (
+                          <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/sales/proposals/${p.id}/upload-pdf/`.replace('upload-pdf/', '')}
+                            target="_blank" rel="noopener noreferrer"
+                            className="p-1.5 text-green-500 hover:text-green-600 transition-colors" title="Baixar PDF">
+                            <Download className="w-4 h-4" />
+                          </a>
+                        ) : (
+                          <label className="p-1.5 text-gray-300 hover:text-blue-500 transition-colors cursor-pointer" title="Anexar PDF">
+                            <Upload className="w-4 h-4" />
+                            <input type="file" accept=".pdf" className="hidden" onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              try { await api.upload(`/sales/proposals/${p.id}/upload-pdf/`, file, 'proposal_file'); toast.success('PDF anexado! Link gerado.'); fetchData(); }
+                              catch { toast.error('Erro ao anexar PDF.'); }
+                              e.target.value = '';
+                            }} />
+                          </label>
+                        )}
+                        {/* Copiar link público */}
+                        {p.public_token && (
+                          <button onClick={() => {
+                            const url = `${window.location.origin}/p/${p.public_token}`;
+                            navigator.clipboard.writeText(url);
+                            toast.success('Link copiado!');
+                          }} className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors" title="Copiar link público">
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        )}
+                        {/* Visualizações */}
+                        {p.view_count > 0 && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-gray-400 px-1" title={`${p.view_count} visualizações`}>
+                            <Eye className="w-3 h-3" /> {p.view_count}
+                          </span>
                         )}
                         <button onClick={() => openEditModal(p)}
                           aria-label="Editar"

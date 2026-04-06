@@ -806,10 +806,9 @@ class FinanceDashboardView(viewsets.ViewSet):
                 due_date__year=year, due_date__month=current_month,
             ).aggregate(t=Sum('total'))['t'] or 0
         )
-        mrr_plan = sum(
-            float(c.contract_value) for c in active_customers
-            if c.contract_value and c.billing_frequency == 'monthly'
-        )
+        # mrr_plan disponível se necessário no futuro
+        # sum(float(c.contract_value) for c in active_customers
+        #     if c.contract_value and c.billing_frequency == 'monthly')
 
         churned = Customer.objects.filter(is_active=False, contract_value__gt=0)
         churn_value = float(sum(float(c.contract_value) for c in churned))
