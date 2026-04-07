@@ -33,19 +33,29 @@ class ProposalPublicView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Registrar visualização
+        # Registrar visualização (deduplica por IP/dia)
+        from django.utils import timezone as tz
         ip = request.META.get(
             'HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '')
         )
         if ip and ',' in ip:
             ip = ip.split(',')[0].strip()
-        ProposalView.objects.create(
+
+        today = tz.now().date()
+        already_viewed = ProposalView.objects.filter(
             proposal=proposal,
-            ip_address=ip or None,
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
-        )
-        proposal.view_count = (proposal.view_count or 0) + 1
-        proposal.save(update_fields=['view_count'])
+            ip_address=ip,
+            viewed_at__date=today,
+        ).exists() if ip else False
+
+        if not already_viewed:
+            ProposalView.objects.create(
+                proposal=proposal,
+                ip_address=ip or None,
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+            )
+            proposal.view_count = (proposal.view_count or 0) + 1
+            proposal.save(update_fields=['view_count'])
 
         return Response({
             'number': proposal.number,
@@ -88,6 +98,9 @@ class ProposalPublicHTMLView(APIView):
             )
 
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
+        response['Content-Security-Policy'] = "script-src 'none'; object-src 'none'; frame-ancestors 'none';"
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['X-XSS-Protection'] = '1; mode=block'
         response['Cache-Control'] = 'no-store, no-cache'
         response['X-Robots-Tag'] = 'noindex, nofollow'
         return response

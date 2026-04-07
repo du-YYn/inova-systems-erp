@@ -46,6 +46,6 @@ export default function ProposalPublicPage() {
     );
   }
 
-  // Renderiza o HTML completo substituindo a página inteira
-  return <iframe srcDoc={html} style={{ width: '100%', height: '100vh', border: 'none' }} title="Proposta" />;
+  // Renderiza HTML em iframe sandboxed — bloqueia JavaScript, formulários, popups
+  return <iframe srcDoc={html} sandbox="allow-same-origin" style={{ width: '100%', height: '100vh', border: 'none' }} title="Proposta" />;
 }

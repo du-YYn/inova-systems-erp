@@ -7,12 +7,18 @@ const BACKEND_URLS = [
   process.env.NEXT_PUBLIC_API_URL,
 ].filter(Boolean) as string[];
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // GET /api/proposal/[token]/html — serve o HTML raw diretamente
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+
+  if (!UUID_REGEX.test(token)) {
+    return new NextResponse('Token inválido.', { status: 400 });
+  }
 
   for (const baseUrl of BACKEND_URLS) {
     try {
@@ -26,6 +32,9 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
+            'Content-Security-Policy': "script-src 'none'; object-src 'none'; frame-ancestors 'none';",
+            'X-Content-Type-Options': 'nosniff',
+            'X-XSS-Protection': '1; mode=block',
             'Cache-Control': 'no-store, no-cache',
             'X-Robots-Tag': 'noindex, nofollow',
           },
