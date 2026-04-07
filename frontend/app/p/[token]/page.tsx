@@ -20,8 +20,12 @@ export default function ProposalPublicPage() {
       fetch(`/api/proposal/${token}/html`),
     ])
       .then(async ([, htmlRes]) => {
-        if (!htmlRes || !htmlRes.ok) throw new Error('Proposta não encontrada');
+        if (!htmlRes) throw new Error('Erro de conexão com o servidor.');
+        if (htmlRes.status === 429) throw new Error('Muitos acessos. Tente novamente em alguns minutos.');
+        if (htmlRes.status === 404) throw new Error('Proposta não encontrada.');
+        if (!htmlRes.ok) throw new Error(`Erro ao carregar proposta (${htmlRes.status}).`);
         const content = await htmlRes.text();
+        if (!content || content.length < 10) throw new Error('Proposta sem conteúdo.');
         setHtml(content);
       })
       .catch(e => setError(e.message))

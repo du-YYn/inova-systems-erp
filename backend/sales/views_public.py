@@ -9,7 +9,7 @@ from .models import Proposal, ProposalView
 
 
 class ProposalPublicThrottle(AnonRateThrottle):
-    rate = '10/hour'
+    rate = '60/hour'
 
 
 class ProposalPublicView(APIView):
