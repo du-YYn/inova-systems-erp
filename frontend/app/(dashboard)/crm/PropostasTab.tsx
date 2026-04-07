@@ -603,7 +603,12 @@ export default function PropostasTab() {
                 </button>
               </div>
               <div className="mt-3">
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColors[viewingProposal.status] || 'bg-gray-100 text-gray-600'}`}>
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                  viewingProposal.status === 'approved' ? 'bg-green-100 text-green-800' :
+                  viewingProposal.status === 'rejected' ? 'bg-red-100 text-red-800' :
+                  viewingProposal.status === 'sent' ? 'bg-blue-100 text-blue-800' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
                   {statusLabels[viewingProposal.status] || viewingProposal.status}
                 </span>
               </div>
