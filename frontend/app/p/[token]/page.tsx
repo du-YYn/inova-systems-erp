@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { FileText, Download, Eye } from 'lucide-react';
+import { FileText, Eye } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -13,7 +13,7 @@ interface ProposalData {
   total_value: number;
   status: string;
   valid_until: string | null;
-  file_url: string | null;
+  has_file: boolean;
   view_count: number;
 }
 
@@ -38,6 +38,22 @@ export default function ProposalPublicPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // Bloquear clique-direito e atalhos de download
+  useEffect(() => {
+    const prevent = (e: Event) => e.preventDefault();
+    document.addEventListener('contextmenu', prevent);
+    const preventKeys = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'p')) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('keydown', preventKeys);
+    return () => {
+      document.removeEventListener('contextmenu', prevent);
+      document.removeEventListener('keydown', preventKeys);
+    };
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -58,17 +74,22 @@ export default function ProposalPublicPage() {
     );
   }
 
+  // URL do PDF inline (sem download)
+  const pdfUrl = `${API_URL}/sales/proposals/public/${token}/pdf/`;
+
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-950 select-none" style={{ userSelect: 'none' }}>
       {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-white">Inova<span className="text-gray-500 text-xs ml-1">SYSTEMS SOLUTIONS</span></h1>
+            <h1 className="text-lg font-bold text-white">
+              Inova<span className="text-gray-500 text-xs ml-1">SYSTEMS SOLUTIONS</span>
+            </h1>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-gray-500">
             <Eye className="w-3.5 h-3.5" />
-            {data.view_count} visualização{data.view_count !== 1 ? 'ões' : ''}
+            Documento confidencial
           </div>
         </div>
       </header>
@@ -77,9 +98,11 @@ export default function ProposalPublicPage() {
       <main className="max-w-4xl mx-auto px-6 py-8">
         {/* Proposal info */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 mb-6">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">Proposta Comercial</p>
+              <p className="text-xs text-amber-500 font-semibold uppercase tracking-wide mb-1">
+                Proposta Comercial
+              </p>
               <h2 className="text-xl font-bold text-white">{data.title}</h2>
               <p className="text-sm text-gray-400 mt-1">{data.number} • {data.company}</p>
             </div>
@@ -94,20 +117,20 @@ export default function ProposalPublicPage() {
           </div>
         </div>
 
-        {/* PDF Viewer */}
-        {data.file_url ? (
+        {/* PDF Viewer (inline, sem download) */}
+        {data.has_file ? (
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <iframe
-              src={data.file_url}
+              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1`}
               className="w-full border-0"
               style={{ height: '80vh' }}
               title="Proposta PDF"
+              sandbox="allow-same-origin allow-scripts"
             />
-            <div className="p-4 border-t border-gray-800 flex justify-center">
-              <a href={data.file_url} download target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-2 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors">
-                <Download className="w-4 h-4" /> Baixar PDF
-              </a>
+            <div className="p-3 border-t border-gray-800 text-center">
+              <p className="text-[10px] text-gray-600">
+                Este documento é confidencial. A reprodução ou distribuição não autorizada é proibida.
+              </p>
             </div>
           </div>
         ) : (
@@ -120,7 +143,7 @@ export default function ProposalPublicPage() {
 
       {/* Footer */}
       <footer className="text-center py-6 text-xs text-gray-600">
-        © {new Date().getFullYear()} Inova Systems Solutions
+        © {new Date().getFullYear()} Inova Systems Solutions — Documento confidencial
       </footer>
     </div>
   );

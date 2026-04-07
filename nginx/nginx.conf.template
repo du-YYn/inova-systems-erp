@@ -89,6 +89,16 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # ── Propostas públicas (rate limited) ────────────────────────────────────
+    location /api/v1/sales/proposals/public/ {
+        limit_req zone=api_auth burst=5 nodelay;
+        proxy_pass http://backend;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # ── API Django ────────────────────────────────────────────────────────────
     location /api/ {
         limit_req zone=api_general burst=50 nodelay;
