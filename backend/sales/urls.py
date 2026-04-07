@@ -4,7 +4,7 @@ from .views import (
     CustomerViewSet, ProspectViewSet, ProposalViewSet, ContractViewSet,
     ProspectActivityViewSet, WinLossReasonViewSet, WebsiteLeadCreateView,
 )
-from .views_public import ProposalPublicView, ProposalPublicPDFView
+from .views_public import ProposalPublicView
 
 router = DefaultRouter()
 router.register(r'customers', CustomerViewSet)
@@ -16,7 +16,6 @@ router.register(r'win-loss', WinLossReasonViewSet)
 
 urlpatterns = [
     path('proposals/public/<uuid:token>/', ProposalPublicView.as_view(), name='proposal-public'),
-    path('proposals/public/<uuid:token>/pdf/', ProposalPublicPDFView.as_view(), name='proposal-public-pdf'),
     path('website-lead/', WebsiteLeadCreateView.as_view(), name='website-lead'),
     path('n8n/', include('sales.n8n_urls')),
     path('', include(router.urls)),

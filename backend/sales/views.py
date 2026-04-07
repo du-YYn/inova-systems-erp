@@ -682,7 +682,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='upload-pdf')
     def upload_pdf(self, request, pk=None):
-        """Upload de PDF da proposta."""
+        """Upload de arquivo da proposta (HTML ou PDF)."""
         import uuid
         proposal = self.get_object()
         file = request.FILES.get('proposal_file')
@@ -690,8 +690,9 @@ class ProposalViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Nenhum arquivo.'}, status=status.HTTP_400_BAD_REQUEST)
         if file.size > 10 * 1024 * 1024:
             return Response({'error': 'Máximo 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
-        if not file.name.lower().endswith('.pdf'):
-            return Response({'error': 'Apenas PDF.'}, status=status.HTTP_400_BAD_REQUEST)
+        allowed = ('.html', '.htm', '.pdf')
+        if not file.name.lower().endswith(allowed):
+            return Response({'error': 'Apenas HTML ou PDF.'}, status=status.HTTP_400_BAD_REQUEST)
         proposal.proposal_file = file
         if not proposal.public_token:
             proposal.public_token = uuid.uuid4()

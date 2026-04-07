@@ -4,7 +4,6 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
-from django.http import FileResponse
 from .models import Proposal, ProposalView
 
 
@@ -47,7 +46,17 @@ class ProposalPublicView(APIView):
         proposal.view_count = (proposal.view_count or 0) + 1
         proposal.save(update_fields=['view_count'])
 
-        # Retornar info (SEM file_url — arquivo não é baixável)
+        # Ler conteúdo HTML do arquivo
+        html_content = ''
+        try:
+            proposal.proposal_file.open('r')
+            html_content = proposal.proposal_file.read().decode(
+                'utf-8', errors='replace'
+            )
+            proposal.proposal_file.close()
+        except Exception:
+            html_content = ''
+
         return Response({
             'number': proposal.number,
             'title': proposal.title,
@@ -64,38 +73,6 @@ class ProposalPublicView(APIView):
                 proposal.valid_until.isoformat()
                 if proposal.valid_until else None
             ),
-            'has_file': bool(proposal.proposal_file),
+            'html_content': html_content,
             'view_count': proposal.view_count,
         })
-
-
-class ProposalPublicPDFView(APIView):
-    """Serve o PDF inline (apenas visualização, sem download)."""
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = [ProposalPublicThrottle]
-
-    def get(self, request, token):
-        try:
-            proposal = Proposal.objects.get(public_token=token)
-        except Proposal.DoesNotExist:
-            return Response(
-                {'error': 'Não encontrado.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        if not proposal.proposal_file:
-            return Response(
-                {'error': 'Sem arquivo.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        response = FileResponse(
-            proposal.proposal_file.open('rb'),
-            content_type='application/pdf',
-        )
-        # inline = visualiza no browser, NÃO faz download
-        response['Content-Disposition'] = 'inline'
-        # Impede cache e indexação
-        response['Cache-Control'] = 'no-store, no-cache'
-        response['X-Robots-Tag'] = 'noindex, nofollow'
-        return response
