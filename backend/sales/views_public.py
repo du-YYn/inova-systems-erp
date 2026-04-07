@@ -4,6 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
+from django.http import HttpResponse
 from .models import Proposal, ProposalView
 
 
@@ -12,7 +13,7 @@ class ProposalPublicThrottle(AnonRateThrottle):
 
 
 class ProposalPublicView(APIView):
-    """Endpoint público para visualizar proposta via token UUID."""
+    """Retorna metadados da proposta (para tracking)."""
     permission_classes = [AllowAny]
     authentication_classes = []
     throttle_classes = [ProposalPublicThrottle]
@@ -28,7 +29,7 @@ class ProposalPublicView(APIView):
 
         if not proposal.proposal_file:
             return Response(
-                {'error': 'Nenhum arquivo anexado a esta proposta.'},
+                {'error': 'Nenhum arquivo anexado.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -46,35 +47,47 @@ class ProposalPublicView(APIView):
         proposal.view_count = (proposal.view_count or 0) + 1
         proposal.save(update_fields=['view_count'])
 
-        # Ler conteúdo HTML do arquivo
-        html_content = ''
-        try:
-            proposal.proposal_file.open('rb')
-            raw = proposal.proposal_file.read()
-            proposal.proposal_file.close()
-            if isinstance(raw, bytes):
-                html_content = raw.decode('utf-8', errors='replace')
-            else:
-                html_content = str(raw)
-        except Exception as e:
-            html_content = f'<p>Erro ao carregar proposta: {e}</p>'
-
         return Response({
             'number': proposal.number,
             'title': proposal.title,
-            'company': (
-                proposal.prospect.company_name if proposal.prospect
-                else (
-                    proposal.customer.company_name
-                    if proposal.customer else ''
-                )
-            ),
-            'total_value': float(proposal.total_value or 0),
-            'status': proposal.status,
-            'valid_until': (
-                proposal.valid_until.isoformat()
-                if proposal.valid_until else None
-            ),
-            'html_content': html_content,
+            'has_file': True,
             'view_count': proposal.view_count,
         })
+
+
+class ProposalPublicHTMLView(APIView):
+    """Serve o arquivo HTML diretamente — renderiza no browser."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ProposalPublicThrottle]
+
+    def get(self, request, token):
+        try:
+            proposal = Proposal.objects.get(public_token=token)
+        except Proposal.DoesNotExist:
+            return HttpResponse(
+                '<h1>Proposta não encontrada</h1>',
+                content_type='text/html', status=404,
+            )
+
+        if not proposal.proposal_file:
+            return HttpResponse(
+                '<h1>Nenhum arquivo anexado</h1>',
+                content_type='text/html', status=404,
+            )
+
+        # Ler e servir o HTML diretamente
+        try:
+            proposal.proposal_file.open('rb')
+            content = proposal.proposal_file.read()
+            proposal.proposal_file.close()
+        except Exception:
+            return HttpResponse(
+                '<h1>Erro ao ler arquivo</h1>',
+                content_type='text/html', status=500,
+            )
+
+        response = HttpResponse(content, content_type='text/html; charset=utf-8')
+        response['Cache-Control'] = 'no-store, no-cache'
+        response['X-Robots-Tag'] = 'noindex, nofollow'
+        return response

@@ -4,47 +4,25 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
 
-// Proxy interno — evita problemas de CORS entre subdomínios
-
-interface ProposalData {
-  number: string;
-  title: string;
-  company: string;
-  total_value: number;
-  status: string;
-  valid_until: string | null;
-  html_content: string;
-  view_count: number;
-}
-
 export default function ProposalPublicPage() {
   const params = useParams();
   const token = params.token as string;
-  const [data, setData] = useState<ProposalData | null>(null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
+
+    // 1. Registra a visualização via proxy
     fetch(`/api/proposal/${token}`)
       .then(async res => {
         if (!res.ok) throw new Error('Proposta não encontrada');
-        return res.json();
+        // 2. Redireciona para o HTML raw (renderizado direto pelo browser)
+        window.location.href = `/api/proposal/${token}/html`;
       })
-      .then(setData)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch(e => setError(e.message));
   }, [token]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-pulse text-gray-400">Carregando...</div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (error) {
     return (
       <div className="min-h-screen bg-gray-950 flex items-center justify-center">
         <div className="text-center">
@@ -56,11 +34,10 @@ export default function ProposalPublicPage() {
     );
   }
 
-  // Renderiza o HTML da proposta direto na página
+  // Loading enquanto registra view e redireciona
   return (
-    <div
-      className="proposal-content"
-      dangerouslySetInnerHTML={{ __html: data.html_content }}
-    />
+    <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="animate-pulse text-gray-400 text-sm">Carregando proposta...</div>
+    </div>
   );
 }

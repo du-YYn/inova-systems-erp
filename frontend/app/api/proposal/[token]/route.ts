@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// No Docker, o frontend acessa o backend pelo nome do serviço
-// Tenta múltiplas URLs em ordem de prioridade
 const BACKEND_URLS = [
   process.env.INTERNAL_API_URL,
   'http://backend:8000/api/v1',
@@ -9,6 +7,7 @@ const BACKEND_URLS = [
   process.env.NEXT_PUBLIC_API_URL,
 ].filter(Boolean) as string[];
 
+// GET /api/proposal/[token] — registra view e retorna metadados
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -17,31 +16,20 @@ export async function GET(
 
   for (const baseUrl of BACKEND_URLS) {
     try {
-      const url = `${baseUrl}/sales/proposals/public/${token}/`;
-      const res = await fetch(url, {
+      const res = await fetch(`${baseUrl}/sales/proposals/public/${token}/`, {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
       });
-
       if (res.ok) {
         const data = await res.json();
         return NextResponse.json(data);
       }
-
       if (res.status === 404) {
-        return NextResponse.json(
-          { error: 'Proposta não encontrada.' },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: 'Proposta não encontrada.' }, { status: 404 });
       }
     } catch {
-      // Tenta próxima URL
       continue;
     }
   }
-
-  return NextResponse.json(
-    { error: 'Não foi possível conectar ao servidor.' },
-    { status: 502 }
-  );
+  return NextResponse.json({ error: 'Erro de conexão.' }, { status: 502 });
 }
