@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation';
 import { FileText, Download, Eye } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-const BASE_URL = API_URL.replace('/api/v1', '');
 
 interface ProposalData {
   number: string;
@@ -29,7 +28,7 @@ export default function ProposalPublicPage() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${BASE_URL}/p/${token}/`)
+    fetch(`${API_URL}/sales/proposals/public/${token}/`)
       .then(async res => {
         if (!res.ok) throw new Error('Proposta não encontrada');
         return res.json();
