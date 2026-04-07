@@ -98,7 +98,7 @@ class ProposalPublicHTMLView(APIView):
             )
 
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
-        response['Content-Security-Policy'] = "script-src 'none'; object-src 'none'; frame-ancestors 'none';"
+        response['Content-Security-Policy'] = "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;"
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-XSS-Protection'] = '1; mode=block'
         response['Cache-Control'] = 'no-store, no-cache'

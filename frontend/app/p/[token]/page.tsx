@@ -46,6 +46,6 @@ export default function ProposalPublicPage() {
     );
   }
 
-  // Renderiza HTML em iframe sandboxed — bloqueia JavaScript, formulários, popups
-  return <iframe srcDoc={html} sandbox="allow-same-origin" style={{ width: '100%', height: '100vh', border: 'none' }} title="Proposta" />;
+  // Renderiza HTML em iframe sandboxed — permite CSS/fontes, bloqueia JavaScript
+  return <iframe srcDoc={html} sandbox="allow-same-origin allow-popups" style={{ width: '100%', height: '100vh', border: 'none', margin: 0, padding: 0 }} title="Proposta" />;
 }

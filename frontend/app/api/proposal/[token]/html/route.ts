@@ -32,7 +32,7 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Content-Security-Policy': "script-src 'none'; object-src 'none'; frame-ancestors 'none';",
+            'Content-Security-Policy': "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;",
             'X-Content-Type-Options': 'nosniff',
             'X-XSS-Protection': '1; mode=block',
             'Cache-Control': 'no-store, no-cache',
