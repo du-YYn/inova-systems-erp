@@ -7,31 +7,40 @@ import { FileText } from 'lucide-react';
 export default function ProposalPublicPage() {
   const params = useParams();
   const token = params.token as string;
+  const [html, setHtml] = useState('');
   const [error, setError] = useState('');
-  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
 
-    // Registra view e depois redireciona para o HTML raw
-    fetch(`/api/proposal/${token}`)
-      .then(async res => {
-        if (res.status === 429) { setError('Muitos acessos. Tente novamente em alguns minutos.'); return; }
-        if (res.status === 404) { setError('Proposta não encontrada.'); return; }
-        if (!res.ok) { setError(`Erro ao carregar proposta (${res.status}).`); return; }
-        setReady(true);
+    // Registra view + busca HTML
+    Promise.all([
+      fetch(`/api/proposal/${token}`).catch(() => null),
+      fetch(`/api/proposal/${token}/html`),
+    ])
+      .then(async ([, htmlRes]) => {
+        if (!htmlRes) { setError('Erro de conexão.'); return; }
+        if (htmlRes.status === 429) { setError('Muitos acessos. Tente novamente em alguns minutos.'); return; }
+        if (htmlRes.status === 404) { setError('Proposta não encontrada.'); return; }
+        if (!htmlRes.ok) { setError(`Erro (${htmlRes.status}).`); return; }
+        const content = await htmlRes.text();
+        if (!content || content.length < 10) { setError('Proposta sem conteúdo.'); return; }
+        setHtml(content);
       })
-      .catch(() => setError('Erro de conexão.'));
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, [token]);
 
-  // Quando pronto, redireciona para o HTML raw (renderiza como página nativa)
-  useEffect(() => {
-    if (ready && token) {
-      window.location.replace(`/api/proposal/${token}/html`);
-    }
-  }, [ready, token]);
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+        <p style={{ color: '#999', fontSize: 14 }}>Carregando proposta...</p>
+      </div>
+    );
+  }
 
-  if (error) {
+  if (error || !html) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', flexDirection: 'column' }}>
         <FileText style={{ width: 64, height: 64, color: '#444', marginBottom: 16 }} />
@@ -43,9 +52,14 @@ export default function ProposalPublicPage() {
     );
   }
 
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-      <p style={{ color: '#999', fontSize: 14 }}>Carregando proposta...</p>
-    </div>
-  );
+  // Substitui a página inteira pelo HTML da proposta
+  // Isso remove o Next.js completamente e renderiza o HTML puro
+  if (typeof document !== 'undefined') {
+    document.open();
+    document.write(html);
+    document.close();
+    return null;
+  }
+
+  return null;
 }
