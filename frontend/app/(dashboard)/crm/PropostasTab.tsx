@@ -365,24 +365,18 @@ export default function PropostasTab() {
                           </button>
                         )}
                         {/* Upload/Download PDF */}
-                        {p.proposal_file ? (
-                          <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/sales/proposals/${p.id}/upload-pdf/`.replace('upload-pdf/', '')}
-                            target="_blank" rel="noopener noreferrer"
-                            className="p-1.5 text-green-500 hover:text-green-600 transition-colors" title="Baixar PDF">
-                            <Download className="w-4 h-4" />
-                          </a>
-                        ) : (
-                          <label className="p-1.5 text-gray-300 hover:text-blue-500 transition-colors cursor-pointer" title="Anexar PDF">
-                            <Upload className="w-4 h-4" />
-                            <input type="file" accept=".pdf" className="hidden" onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              try { await api.upload(`/sales/proposals/${p.id}/upload-pdf/`, file, 'proposal_file'); toast.success('PDF anexado! Link gerado.'); fetchData(); }
-                              catch { toast.error('Erro ao anexar PDF.'); }
-                              e.target.value = '';
-                            }} />
-                          </label>
-                        )}
+                        {/* Upload / Substituir PDF */}
+                        <label className={`p-1.5 transition-colors cursor-pointer ${p.proposal_file ? 'text-green-500 hover:text-green-600' : 'text-gray-300 hover:text-blue-500'}`}
+                          title={p.proposal_file ? 'Substituir PDF' : 'Anexar PDF'}>
+                          <Upload className="w-4 h-4" />
+                          <input type="file" accept=".pdf" className="hidden" onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try { await api.upload(`/sales/proposals/${p.id}/upload-pdf/`, file, 'proposal_file'); toast.success(p.proposal_file ? 'PDF substituído!' : 'PDF anexado! Link gerado.'); fetchData(); }
+                            catch { toast.error('Erro ao anexar PDF.'); }
+                            e.target.value = '';
+                          }} />
+                        </label>
                         {/* Copiar link público */}
                         {p.public_token && (
                           <button onClick={() => {
