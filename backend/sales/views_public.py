@@ -49,13 +49,15 @@ class ProposalPublicView(APIView):
         # Ler conteúdo HTML do arquivo
         html_content = ''
         try:
-            proposal.proposal_file.open('r')
-            html_content = proposal.proposal_file.read().decode(
-                'utf-8', errors='replace'
-            )
+            proposal.proposal_file.open('rb')
+            raw = proposal.proposal_file.read()
             proposal.proposal_file.close()
-        except Exception:
-            html_content = ''
+            if isinstance(raw, bytes):
+                html_content = raw.decode('utf-8', errors='replace')
+            else:
+                html_content = str(raw)
+        except Exception as e:
+            html_content = f'<p>Erro ao carregar proposta: {e}</p>'
 
         return Response({
             'number': proposal.number,

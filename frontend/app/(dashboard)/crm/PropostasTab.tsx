@@ -386,8 +386,9 @@ export default function PropostasTab() {
                         {/* Copiar link público */}
                         {p.public_token && (
                           <button onClick={() => {
-                            const baseUrl = process.env.NEXT_PUBLIC_PROPOSAL_URL || window.location.origin;
-                            const url = `${baseUrl}/p/${p.public_token}`;
+                            const proposalDomain = process.env.NEXT_PUBLIC_PROPOSAL_URL
+                              || window.location.origin.replace('erp.', 'proposta.');
+                            const url = `${proposalDomain}/p/${p.public_token}`;
                             navigator.clipboard.writeText(url);
                             toast.success('Link copiado!');
                           }} className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors" title="Copiar link público">
