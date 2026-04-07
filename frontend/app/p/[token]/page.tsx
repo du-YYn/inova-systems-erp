@@ -7,37 +7,45 @@ import { FileText } from 'lucide-react';
 export default function ProposalPublicPage() {
   const params = useParams();
   const token = params.token as string;
+  const [html, setHtml] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token) return;
 
-    // 1. Registra a visualização via proxy
-    fetch(`/api/proposal/${token}`)
-      .then(async res => {
-        if (!res.ok) throw new Error('Proposta não encontrada');
-        // 2. Redireciona para o HTML raw (renderizado direto pelo browser)
-        window.location.href = `/api/proposal/${token}/html`;
+    // Registra view + busca HTML em paralelo
+    Promise.all([
+      fetch(`/api/proposal/${token}`).catch(() => null),
+      fetch(`/api/proposal/${token}/html`),
+    ])
+      .then(async ([, htmlRes]) => {
+        if (!htmlRes || !htmlRes.ok) throw new Error('Proposta não encontrada');
+        const content = await htmlRes.text();
+        setHtml(content);
       })
-      .catch(e => setError(e.message));
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, [token]);
 
-  if (error) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <FileText className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-300 mb-2">Proposta não encontrada</h1>
-          <p className="text-gray-500">O link pode ter expirado ou ser inválido.</p>
-        </div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+        <p style={{ color: '#999', fontSize: 14 }}>Carregando proposta...</p>
       </div>
     );
   }
 
-  // Loading enquanto registra view e redireciona
-  return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <div className="animate-pulse text-gray-400 text-sm">Carregando proposta...</div>
-    </div>
-  );
+  if (error || !html) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', flexDirection: 'column' }}>
+        <FileText style={{ width: 64, height: 64, color: '#444', marginBottom: 16 }} />
+        <h1 style={{ color: '#ccc', fontSize: 20, marginBottom: 8 }}>Proposta não encontrada</h1>
+        <p style={{ color: '#666', fontSize: 14 }}>O link pode ter expirado ou ser inválido.</p>
+      </div>
+    );
+  }
+
+  // Renderiza o HTML completo substituindo a página inteira
+  return <iframe srcDoc={html} style={{ width: '100%', height: '100vh', border: 'none' }} title="Proposta" />;
 }
