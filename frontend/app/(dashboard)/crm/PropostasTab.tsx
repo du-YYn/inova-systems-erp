@@ -368,7 +368,7 @@ export default function PropostasTab() {
                         <label className={`p-1.5 transition-colors cursor-pointer ${p.proposal_file ? 'text-blue-400 hover:text-blue-500' : 'text-gray-300 hover:text-blue-500'}`}
                           title={p.proposal_file ? 'Substituir PDF' : 'Anexar PDF'}>
                           <Upload className="w-4 h-4" />
-                          <input type="file" accept=".html,.htm,.pdf" className="hidden" onChange={async (e) => {
+                          <input type="file" accept=".html,.htm,.pdf,text/html,application/pdf" className="hidden" onChange={async (e) => {
                             const file = e.target.files?.[0];
                             if (!file) return;
                             try { await api.upload(`/sales/proposals/${p.id}/upload-pdf/`, file, 'proposal_file'); toast.success(p.proposal_file ? 'PDF substituído!' : 'PDF anexado! Link gerado.'); fetchData(); }
