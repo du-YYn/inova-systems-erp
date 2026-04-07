@@ -415,8 +415,8 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if proposal.proposal_file:
             try:
                 proposal.proposal_file.delete(save=False)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Erro ao remover arquivo da proposta {proposal.id}: {e}")
         logger.info(
             f"Proposta {proposal.id} ({proposal.number}) "
             f"excluída por {request.user.username}"
