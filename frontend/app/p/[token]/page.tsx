@@ -14,23 +14,30 @@ export default function ProposalPublicPage() {
   useEffect(() => {
     if (!token) return;
 
-    // Registra view + busca HTML
-    Promise.all([
-      fetch(`/api/proposal/${token}`).catch(() => null),
-      fetch(`/api/proposal/${token}/html`),
-    ])
-      .then(async ([, htmlRes]) => {
-        if (!htmlRes) { setError('Erro de conexão.'); return; }
-        if (htmlRes.status === 429) { setError('Muitos acessos. Tente novamente em alguns minutos.'); return; }
-        if (htmlRes.status === 404) { setError('Proposta não encontrada.'); return; }
-        if (!htmlRes.ok) { setError(`Erro (${htmlRes.status}).`); return; }
-        const content = await htmlRes.text();
+    // View tracking em background — não bloqueia o carregamento
+    fetch(`/api/proposal/${token}`).catch(() => {});
+
+    // Busca HTML direto — único fetch que bloqueia
+    fetch(`/api/proposal/${token}/html`)
+      .then(async res => {
+        if (res.status === 429) { setError('Muitos acessos. Tente novamente em alguns minutos.'); return; }
+        if (res.status === 404) { setError('Proposta não encontrada.'); return; }
+        if (!res.ok) { setError(`Erro (${res.status}).`); return; }
+        const content = await res.text();
         if (!content || content.length < 10) { setError('Proposta sem conteúdo.'); return; }
         setHtml(content);
       })
-      .catch(e => setError(e.message))
+      .catch(() => setError('Erro de conexão.'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Renderiza HTML assim que chega — sem esperar tracking
+  if (html && typeof document !== 'undefined') {
+    document.open();
+    document.write(html);
+    document.close();
+    return null;
+  }
 
   if (loading) {
     return (
@@ -40,7 +47,7 @@ export default function ProposalPublicPage() {
     );
   }
 
-  if (error || !html) {
+  if (error) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', flexDirection: 'column' }}>
         <FileText style={{ width: 64, height: 64, color: '#444', marginBottom: 16 }} />
@@ -50,15 +57,6 @@ export default function ProposalPublicPage() {
         <p style={{ color: '#666', fontSize: 14 }}>{error}</p>
       </div>
     );
-  }
-
-  // Substitui a página inteira pelo HTML da proposta
-  // Isso remove o Next.js completamente e renderiza o HTML puro
-  if (typeof document !== 'undefined') {
-    document.open();
-    document.write(html);
-    document.close();
-    return null;
   }
 
   return null;
