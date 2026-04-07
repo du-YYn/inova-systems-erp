@@ -409,6 +409,20 @@ class ProposalViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=prop_status)
         return queryset
 
+    def destroy(self, request, *args, **kwargs):
+        proposal = self.get_object()
+        # Remover arquivo do disco
+        if proposal.proposal_file:
+            try:
+                proposal.proposal_file.delete(save=False)
+            except Exception:
+                pass
+        logger.info(
+            f"Proposta {proposal.id} ({proposal.number}) "
+            f"excluída por {request.user.username}"
+        )
+        return super().destroy(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         with transaction.atomic():
             last_proposal = Proposal.objects.select_for_update().order_by('-id').first()

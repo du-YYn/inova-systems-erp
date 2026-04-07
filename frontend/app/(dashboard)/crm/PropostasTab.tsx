@@ -233,11 +233,12 @@ export default function PropostasTab() {
     if (!confirmDelete) return;
     try {
       await api.delete(`/sales/proposals/${confirmDelete.id}/`);
-      toast.success(`Proposta "${confirmDelete.number || confirmDelete.title}" excluída.`);
+      toast.success(`Proposta "${confirmDelete.number}" excluída.`);
       setConfirmDelete(null);
+      setViewingProposal(null);
       fetchData();
-    } catch {
-      toast.error('Erro ao excluir proposta.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir proposta.');
     }
   };
 
@@ -579,8 +580,9 @@ export default function PropostasTab() {
       <ConfirmDialog
         open={!!confirmDelete}
         title="Excluir proposta"
-        description={`Tem certeza que deseja excluir a proposta "${confirmDelete?.number || confirmDelete?.title}"?`}
-        confirmLabel="Excluir"
+        description={`Tem certeza que deseja excluir "${confirmDelete?.number} — ${confirmDelete?.title}"?${confirmDelete?.proposal_file ? ' O arquivo e o link público serão removidos permanentemente.' : ''}${confirmDelete?.view_count ? ` (${confirmDelete.view_count} visualização${confirmDelete.view_count > 1 ? 'ões' : ''} registrada${confirmDelete.view_count > 1 ? 's' : ''})` : ''}`}
+        confirmLabel="Excluir permanentemente"
+        danger
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(null)}
       />
