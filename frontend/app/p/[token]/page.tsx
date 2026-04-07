@@ -7,54 +7,45 @@ import { FileText } from 'lucide-react';
 export default function ProposalPublicPage() {
   const params = useParams();
   const token = params.token as string;
-  const [html, setHtml] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (!token) return;
 
-    // Registra view + busca HTML em paralelo
-    Promise.all([
-      fetch(`/api/proposal/${token}`).catch(() => null),
-      fetch(`/api/proposal/${token}/html`),
-    ])
-      .then(async ([, htmlRes]) => {
-        if (!htmlRes) throw new Error('Erro de conexão com o servidor.');
-        if (htmlRes.status === 429) throw new Error('Muitos acessos. Tente novamente em alguns minutos.');
-        if (htmlRes.status === 404) throw new Error('Proposta não encontrada.');
-        if (!htmlRes.ok) throw new Error(`Erro ao carregar proposta (${htmlRes.status}).`);
-        const content = await htmlRes.text();
-        if (!content || content.length < 10) throw new Error('Proposta sem conteúdo.');
-        setHtml(content);
+    // Registra view e depois redireciona para o HTML raw
+    fetch(`/api/proposal/${token}`)
+      .then(async res => {
+        if (res.status === 429) { setError('Muitos acessos. Tente novamente em alguns minutos.'); return; }
+        if (res.status === 404) { setError('Proposta não encontrada.'); return; }
+        if (!res.ok) { setError(`Erro ao carregar proposta (${res.status}).`); return; }
+        setReady(true);
       })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch(() => setError('Erro de conexão.'));
   }, [token]);
 
-  if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
-        <p style={{ color: '#999', fontSize: 14 }}>Carregando proposta...</p>
-      </div>
-    );
-  }
+  // Quando pronto, redireciona para o HTML raw (renderiza como página nativa)
+  useEffect(() => {
+    if (ready && token) {
+      window.location.replace(`/api/proposal/${token}/html`);
+    }
+  }, [ready, token]);
 
-  if (error || !html) {
+  if (error) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0a0a', flexDirection: 'column' }}>
         <FileText style={{ width: 64, height: 64, color: '#444', marginBottom: 16 }} />
-        <h1 style={{ color: '#ccc', fontSize: 20, marginBottom: 8 }}>Proposta não encontrada</h1>
-        <p style={{ color: '#666', fontSize: 14 }}>O link pode ter expirado ou ser inválido.</p>
+        <h1 style={{ color: '#ccc', fontSize: 20, marginBottom: 8 }}>
+          {error.includes('encontrada') ? 'Proposta não encontrada' : 'Erro'}
+        </h1>
+        <p style={{ color: '#666', fontSize: 14 }}>{error}</p>
       </div>
     );
   }
 
-  // Renderiza HTML em iframe sandboxed — permite CSS/fontes, bloqueia JavaScript
   return (
-    <>
-      <style>{`html, body { margin: 0; padding: 0; overflow: hidden; }`}</style>
-      <iframe srcDoc={html} sandbox="allow-same-origin allow-popups" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', border: 'none', margin: 0, padding: 0 }} title="Proposta" />
-    </>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff' }}>
+      <p style={{ color: '#999', fontSize: 14 }}>Carregando proposta...</p>
+    </div>
   );
 }
