@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://backend:8000/api/v1';
-// Em produção dentro do Docker, o frontend acessa o backend via hostname interno
-const INTERNAL_URL = process.env.INTERNAL_API_URL || BACKEND_URL.replace('https://erp.inovasystemssolutions.com', 'http://backend:8000');
+// No Docker, o frontend acessa o backend pelo nome do serviço
+// Tenta múltiplas URLs em ordem de prioridade
+const BACKEND_URLS = [
+  process.env.INTERNAL_API_URL,
+  'http://backend:8000/api/v1',
+  'http://grupo_ry_inova-erp_backend:8000/api/v1',
+  process.env.NEXT_PUBLIC_API_URL,
+].filter(Boolean) as string[];
 
 export async function GET(
   request: NextRequest,
@@ -10,25 +15,33 @@ export async function GET(
 ) {
   const { token } = await params;
 
-  try {
-    const res = await fetch(`${INTERNAL_URL}/sales/proposals/public/${token}/`, {
-      headers: { 'Content-Type': 'application/json' },
-      cache: 'no-store',
-    });
+  for (const baseUrl of BACKEND_URLS) {
+    try {
+      const url = `${baseUrl}/sales/proposals/public/${token}/`;
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+      });
 
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: 'Proposta não encontrada.' },
-        { status: res.status }
-      );
+      if (res.ok) {
+        const data = await res.json();
+        return NextResponse.json(data);
+      }
+
+      if (res.status === 404) {
+        return NextResponse.json(
+          { error: 'Proposta não encontrada.' },
+          { status: 404 }
+        );
+      }
+    } catch {
+      // Tenta próxima URL
+      continue;
     }
-
-    const data = await res.json();
-    return NextResponse.json(data);
-  } catch {
-    return NextResponse.json(
-      { error: 'Erro ao buscar proposta.' },
-      { status: 500 }
-    );
   }
+
+  return NextResponse.json(
+    { error: 'Não foi possível conectar ao servidor.' },
+    { status: 502 }
+  );
 }
