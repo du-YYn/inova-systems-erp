@@ -100,9 +100,24 @@ export default function PropostasTab() {
   const [sortField, setSortField] = useState<'number' | 'title' | 'value' | 'status' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
+  // Drawer de detalhes da proposta
+  const [viewingProposal, setViewingProposal] = useState<Proposal | null>(null);
+  const [viewHistory, setViewHistory] = useState<{ viewed_at: string; ip_address: string; user_agent: string }[]>([]);
+
   const handleSort = (field: 'number' | 'title' | 'value' | 'status') => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(field); setSortDir('asc'); }
+  };
+
+  const openProposalDrawer = (p: Proposal) => {
+    setViewingProposal(p);
+    setViewHistory([]);
+    if (p.view_count > 0) {
+      api.get<{ viewed_at: string; ip_address: string; user_agent: string }[]>(
+        `/sales/proposals/${p.id}/views-history/`
+      ).then(data => setViewHistory(Array.isArray(data) ? data : []))
+       .catch(() => {});
+    }
   };
 
   const fetchData = useCallback(async () => {
@@ -315,7 +330,7 @@ export default function PropostasTab() {
                     </td>
                   </tr>
                 ) : sortedProposals.map((p) => (
-                  <tr key={p.id}>
+                  <tr key={p.id} onClick={() => openProposalDrawer(p)} className="cursor-pointer">
                     <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"><Sensitive>{p.number}</Sensitive></td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.title}</Sensitive></td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><Sensitive>{p.customer_name || p.prospect_company || '—'}</Sensitive></td>
@@ -569,6 +584,168 @@ export default function PropostasTab() {
         onConfirm={handleDelete}
         onCancel={() => setConfirmDelete(null)}
       />
+
+      {/* ── Drawer: Detalhes da Proposta ──────────────────────────── */}
+      {viewingProposal && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setViewingProposal(null)} />
+          <div className="relative w-full max-w-md bg-white dark:bg-gray-800 shadow-2xl overflow-y-auto animate-modal-in">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-accent-gold font-semibold uppercase tracking-wide">{viewingProposal.number}</p>
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mt-0.5">{viewingProposal.title}</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{viewingProposal.prospect_company || viewingProposal.customer_name} · <Sensitive>{formatCurrency(viewingProposal.total_value)}</Sensitive></p>
+                </div>
+                <button onClick={() => setViewingProposal(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <div className="mt-3">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${statusColors[viewingProposal.status] || 'bg-gray-100 text-gray-600'}`}>
+                  {statusLabels[viewingProposal.status] || viewingProposal.status}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-6">
+              {/* ── Tracking ────────────────────────────── */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Tracking</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Status</p>
+                    <p className={`text-sm font-bold mt-0.5 ${viewingProposal.view_count > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {viewingProposal.view_count > 0 ? '🟢 Abriu' : '🔴 Não abriu'}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Visualizações</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-0.5">{viewingProposal.view_count}</p>
+                  </div>
+                </div>
+                {viewHistory.length > 0 && (
+                  <div className="mt-3">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Primeira abertura</p>
+                        <p className="text-xs text-gray-900 dark:text-gray-100 mt-0.5">
+                          {new Date(viewHistory[viewHistory.length - 1].viewed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Última abertura</p>
+                        <p className="text-xs text-gray-900 dark:text-gray-100 mt-0.5">
+                          {new Date(viewHistory[0].viewed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-2">Histórico</p>
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {viewHistory.map((v, i) => {
+                        const isMobile = v.user_agent.toLowerCase().includes('mobile');
+                        return (
+                          <div key={i} className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/30 rounded-lg px-3 py-2 text-xs">
+                            <span className="text-gray-600 dark:text-gray-300">
+                              {new Date(v.viewed_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span className="text-gray-400">{isMobile ? '📱 Mobile' : '💻 Desktop'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Link ─────────────────────────────── */}
+              {viewingProposal.public_token && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Link Público</p>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 font-mono break-all mb-2">
+                      {(process.env.NEXT_PUBLIC_PROPOSAL_URL || window.location.origin.replace('erp.', 'proposta.'))}/p/{viewingProposal.public_token}
+                    </p>
+                    <button onClick={() => {
+                      const baseUrl = process.env.NEXT_PUBLIC_PROPOSAL_URL || window.location.origin.replace('erp.', 'proposta.');
+                      navigator.clipboard.writeText(`${baseUrl}/p/${viewingProposal.public_token}`);
+                      toast.success('Link copiado!');
+                    }} className="w-full flex items-center justify-center gap-2 py-2 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark transition-colors">
+                      <Copy className="w-4 h-4" /> Copiar Link
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Arquivo ──────────────────────────── */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Arquivo</p>
+                {viewingProposal.proposal_file ? (
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-green-500" />
+                      <span className="text-xs text-gray-600 dark:text-gray-300">Arquivo anexado</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <label className="flex-1 flex items-center justify-center gap-2 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <Upload className="w-3.5 h-3.5" /> Substituir
+                        <input type="file" accept=".html,.htm,.pdf,text/html,application/pdf" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try { await api.upload(`/sales/proposals/${viewingProposal.id}/upload-pdf/`, file, 'proposal_file'); toast.success('Arquivo substituído!'); fetchData(); setViewingProposal(null); }
+                          catch { toast.error('Erro ao substituir.'); }
+                          e.target.value = '';
+                        }} />
+                      </label>
+                      <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/sales/proposals/${viewingProposal.id}/download-pdf/`}
+                        className="flex-1 flex items-center justify-center gap-2 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-xs font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                        <Download className="w-3.5 h-3.5" /> Baixar
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex items-center justify-center gap-2 py-4 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-lg text-sm text-gray-400 cursor-pointer hover:border-accent-gold hover:text-accent-gold transition-colors">
+                    <Upload className="w-4 h-4" /> Anexar arquivo HTML
+                    <input type="file" accept=".html,.htm,.pdf,text/html,application/pdf" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try { await api.upload(`/sales/proposals/${viewingProposal.id}/upload-pdf/`, file, 'proposal_file'); toast.success('Arquivo anexado! Link gerado.'); fetchData(); setViewingProposal(null); }
+                      catch { toast.error('Erro ao anexar.'); }
+                      e.target.value = '';
+                    }} />
+                  </label>
+                )}
+              </div>
+
+              {/* ── Ações ────────────────────────────── */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Ações</p>
+                <div className="space-y-2">
+                  {viewingProposal.status === 'sent' && (
+                    <button onClick={() => { handleAction(viewingProposal, 'approve'); setViewingProposal(null); }} disabled={!!performingAction}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+                      <ThumbsUp className="w-4 h-4" /> Aprovar Proposta
+                    </button>
+                  )}
+                  {viewingProposal.status === 'sent' && (
+                    <button onClick={() => { handleAction(viewingProposal, 'reject'); setViewingProposal(null); }} disabled={!!performingAction}
+                      className="w-full flex items-center justify-center gap-2 py-2 border border-red-200 text-red-500 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
+                      <ThumbsDown className="w-4 h-4" /> Rejeitar
+                    </button>
+                  )}
+                  {viewingProposal.status === 'approved' && (
+                    <button onClick={() => { handleAction(viewingProposal, 'convert_to_contract'); setViewingProposal(null); }} disabled={!!performingAction}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark disabled:opacity-50 transition-colors">
+                      <ArrowRight className="w-4 h-4" /> Converter em Contrato
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
