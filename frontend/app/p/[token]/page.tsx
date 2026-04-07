@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+// Proxy interno — evita problemas de CORS entre subdomínios
 
 interface ProposalData {
   number: string;
@@ -26,7 +26,7 @@ export default function ProposalPublicPage() {
 
   useEffect(() => {
     if (!token) return;
-    fetch(`${API_URL}/sales/proposals/public/${token}/`)
+    fetch(`/api/proposal/${token}`)
       .then(async res => {
         if (!res.ok) throw new Error('Proposta não encontrada');
         return res.json();
