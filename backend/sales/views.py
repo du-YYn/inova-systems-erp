@@ -698,6 +698,22 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.save(update_fields=['proposal_file', 'public_token'])
         return Response(ProposalSerializer(proposal).data)
 
+    @action(detail=True, methods=['get'], url_path='download-pdf')
+    def download_pdf(self, request, pk=None):
+        """Download do PDF da proposta (autenticado — admin/manager)."""
+        from django.http import FileResponse
+        proposal = self.get_object()
+        if not proposal.proposal_file:
+            return Response(
+                {'error': 'Nenhum PDF anexado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return FileResponse(
+            proposal.proposal_file.open('rb'),
+            as_attachment=True,
+            filename=proposal.proposal_file.name.split('/')[-1],
+        )
+
     @action(detail=True, methods=['get'], url_path='views-history')
     def views_history(self, request, pk=None):
         """Histórico de visualizações da proposta."""

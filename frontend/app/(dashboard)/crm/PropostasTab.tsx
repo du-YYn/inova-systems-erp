@@ -364,9 +364,8 @@ export default function PropostasTab() {
                             <ArrowRight className="w-4 h-4" />
                           </button>
                         )}
-                        {/* Upload/Download PDF */}
-                        {/* Upload / Substituir PDF */}
-                        <label className={`p-1.5 transition-colors cursor-pointer ${p.proposal_file ? 'text-green-500 hover:text-green-600' : 'text-gray-300 hover:text-blue-500'}`}
+                        {/* Upload PDF */}
+                        <label className={`p-1.5 transition-colors cursor-pointer ${p.proposal_file ? 'text-blue-400 hover:text-blue-500' : 'text-gray-300 hover:text-blue-500'}`}
                           title={p.proposal_file ? 'Substituir PDF' : 'Anexar PDF'}>
                           <Upload className="w-4 h-4" />
                           <input type="file" accept=".pdf" className="hidden" onChange={async (e) => {
@@ -377,6 +376,13 @@ export default function PropostasTab() {
                             e.target.value = '';
                           }} />
                         </label>
+                        {/* Download PDF (admin) */}
+                        {p.proposal_file && (
+                          <a href={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}/sales/proposals/${p.id}/download-pdf/`}
+                            className="p-1.5 text-green-500 hover:text-green-600 transition-colors" title="Baixar PDF">
+                            <Download className="w-4 h-4" />
+                          </a>
+                        )}
                         {/* Copiar link público */}
                         {p.public_token && (
                           <button onClick={() => {
