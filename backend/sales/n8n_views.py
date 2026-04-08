@@ -114,6 +114,7 @@ class LeadUpdateView(N8NBaseView):
         'last_message', 'last_message_at', 'temperature',
         'qualification_level', 'usage_type', 'description',
         'follow_up_reason', 'pre_meeting_scenario',
+        'follow_up_count', 'last_follow_up_at',
     }
 
     def patch(self, request, pk):
@@ -182,14 +183,26 @@ class FollowUpLeadsView(N8NBaseView):
     Retorna leads que precisam de follow-up:
     - Cenario 1: qualificados mas sem reuniao agendada
     - Cenario 2: agendaram mas nao compareceram (no-show)
-    - Cenario 3: reuniao realizada mas nao fechou
+    Controles:
+    - Maximo 2 follow-ups por lead
+    - Minimo 48h entre follow-ups
     """
+
+    MAX_FOLLOW_UPS = 2
+    MIN_INTERVAL_HOURS = 48
 
     def get(self, request):
         now = timezone.now()
+        min_interval = now - timezone.timedelta(hours=self.MIN_INTERVAL_HOURS)
+
+        # Filtro base: max 2 follow-ups e respeitar intervalo minimo
+        base_filter = Q(follow_up_count__lt=self.MAX_FOLLOW_UPS) & (
+            Q(last_follow_up_at__isnull=True) | Q(last_follow_up_at__lte=min_interval)
+        )
 
         # Cenario 1: qualificados sem agendamento (qualified ha mais de 24h)
         cenario_1 = Prospect.objects.filter(
+            base_filter,
             status='qualified',
             meeting_scheduled_at__isnull=True,
             updated_at__lte=now - timezone.timedelta(hours=24),
@@ -197,6 +210,7 @@ class FollowUpLeadsView(N8NBaseView):
 
         # Cenario 2: no-show detectado (agendamento passou e meeting_attended is null)
         cenario_2_detectado = Prospect.objects.filter(
+            base_filter,
             status__in=['scheduled', 'pre_meeting'],
             meeting_scheduled_at__lt=now - timezone.timedelta(hours=1),
             meeting_attended__isnull=True,
@@ -204,15 +218,11 @@ class FollowUpLeadsView(N8NBaseView):
 
         # Cenario 2: ja marcados como no-show
         cenario_2_marcado = Prospect.objects.filter(
+            base_filter,
             status='no_show',
         ).values_list('id', flat=True)
 
-        # Cenario 3: reuniao realizada mas nao fechou
-        cenario_3 = Prospect.objects.filter(
-            status='not_closed',
-        ).values_list('id', flat=True)
-
-        all_ids = set(cenario_1) | set(cenario_2_detectado) | set(cenario_2_marcado) | set(cenario_3)
+        all_ids = set(cenario_1) | set(cenario_2_detectado) | set(cenario_2_marcado)
         leads = Prospect.objects.filter(id__in=all_ids)
         results = []
 
@@ -224,8 +234,6 @@ class FollowUpLeadsView(N8NBaseView):
                 lead_data['cenario'] = 'detectado_no_show'
             elif lead.id in cenario_2_marcado:
                 lead_data['cenario'] = 'cenario_2_nao_compareceu'
-            elif lead.id in cenario_3:
-                lead_data['cenario'] = 'cenario_3_nao_fechou'
             results.append(lead_data)
 
         return Response({

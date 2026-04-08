@@ -109,6 +109,8 @@ class ProspectSerializer(serializers.ModelSerializer):
             "meeting_transcript",
             # follow-up
             "follow_up_reason",
+            "follow_up_count",
+            "last_follow_up_at",
             # pré-reunião
             "pre_meeting_scenario",
             # última mensagem

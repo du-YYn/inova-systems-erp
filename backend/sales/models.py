@@ -215,6 +215,8 @@ class Prospect(models.Model):
         max_length=20, choices=FOLLOW_UP_REASON_CHOICES, blank=True,
         help_text='Sub-cenário do follow-up: nao_agendou, nao_compareceu, nao_fechou'
     )
+    follow_up_count = models.IntegerField(default=0, help_text='Número de follow-ups realizados')
+    last_follow_up_at = models.DateTimeField(null=True, blank=True, help_text='Data/hora do último follow-up')
 
     # ── Pré-reunião ──────────────────────────────────────────────────────────
     pre_meeting_scenario = models.IntegerField(
