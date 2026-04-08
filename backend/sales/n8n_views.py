@@ -60,10 +60,11 @@ class LeadSearchView(N8NBaseView):
     def get(self, request):
         phone = request.query_params.get('phone', '').strip()
         email = request.query_params.get('email', '').strip()
+        name = request.query_params.get('name', '').strip()
 
-        if not phone and not email:
+        if not phone and not email and not name:
             return Response(
-                {'error': 'Informe phone ou email'},
+                {'error': 'Informe phone, email ou name'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -77,6 +78,12 @@ class LeadSearchView(N8NBaseView):
             filters |= Q(contact_email__iexact=email)
 
         leads = Prospect.objects.filter(filters).order_by('-updated_at')[:10]
+
+        # Fallback: se nao encontrou por phone/email e name foi informado, busca por nome
+        if not leads.exists() and name:
+            leads = Prospect.objects.filter(
+                contact_name__icontains=name.split()[0]
+            ).order_by('-updated_at')[:10]
         data = ProspectSerializer(leads, many=True).data
         return Response({
             'count': len(data),
