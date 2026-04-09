@@ -20,6 +20,7 @@ import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { buildProposalDefaults } from '@/lib/proposalDefaults';
+import { ChatModal } from '@/components/crm/ChatModal';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -436,6 +437,9 @@ export default function FunilTab() {
   const [proposalForm, setProposalForm] = useState(EMPTY_PROPOSAL_FORM);
   const [savingProposal, setSavingProposal] = useState(false);
 
+  // Chat modal
+  const [chatProspect, setChatProspect] = useState<Prospect | null>(null);
+
   // Modal de motivo de perda
   const [lossModalProspect, setLossModalProspect] = useState<Prospect | null>(null);
   const [lossForm, setLossForm] = useState({
@@ -587,7 +591,8 @@ export default function FunilTab() {
       }
       // Escape — close modals
       if (e.key === 'Escape') {
-        if (lossModalProspect) setLossModalProspect(null);
+        if (chatProspect) setChatProspect(null);
+        else if (lossModalProspect) setLossModalProspect(null);
         else if (followUpModalProspect) setFollowUpModalProspect(null);
         else if (showModal) setShowModal(false);
         else if (viewingProspect) setViewingProspect(null);
@@ -595,7 +600,7 @@ export default function FunilTab() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [showModal, lossModalProspect, followUpModalProspect]);
+  }, [showModal, chatProspect, lossModalProspect, followUpModalProspect]);
 
   // ─── Drag-and-drop handlers ──────────────────────────────────────────────
 
@@ -1243,6 +1248,7 @@ export default function FunilTab() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 mt-2 justify-end">
+                      <button onClick={() => setChatProspect(prospect)} className="p-1.5 text-gray-300 hover:text-green-500 rounded-lg" aria-label="Mensagens"><MessageSquare className="w-4 h-4" /></button>
                       <button onClick={() => openEditModal(prospect)} className="p-1.5 text-gray-300 hover:text-accent-gold rounded-lg" aria-label="Editar"><Edit className="w-4 h-4" /></button>
                       <button onClick={() => setConfirmDelete(prospect)} className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg" aria-label="Excluir"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -1362,6 +1368,13 @@ export default function FunilTab() {
                         </td>
                         <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => setChatProspect(prospect)}
+                              className="p-1.5 text-gray-300 hover:text-green-500 transition-colors rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20"
+                              aria-label="Mensagens"
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={() => openEditModal(prospect)}
                               className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5"
@@ -1504,6 +1517,13 @@ export default function FunilTab() {
                             )}
                           </div>
                           <div className="flex items-center gap-0.5">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setChatProspect(prospect); }}
+                              className="p-1 text-gray-300 hover:text-green-500 transition-colors rounded"
+                              aria-label="Mensagens"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               onClick={(e) => { e.stopPropagation(); openEditModal(prospect); }}
                               className="p-1 text-gray-300 hover:text-accent-gold transition-colors rounded"
@@ -1777,6 +1797,21 @@ export default function FunilTab() {
                       placeholder="Resultado da reunião, escopo acordado, expectativas..." />
                   </div>
                 </Section>
+              )}
+
+              {/* ── Chat History ── */}
+              {editingProspect && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowModal(false);
+                    setChatProspect(editingProspect as unknown as Prospect);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors text-sm font-medium"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  Ver Histórico de Mensagens
+                </button>
               )}
 
               {/* ── Actions ── */}
@@ -2787,6 +2822,16 @@ export default function FunilTab() {
           </div>
           </FocusTrap>
         </div>
+      )}
+
+      {/* ─── Chat Modal ─────────────────────────────────────────────────── */}
+      {chatProspect && (
+        <ChatModal
+          prospectId={chatProspect.id}
+          prospectName={chatProspect.contact_name}
+          companyName={chatProspect.company_name}
+          onClose={() => setChatProspect(null)}
+        />
       )}
     </div>
   );

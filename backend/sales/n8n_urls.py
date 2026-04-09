@@ -6,6 +6,7 @@ from .n8n_views import (
     FollowUpLeadsView,
     ProposalCreateView,
     SendEmailView,
+    MessageCreateView,
 )
 
 urlpatterns = [
@@ -15,4 +16,5 @@ urlpatterns = [
     path('leads/follow-up/', FollowUpLeadsView.as_view(), name='n8n-follow-up'),
     path('proposals/create/', ProposalCreateView.as_view(), name='n8n-proposal-create'),
     path('send-email/', SendEmailView.as_view(), name='n8n-send-email'),
+    path('messages/', MessageCreateView.as_view(), name='n8n-message-create'),
 ]

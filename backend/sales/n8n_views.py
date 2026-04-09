@@ -9,8 +9,8 @@ from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Prospect, Proposal, Customer
-from .serializers import ProspectSerializer, ProposalSerializer
+from .models import Prospect, Proposal, Customer, ProspectMessage
+from .serializers import ProspectSerializer, ProposalSerializer, ProspectMessageSerializer
 from .n8n_auth import N8NApiKeyAuthentication
 
 logger = logging.getLogger('sales')
@@ -358,3 +358,50 @@ class SendEmailView(N8NBaseView):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class MessageCreateView(N8NBaseView):
+    """
+    POST /api/v1/sales/n8n/messages/
+    Registra uma mensagem trocada entre a Beatriz (SDR) e o lead.
+    Chamado pelo n8n após cada mensagem enviada/recebida no WhatsApp.
+    """
+
+    def post(self, request):
+        prospect_id = request.data.get('prospect_id')
+        if not prospect_id:
+            return Response(
+                {'error': 'prospect_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            prospect = Prospect.objects.get(pk=prospect_id)
+        except Prospect.DoesNotExist:
+            return Response(
+                {'error': 'Prospect não encontrado'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ProspectMessageSerializer(data={
+            'prospect': prospect.id,
+            'direction': request.data.get('direction'),
+            'content': request.data.get('content', ''),
+            'channel': request.data.get('channel', 'whatsapp'),
+            'sent_at': request.data.get('sent_at'),
+            'metadata': request.data.get('metadata'),
+        })
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        message = serializer.save()
+
+        # Atualizar last_message do prospect para compatibilidade
+        if message.direction == 'inbound':
+            prospect.last_message = message.content[:500]
+            prospect.last_message_at = message.sent_at
+            prospect.save(update_fields=['last_message', 'last_message_at', 'updated_at'])
+
+        logger.info(f"n8n message recorded for prospect {prospect_id}: {message.direction}")
+        return Response(ProspectMessageSerializer(message).data, status=status.HTTP_201_CREATED)

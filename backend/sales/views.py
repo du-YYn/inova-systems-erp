@@ -23,12 +23,12 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
-from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer,
     ProspectActivitySerializer, WinLossReasonSerializer,
-    WebsiteLeadSerializer,
+    WebsiteLeadSerializer, ProspectMessageSerializer,
 )
 
 logger = logging.getLogger('sales')
@@ -394,6 +394,18 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.save()
         logger.info(f"E-book enviado para prospect {prospect.id} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
+
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """GET /api/v1/sales/prospects/{id}/messages/ — histórico de mensagens."""
+        prospect = self.get_object()
+        qs = ProspectMessage.objects.filter(prospect=prospect).order_by('sent_at')
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = ProspectMessageSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = ProspectMessageSerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 @extend_schema(tags=['sales'])

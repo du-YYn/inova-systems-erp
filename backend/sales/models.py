@@ -498,3 +498,33 @@ class WinLossReason(models.Model):
 
     def __str__(self):
         return f"{self.get_result_display()} - {self.prospect.company_name} ({self.get_reason_display()})"
+
+
+class ProspectMessage(models.Model):
+    DIRECTION_CHOICES = [
+        ('inbound', 'Lead → Inova'),
+        ('outbound', 'Inova → Lead'),
+    ]
+    CHANNEL_CHOICES = [
+        ('whatsapp', 'WhatsApp'),
+        ('email', 'E-mail'),
+        ('sms', 'SMS'),
+    ]
+
+    prospect = models.ForeignKey(Prospect, on_delete=models.CASCADE, related_name='messages')
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
+    content = models.TextField()
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='whatsapp')
+    sent_at = models.DateTimeField()
+    metadata = models.JSONField(null=True, blank=True, help_text='Media URLs, wamid, delivery status, etc.')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'prospect_messages'
+        ordering = ['sent_at']
+        indexes = [
+            models.Index(fields=['prospect', 'sent_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_direction_display()} - {self.prospect.company_name} - {self.sent_at}"

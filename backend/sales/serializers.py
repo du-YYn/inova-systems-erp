@@ -1,6 +1,6 @@
 from django.db import transaction
 from rest_framework import serializers
-from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -421,6 +421,21 @@ class WebsiteLeadSerializer(serializers.Serializer):
             created_by=website_user,
         )
         return prospect
+
+
+class ProspectMessageSerializer(serializers.ModelSerializer):
+    content = serializers.CharField(max_length=5000)
+
+    def validate_metadata(self, value):
+        import json
+        if value is not None and len(json.dumps(value)) > 4096:
+            raise serializers.ValidationError('metadata excede 4KB.')
+        return value
+
+    class Meta:
+        model = ProspectMessage
+        fields = ['id', 'prospect', 'direction', 'content', 'channel', 'sent_at', 'metadata', 'created_at']
+        read_only_fields = ['id', 'created_at']
 
 
 class WinLossReasonSerializer(serializers.ModelSerializer):
