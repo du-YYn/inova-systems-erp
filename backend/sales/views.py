@@ -436,14 +436,10 @@ class ProposalViewSet(viewsets.ModelViewSet):
             next_number = f"PROP-{last_seq + 1:05d}"
             proposal = serializer.save(
                 number=next_number,
-                status='sent',
-                sent_at=timezone.now(),
+                status='draft',
                 created_by=self.request.user,
             )
             if proposal.prospect_id:
-                Prospect.objects.filter(pk=proposal.prospect_id).exclude(
-                    status__in=['won', 'lost', 'not_closed'],
-                ).update(status='proposal')
                 log_crm_activity(
                     proposal.prospect, 'proposal_created',
                     f'Proposta #{next_number} — R$ {proposal.total_value}',
@@ -481,8 +477,6 @@ class ProposalViewSet(viewsets.ModelViewSet):
             )
         proposal.status = 'approved'
         proposal.save()
-        if proposal.prospect_id:
-            Prospect.objects.filter(pk=proposal.prospect_id).update(status='won')
 
         # Gerar comissões automaticamente
         self._generate_commissions(proposal, request.user)
@@ -499,32 +493,34 @@ class ProposalViewSet(viewsets.ModelViewSet):
     @staticmethod
     def _generate_commissions(proposal, user):
         """Gera ClientCost de comissão Closer/SDR ao aprovar proposta."""
+        from decimal import Decimal, ROUND_HALF_UP
         from finance.models import ClientCost
 
-        total = float(proposal.total_value or 0)
+        total = proposal.total_value or Decimal('0')
         if total <= 0:
             return
 
         customer = proposal.customer
         if not customer and proposal.prospect_id:
-            # Busca customer vinculado ao prospect
             customer = Customer.objects.filter(
                 company_name=proposal.prospect.company_name
             ).first() if proposal.prospect else None
 
         if not customer:
+            logger.warning(f"Comissão não gerada — proposta #{proposal.number} sem cliente vinculado")
             return
 
         ref_month = timezone.now().date().replace(day=1)
-        CLOSER_PCT = 10  # 10% para Closer
-        SDR_PCT = 5      # 5% para SDR
+        CLOSER_PCT = Decimal('10')
+        SDR_PCT = Decimal('5')
 
         for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
+            value = (total * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             ClientCost.objects.create(
                 customer=customer,
                 cost_category='comercial',
                 description=desc,
-                value=round(total * pct / 100, 2),
+                value=value,
                 reference_month=ref_month,
                 notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
                 created_by=user,
@@ -626,6 +622,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Impede conversão duplicada
+        if Contract.objects.filter(proposal=proposal).exists():
+            return Response(
+                {'error': 'Esta proposta já foi convertida em contrato.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         with transaction.atomic():
             last_contract = Contract.objects.select_for_update().order_by('-id').first()
             if last_contract:
@@ -672,6 +675,15 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 notes=proposal.notes,
                 terms=proposal.terms,
                 created_by=request.user
+            )
+
+        # Log de atividade no CRM
+        if proposal.prospect:
+            log_crm_activity(
+                proposal.prospect,
+                'contract_created',
+                f'Contrato #{next_number} criado a partir da proposta #{proposal.number}',
+                request.user,
             )
 
         logger.info(f"Proposta {proposal.id} convertida em contrato {contract.id} por {request.user.username}")

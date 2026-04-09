@@ -204,8 +204,8 @@ export default function PropostasTab() {
       toast.success(editingProposal ? 'Proposta atualizada!' : 'Proposta criada!');
       setShowModal(false);
       fetchData();
-    } catch {
-      toast.error('Erro ao salvar proposta.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao salvar proposta.');
     } finally {
       setSaving(false);
     }
@@ -222,8 +222,9 @@ export default function PropostasTab() {
       };
       toast.success(labels[action]);
       fetchData();
-    } catch {
-      toast.error('Erro ao executar ação.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao executar ação.';
+      toast.error(message);
     } finally {
       setPerformingAction(null);
     }
@@ -546,7 +547,7 @@ export default function PropostasTab() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelInput}>Valor Total (R$)</label>
-                  <input type="number" step="0.01" value={formData.total_value}
+                  <input type="number" step="0.01" min="0" value={formData.total_value}
                     onChange={(e) => setFormData({ ...formData, total_value: e.target.value })}
                     className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
                 </div>
@@ -557,6 +558,24 @@ export default function PropostasTab() {
                     className="input-field" />
                 </div>
               </div>
+              {(formData.billing_type === 'hourly' || formData.billing_type === 'monthly') && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelInput}>Horas Estimadas</label>
+                    <input type="number" step="0.5" min="0" value={formData.hours_estimated}
+                      onChange={(e) => setFormData({ ...formData, hours_estimated: e.target.value })}
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
+                      placeholder="Ex: 120" />
+                  </div>
+                  <div>
+                    <label className={labelInput}>Valor/Hora (R$)</label>
+                    <input type="number" step="0.01" min="0" value={formData.hourly_rate}
+                      onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
+                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
+                      placeholder="Ex: 150.00" />
+                  </div>
+                </div>
+              )}
               <div>
                 <label className={labelInput}>Observações</label>
                 <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -617,6 +636,55 @@ export default function PropostasTab() {
             </div>
 
             <div className="p-5 space-y-6">
+              {/* ── Detalhes ───────────────────────────── */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Detalhes</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Tipo</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">{proposalTypeLabels[viewingProposal.proposal_type] || viewingProposal.proposal_type}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Cobrança</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                      {{ fixed: 'Valor Fixo', hourly: 'Por Hora', monthly: 'Mensal', milestone: 'Por Marco' }[viewingProposal.billing_type] || viewingProposal.billing_type}
+                    </p>
+                  </div>
+                  {viewingProposal.valid_until && (
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Validade</p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                        {new Date(viewingProposal.valid_until + 'T00:00:00').toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                  )}
+                  {(viewingProposal.hours_estimated && Number(viewingProposal.hours_estimated) > 0) && (
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Horas Estimadas</p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5"><Sensitive>{viewingProposal.hours_estimated}h</Sensitive></p>
+                    </div>
+                  )}
+                  {(viewingProposal.hourly_rate && Number(viewingProposal.hourly_rate) > 0) && (
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Valor/Hora</p>
+                      <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5"><Sensitive>{formatCurrency(viewingProposal.hourly_rate)}</Sensitive></p>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Criado em</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
+                      {new Date(viewingProposal.created_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+                {viewingProposal.notes && (
+                  <div className="mt-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Observações</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-line"><Sensitive>{viewingProposal.notes}</Sensitive></p>
+                  </div>
+                )}
+              </div>
+
               {/* ── Tracking ────────────────────────────── */}
               <div>
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Tracking</p>
@@ -729,24 +797,45 @@ export default function PropostasTab() {
               <div>
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Ações</p>
                 <div className="space-y-2">
-                  {viewingProposal.status === 'sent' && (
-                    <button onClick={() => { handleAction(viewingProposal, 'approve'); setViewingProposal(null); }} disabled={!!performingAction}
+                  {viewingProposal.status === 'draft' && (
+                    <button onClick={() => { handleAction(viewingProposal, 'send'); setViewingProposal(null); }}
+                      disabled={performingAction === `${viewingProposal.id}-send`}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                      <Send className="w-4 h-4" /> Enviar Proposta
+                    </button>
+                  )}
+                  {['sent', 'viewed', 'negotiation'].includes(viewingProposal.status) && (
+                    <button onClick={() => { handleAction(viewingProposal, 'approve'); setViewingProposal(null); }}
+                      disabled={performingAction === `${viewingProposal.id}-approve`}
                       className="w-full flex items-center justify-center gap-2 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
                       <ThumbsUp className="w-4 h-4" /> Aprovar Proposta
                     </button>
                   )}
-                  {viewingProposal.status === 'sent' && (
-                    <button onClick={() => { handleAction(viewingProposal, 'reject'); setViewingProposal(null); }} disabled={!!performingAction}
+                  {['sent', 'viewed', 'negotiation'].includes(viewingProposal.status) && (
+                    <button onClick={() => { handleAction(viewingProposal, 'reject'); setViewingProposal(null); }}
+                      disabled={performingAction === `${viewingProposal.id}-reject`}
                       className="w-full flex items-center justify-center gap-2 py-2 border border-red-200 text-red-500 rounded-lg text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors">
                       <ThumbsDown className="w-4 h-4" /> Rejeitar
                     </button>
                   )}
                   {viewingProposal.status === 'approved' && (
-                    <button onClick={() => { handleAction(viewingProposal, 'convert_to_contract'); setViewingProposal(null); }} disabled={!!performingAction}
+                    <button onClick={() => { handleAction(viewingProposal, 'convert_to_contract'); setViewingProposal(null); }}
+                      disabled={performingAction === `${viewingProposal.id}-convert_to_contract`}
                       className="w-full flex items-center justify-center gap-2 py-2 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark disabled:opacity-50 transition-colors">
                       <ArrowRight className="w-4 h-4" /> Converter em Contrato
                     </button>
                   )}
+                  {/* Editar / Excluir */}
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => { openEditModal(viewingProposal); setViewingProposal(null); }}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                      <Edit className="w-4 h-4" /> Editar
+                    </button>
+                    <button onClick={() => { setConfirmDelete(viewingProposal); setViewingProposal(null); }}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 border border-red-200 dark:border-red-800 text-red-500 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                      <Trash2 className="w-4 h-4" /> Excluir
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
