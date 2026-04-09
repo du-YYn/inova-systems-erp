@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import api, { ApiError } from '@/lib/api';
+import AnimatedCharacters from '@/components/ui/AnimatedCharacters';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [formData, setFormData] = useState({ username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -15,6 +14,7 @@ export default function LoginPage() {
   const [tempToken, setTempToken] = useState('');
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [isFocused, setIsFocused] = useState({ username: false, password: false });
+  const [isTyping, setIsTyping] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,60 +71,51 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-black">
-        
-        {/* Tech circuit pattern - very transparent */}
-        <div className="absolute inset-0 opacity-15" 
-          style={{ 
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Cg fill='none' stroke='%23A6864A' stroke-width='0.5'%3E%3Cpath d='M10 10h80v80H10z'/%3E%3Cpath d='M10 30h20M10 50h30M10 70h40'/%3E%3Cpath d='M30 10v20M50 10v30M70 10v40M90 10v50'/%3E%3Cpath d='M20 90h60M40 80h40M60 70h20'/%3E%3Ccircle cx='30' cy='30' r='3' fill='%23A6864A'/%3E%3Ccircle cx='50' cy='50' r='2' fill='%23A6864A'/%3E%3Ccircle cx='70' cy='70' r='3' fill='%23A6864A'/%3E%3Ccircle cx='90' cy='30' r='2' fill='%23A6864A'/%3E%3Ccircle cx='20' cy='80' r='2' fill='%23A6864A'/%3E%3C/g%3E%3C/svg%3E")`,
-            backgroundSize: '100px 100px',
-          }} 
+        {/* Grid pattern de fundo */}
+        <div className="absolute inset-0"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0)', backgroundSize: '40px 40px' }}
         />
-        
-        {/* Binary code rain effect - very transparent */}
-        <div className="absolute inset-0 overflow-hidden opacity-10">
-          <div className="absolute top-0 left-10 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '3s' }}>
-            10101010101010101010<br/>01101001011010100101<br/>10110100110101011010
-          </div>
-          <div className="absolute top-20 right-20 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '4s', animationDelay: '1s' }}>
-            01011010110101101010<br/>10100110101101010011<br/>01101011010110101101
-          </div>
-          <div className="absolute bottom-40 left-20 text-xs font-mono text-accent-gold whitespace-nowrap" style={{ animationDuration: '3.5s', animationDelay: '0.5s' }}>
-            11010110010101101001<br/>01101011010110100101<br/>10101010110101101010
-          </div>
-        </div>
-        
-        <div className="relative z-10 flex flex-col justify-center items-center w-full p-12 text-white">
-          <div className="mb-8 group text-left">
+
+        {/* Glow decorativo */}
+        <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-accent-gold/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-accent-gold/5 rounded-full blur-3xl" />
+
+        <div className="relative z-10 flex flex-col justify-between w-full p-12 text-white">
+          {/* Logo topo */}
+          <div className="group text-left">
             <div>
-              <span className="text-5xl font-bold text-accent-gold tracking-tighter group-hover:text-[#B8965A] transition-colors">Inova.</span>
+              <span className="text-5xl font-bold text-accent-gold tracking-tighter group-hover:text-accent-gold-light transition-colors">Inova.</span>
             </div>
             <div className="-mt-1">
-              <span className="text-sm font-light text-gray-400 dark:text-gray-500 tracking-[0.15em] uppercase">Systems Solutions</span>
+              <span className="text-sm font-light text-gray-400 tracking-[0.15em] uppercase">Systems Solutions</span>
             </div>
           </div>
-          <div className="text-center">
-            <p className="text-xl text-slate-300 max-w-md">
-              Sistema completo de gestão empresarial da Inova
-            </p>
+
+          {/* Personagens animados — centro */}
+          <div className="flex items-end justify-center">
+            <AnimatedCharacters
+              isTyping={isTyping}
+              isPasswordVisible={showPassword}
+              hasPassword={formData.password.length > 0}
+            />
           </div>
-          <div className="mt-12 flex flex-wrap justify-center items-center gap-6 text-center">
+
+          {/* Links rodapé */}
+          <div className="flex flex-wrap justify-center items-center gap-6 text-center">
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full" />
               <span className="text-sm">Gestão Comercial e Vendas</span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full" />
               <span className="text-sm">Controle Financeiro</span>
             </div>
             <div className="flex items-center gap-2 text-slate-400">
-              <div className="w-2 h-2 bg-accent-gold rounded-full"></div>
+              <div className="w-2 h-2 bg-accent-gold rounded-full" />
               <span className="text-sm">Gestão de Projetos</span>
             </div>
           </div>
         </div>
-        <div className="absolute inset-0 bg-grid-white/5" 
-          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.1) 1px, transparent 0)', backgroundSize: '40px 40px' }} 
-        />
       </div>
 
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-200">
@@ -174,8 +165,8 @@ export default function LoginPage() {
                       type="text"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      onFocus={() => setIsFocused({ ...isFocused, username: true })}
-                      onBlur={() => setIsFocused({ ...isFocused, username: false })}
+                      onFocus={() => { setIsFocused({ ...isFocused, username: true }); setIsTyping(true); }}
+                      onBlur={() => { setIsFocused({ ...isFocused, username: false }); setIsTyping(false); }}
                       className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
                         isFocused.username 
                           ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
@@ -199,8 +190,8 @@ export default function LoginPage() {
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      onFocus={() => setIsFocused({ ...isFocused, password: true })}
-                      onBlur={() => setIsFocused({ ...isFocused, password: false })}
+                      onFocus={() => { setIsFocused({ ...isFocused, password: true }); setIsTyping(true); }}
+                      onBlur={() => { setIsFocused({ ...isFocused, password: false }); setIsTyping(false); }}
                       className={`w-full pl-12 pr-14 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
                         isFocused.password 
                           ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
