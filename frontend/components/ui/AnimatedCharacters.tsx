@@ -163,16 +163,21 @@ interface AnimatedCharactersProps {
   isTyping?: boolean;
   isPasswordVisible?: boolean;
   hasPassword?: boolean;
+  /** Incrementar para disparar animação de medo + headshake */
+  errorTrigger?: number;
 }
 
 export default function AnimatedCharacters({
   isTyping = false,
   isPasswordVisible = false,
   hasPassword = false,
+  errorTrigger = 0,
 }: AnimatedCharactersProps) {
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
   const [lookingAtEachOther, setLookingAtEachOther] = useState(false);
   const [peeking, setPeeking] = useState(false);
+  const [scared, setScared] = useState(false);
+  const [headShake, setHeadShake] = useState(false);
 
   const goldRef = useRef<HTMLDivElement>(null);
   const darkRef = useRef<HTMLDivElement>(null);
@@ -200,6 +205,16 @@ export default function AnimatedCharacters({
     }
     setLookingAtEachOther(false);
   }, [isTyping]);
+
+  // Reação de medo + balança cabeça quando erro
+  useEffect(() => {
+    if (errorTrigger === 0) return;
+    setScared(true);
+    setHeadShake(true);
+    const shakeEnd = setTimeout(() => setHeadShake(false), 1200);
+    const scaredEnd = setTimeout(() => setScared(false), 2500);
+    return () => { clearTimeout(shakeEnd); clearTimeout(scaredEnd); };
+  }, [errorTrigger]);
 
   // Gold espia quando senha visível
   useEffect(() => {
@@ -245,8 +260,46 @@ export default function AnimatedCharacters({
   const WARM   = '#8B6F3D';
   const PUPIL  = '#1A1A2E';
 
+  /* ── Helpers de estado assustado ── */
+  // Olhos arregalados: pupilas menores, olham pra frente/baixo
+  const scaredLookX = 0;
+  const scaredLookY = 5;
+
+  // Resolve forceLook considerando scared > showing > lookingAtEachOther > mouse
+  const goldEyeX = scared ? scaredLookX : showing ? (peeking ? 4 : -4) : lookingAtEachOther ? 3 : undefined;
+  const goldEyeY = scared ? scaredLookY : showing ? (peeking ? 5 : -4) : lookingAtEachOther ? 4 : undefined;
+  const darkEyeX = scared ? scaredLookX : showing ? -4 : lookingAtEachOther ? 0 : undefined;
+  const darkEyeY = scared ? scaredLookY : showing ? -4 : lookingAtEachOther ? -4 : undefined;
+  const frontEyeX = scared ? scaredLookX : showing ? -5 : undefined;
+  const frontEyeY = scared ? scaredLookY : showing ? -4 : undefined;
+
   return (
-    <div className="relative" style={{ width: 550, height: 400 }}>
+    <>
+      {/* Keyframe do headshake injetado uma vez */}
+      <style>{`
+        @keyframes headShakeNo {
+          0%   { transform: translateX(0); }
+          10%  { transform: translateX(-8px) rotate(-2deg); }
+          20%  { transform: translateX(8px) rotate(2deg); }
+          30%  { transform: translateX(-8px) rotate(-2deg); }
+          40%  { transform: translateX(8px) rotate(2deg); }
+          50%  { transform: translateX(-6px) rotate(-1deg); }
+          60%  { transform: translateX(6px) rotate(1deg); }
+          70%  { transform: translateX(-4px); }
+          80%  { transform: translateX(4px); }
+          90%  { transform: translateX(-2px); }
+          100% { transform: translateX(0); }
+        }
+      `}</style>
+
+      <div
+        className="relative"
+        style={{
+          width: 550,
+          height: 400,
+          animation: headShake ? 'headShakeNo 1.2s ease-in-out' : 'none',
+        }}
+      >
 
       {/* ── Personagem 1: Gold (alto, traseiro) ── */}
       <div
@@ -255,34 +308,36 @@ export default function AnimatedCharacters({
         style={{
           left: 70,
           width: 180,
-          height: (isTyping || hiding) ? 440 : 400,
+          height: scared ? 370 : (isTyping || hiding) ? 440 : 400,
           backgroundColor: GOLD,
           borderRadius: '10px 10px 0 0',
           zIndex: 1,
-          transform: showing
+          transform: scared
             ? 'skewX(0deg)'
-            : (isTyping || hiding)
-              ? `skewX(${(gold.skew || 0) - 12}deg) translateX(40px)`
-              : `skewX(${gold.skew || 0}deg)`,
+            : showing
+              ? 'skewX(0deg)'
+              : (isTyping || hiding)
+                ? `skewX(${(gold.skew || 0) - 12}deg) translateX(40px)`
+                : `skewX(${gold.skew || 0}deg)`,
           transformOrigin: 'bottom center',
         }}
       >
         <div
           className="absolute flex gap-8 transition-all duration-700 ease-in-out"
           style={{
-            left: showing ? 20 : lookingAtEachOther ? 55 : 45 + gold.fX,
-            top: showing ? 35 : lookingAtEachOther ? 65 : 40 + gold.fY,
+            left: scared ? 40 : showing ? 20 : lookingAtEachOther ? 55 : 45 + gold.fX,
+            top: scared ? 30 : showing ? 35 : lookingAtEachOther ? 65 : 40 + gold.fY,
           }}
         >
-          <EyeBall size={18} pupilSize={7} maxDistance={5} pupilColor={PUPIL}
-            isBlinking={goldBlink}
-            forceLookX={showing ? (peeking ? 4 : -4) : lookingAtEachOther ? 3 : undefined}
-            forceLookY={showing ? (peeking ? 5 : -4) : lookingAtEachOther ? 4 : undefined}
+          <EyeBall size={scared ? 24 : 18} pupilSize={scared ? 5 : 7} maxDistance={5} pupilColor={PUPIL}
+            isBlinking={scared ? false : goldBlink}
+            forceLookX={goldEyeX}
+            forceLookY={goldEyeY}
           />
-          <EyeBall size={18} pupilSize={7} maxDistance={5} pupilColor={PUPIL}
-            isBlinking={goldBlink}
-            forceLookX={showing ? (peeking ? 4 : -4) : lookingAtEachOther ? 3 : undefined}
-            forceLookY={showing ? (peeking ? 5 : -4) : lookingAtEachOther ? 4 : undefined}
+          <EyeBall size={scared ? 24 : 18} pupilSize={scared ? 5 : 7} maxDistance={5} pupilColor={PUPIL}
+            isBlinking={scared ? false : goldBlink}
+            forceLookX={goldEyeX}
+            forceLookY={goldEyeY}
           />
         </div>
       </div>
@@ -294,36 +349,38 @@ export default function AnimatedCharacters({
         style={{
           left: 240,
           width: 120,
-          height: 310,
+          height: scared ? 280 : 310,
           backgroundColor: DARK,
           borderRadius: '8px 8px 0 0',
           zIndex: 2,
-          transform: showing
+          transform: scared
             ? 'skewX(0deg)'
-            : lookingAtEachOther
-              ? `skewX(${(dark.skew || 0) * 1.5 + 10}deg) translateX(20px)`
-              : (isTyping || hiding)
-                ? `skewX(${(dark.skew || 0) * 1.5}deg)`
-                : `skewX(${dark.skew || 0}deg)`,
+            : showing
+              ? 'skewX(0deg)'
+              : lookingAtEachOther
+                ? `skewX(${(dark.skew || 0) * 1.5 + 10}deg) translateX(20px)`
+                : (isTyping || hiding)
+                  ? `skewX(${(dark.skew || 0) * 1.5}deg)`
+                  : `skewX(${dark.skew || 0}deg)`,
           transformOrigin: 'bottom center',
         }}
       >
         <div
           className="absolute flex gap-6 transition-all duration-700 ease-in-out"
           style={{
-            left: showing ? 10 : lookingAtEachOther ? 32 : 26 + dark.fX,
-            top: showing ? 28 : lookingAtEachOther ? 12 : 32 + dark.fY,
+            left: scared ? 18 : showing ? 10 : lookingAtEachOther ? 32 : 26 + dark.fX,
+            top: scared ? 22 : showing ? 28 : lookingAtEachOther ? 12 : 32 + dark.fY,
           }}
         >
-          <EyeBall size={16} pupilSize={6} maxDistance={4} pupilColor={PUPIL}
-            isBlinking={darkBlink}
-            forceLookX={showing ? -4 : lookingAtEachOther ? 0 : undefined}
-            forceLookY={showing ? -4 : lookingAtEachOther ? -4 : undefined}
+          <EyeBall size={scared ? 22 : 16} pupilSize={scared ? 4 : 6} maxDistance={4} pupilColor={PUPIL}
+            isBlinking={scared ? false : darkBlink}
+            forceLookX={darkEyeX}
+            forceLookY={darkEyeY}
           />
-          <EyeBall size={16} pupilSize={6} maxDistance={4} pupilColor={PUPIL}
-            isBlinking={darkBlink}
-            forceLookX={showing ? -4 : lookingAtEachOther ? 0 : undefined}
-            forceLookY={showing ? -4 : lookingAtEachOther ? -4 : undefined}
+          <EyeBall size={scared ? 22 : 16} pupilSize={scared ? 4 : 6} maxDistance={4} pupilColor={PUPIL}
+            isBlinking={scared ? false : darkBlink}
+            forceLookX={darkEyeX}
+            forceLookY={darkEyeY}
           />
         </div>
       </div>
@@ -335,23 +392,23 @@ export default function AnimatedCharacters({
         style={{
           left: 0,
           width: 240,
-          height: 200,
+          height: scared ? 180 : 200,
           backgroundColor: LIGHT,
           borderRadius: '120px 120px 0 0',
           zIndex: 3,
-          transform: showing ? 'skewX(0deg)' : `skewX(${light.skew || 0}deg)`,
+          transform: scared ? 'skewX(0deg)' : showing ? 'skewX(0deg)' : `skewX(${light.skew || 0}deg)`,
           transformOrigin: 'bottom center',
         }}
       >
         <div
           className="absolute flex gap-8 transition-all duration-200 ease-out"
           style={{
-            left: showing ? 50 : 82 + light.fX,
-            top: showing ? 85 : 90 + light.fY,
+            left: scared ? 75 : showing ? 50 : 82 + light.fX,
+            top: scared ? 75 : showing ? 85 : 90 + light.fY,
           }}
         >
-          <Pupil size={12} maxDistance={5} color={PUPIL} forceLookX={showing ? -5 : undefined} forceLookY={showing ? -4 : undefined} />
-          <Pupil size={12} maxDistance={5} color={PUPIL} forceLookX={showing ? -5 : undefined} forceLookY={showing ? -4 : undefined} />
+          <Pupil size={scared ? 15 : 12} maxDistance={5} color={PUPIL} forceLookX={frontEyeX} forceLookY={frontEyeY} />
+          <Pupil size={scared ? 15 : 12} maxDistance={5} color={PUPIL} forceLookX={frontEyeX} forceLookY={frontEyeY} />
         </div>
       </div>
 
@@ -362,34 +419,48 @@ export default function AnimatedCharacters({
         style={{
           left: 310,
           width: 140,
-          height: 230,
+          height: scared ? 210 : 230,
           backgroundColor: WARM,
           borderRadius: '70px 70px 0 0',
           zIndex: 4,
-          transform: showing ? 'skewX(0deg)' : `skewX(${warm.skew || 0}deg)`,
+          transform: scared ? 'skewX(0deg)' : showing ? 'skewX(0deg)' : `skewX(${warm.skew || 0}deg)`,
           transformOrigin: 'bottom center',
         }}
       >
         <div
           className="absolute flex gap-6 transition-all duration-200 ease-out"
           style={{
-            left: showing ? 20 : 52 + warm.fX,
-            top: showing ? 35 : 40 + warm.fY,
+            left: scared ? 38 : showing ? 20 : 52 + warm.fX,
+            top: scared ? 28 : showing ? 35 : 40 + warm.fY,
           }}
         >
-          <Pupil size={12} maxDistance={5} color={PUPIL} forceLookX={showing ? -5 : undefined} forceLookY={showing ? -4 : undefined} />
-          <Pupil size={12} maxDistance={5} color={PUPIL} forceLookX={showing ? -5 : undefined} forceLookY={showing ? -4 : undefined} />
+          <Pupil size={scared ? 15 : 12} maxDistance={5} color={PUPIL} forceLookX={frontEyeX} forceLookY={frontEyeY} />
+          <Pupil size={scared ? 15 : 12} maxDistance={5} color={PUPIL} forceLookX={frontEyeX} forceLookY={frontEyeY} />
         </div>
-        {/* Boca */}
-        <div
-          className="absolute w-20 h-[4px] rounded-full transition-all duration-200 ease-out"
-          style={{
-            backgroundColor: PUPIL,
-            left: showing ? 10 : 40 + warm.fX,
-            top: showing ? 88 : 88 + warm.fY,
-          }}
-        />
+        {/* Boca — vira "O" de surpresa quando assustado */}
+        {scared ? (
+          <div
+            className="absolute rounded-full border-2 transition-all duration-300"
+            style={{
+              borderColor: PUPIL,
+              width: 18,
+              height: 18,
+              left: 58 + warm.fX,
+              top: 82 + warm.fY,
+            }}
+          />
+        ) : (
+          <div
+            className="absolute w-20 h-[4px] rounded-full transition-all duration-200 ease-out"
+            style={{
+              backgroundColor: PUPIL,
+              left: showing ? 10 : 40 + warm.fX,
+              top: showing ? 88 : 88 + warm.fY,
+            }}
+          />
+        )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

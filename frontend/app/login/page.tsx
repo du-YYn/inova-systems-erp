@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [isFocused, setIsFocused] = useState({ username: false, password: false });
   const [isTyping, setIsTyping] = useState(false);
+  const [errorCount, setErrorCount] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +35,7 @@ export default function LoginPage() {
         } catch (err) {
           const message = err instanceof ApiError ? (err.data as { error?: string })?.error || err.message : 'Código inválido';
           setError(message);
+          setErrorCount(c => c + 1);
           setLoading(false);
           return;
         }
@@ -58,11 +60,13 @@ export default function LoginPage() {
       } catch (err) {
         const message = err instanceof ApiError ? (err.data as { error?: string })?.error || err.message : 'Credenciais inválidas';
         setError(message);
+        setErrorCount(c => c + 1);
         setLoading(false);
         return;
       }
     } catch {
       setError('Erro de conexão. Tente novamente.');
+      setErrorCount(c => c + 1);
     }
 
     setLoading(false);
@@ -97,6 +101,7 @@ export default function LoginPage() {
               isTyping={isTyping}
               isPasswordVisible={showPassword}
               hasPassword={formData.password.length > 0}
+              errorTrigger={errorCount}
             />
           </div>
 
