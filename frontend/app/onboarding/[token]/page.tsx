@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { isValidCPF, isValidCNPJ, formatCPF, formatCNPJ, formatCEP } from '@/lib/validators';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
 interface OnboardingData {
   public_token: string;
   status: string;
@@ -89,7 +91,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch(`/api/onboarding/${token}`);
+        const res = await fetch(`${API_URL}/sales/onboarding/public/${token}/`);
         if (res.status === 404) {
           setError('Formulário não encontrado.');
           setLoading(false);
@@ -208,7 +210,7 @@ export default function OnboardingPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/onboarding/${token}`, {
+      const res = await fetch(`${API_URL}/sales/onboarding/public/${token}/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
