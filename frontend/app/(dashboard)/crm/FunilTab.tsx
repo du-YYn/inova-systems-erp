@@ -21,6 +21,7 @@ import { useDemoMode } from '@/components/ui/DemoContext';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import { buildProposalDefaults } from '@/lib/proposalDefaults';
 import { ChatModal } from '@/components/crm/ChatModal';
+import OnboardingLinkSection from '@/components/crm/OnboardingLinkSection';
 import api from '@/lib/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -1902,6 +1903,13 @@ export default function FunilTab() {
 
             {/* ── Conteúdo rolável ─────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* Cadastro do Cliente (Onboarding) — banner no topo para leads fechados */}
+              {(viewingProspect.status === 'won' || viewingProspect.status === 'production') && (
+                <section>
+                  <OnboardingLinkSection prospectId={viewingProspect.id} />
+                </section>
+              )}
 
               {/* Tipo de Projeto */}
               {Array.isArray(viewingProspect.service_interest) && viewingProspect.service_interest.length > 0 && (

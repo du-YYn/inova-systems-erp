@@ -1,11 +1,13 @@
-"""View pública para visualização de propostas — sem autenticação."""
+"""Views públicas — sem autenticação."""
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
 from django.http import HttpResponse
-from .models import Proposal, ProposalView
+from django.utils import timezone
+from .models import Proposal, ProposalView, ClientOnboarding
+from .serializers import ClientOnboardingPublicSerializer
 
 
 class ProposalPublicThrottle(AnonRateThrottle):
@@ -105,3 +107,101 @@ class ProposalPublicHTMLView(APIView):
         response['Cache-Control'] = 'no-store, no-cache'
         response['X-Robots-Tag'] = 'noindex, nofollow'
         return response
+
+
+# ── Client Onboarding ────────────────────────────────────────────────────────
+
+class OnboardingPublicThrottle(AnonRateThrottle):
+    rate = '30/hour'
+
+
+class ClientOnboardingPublicView(APIView):
+    """Formulário público de cadastro: GET carrega dados, POST submete."""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [OnboardingPublicThrottle]
+
+    def get(self, request, token):
+        try:
+            onboarding = ClientOnboarding.objects.select_related(
+                'prospect'
+            ).get(public_token=token)
+        except ClientOnboarding.DoesNotExist:
+            return Response(
+                {'error': 'Formulário não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = ClientOnboardingPublicSerializer(onboarding)
+        return Response(serializer.data)
+
+    def post(self, request, token):
+        try:
+            onboarding = ClientOnboarding.objects.select_related(
+                'prospect'
+            ).get(public_token=token)
+        except ClientOnboarding.DoesNotExist:
+            return Response(
+                {'error': 'Formulário não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if onboarding.status != 'pending':
+            return Response(
+                {'error': 'Este formulário já foi preenchido.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ClientOnboardingPublicSerializer(
+            onboarding, data=request.data, partial=False,
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        ip = request.META.get(
+            'HTTP_X_FORWARDED_FOR', request.META.get('REMOTE_ADDR', '')
+        )
+        if ip and ',' in ip:
+            ip = ip.split(',')[0].strip()
+
+        serializer.save(
+            status='submitted',
+            submitted_at=timezone.now(),
+            ip_address=ip or None,
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+        )
+
+        # Notificar equipe
+        self._notify_team(onboarding)
+
+        return Response(
+            {'success': True, 'message': 'Dados recebidos com sucesso!'},
+            status=status.HTTP_200_OK,
+        )
+
+    @staticmethod
+    def _notify_team(onboarding):
+        """Cria notificações para a equipe sobre o preenchimento."""
+        try:
+            from notifications.models import Notification
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+
+            recipients = User.objects.filter(
+                role__in=['admin', 'manager'], is_active=True,
+            )
+            if onboarding.prospect.assigned_to_id:
+                recipients = recipients | User.objects.filter(
+                    id=onboarding.prospect.assigned_to_id,
+                )
+
+            for user in recipients.distinct():
+                Notification.objects.create(
+                    user=user,
+                    notification_type='general',
+                    title=f'Cadastro recebido — {onboarding.prospect.company_name}',
+                    message=f'{onboarding.rep_full_name} preencheu o formulário de cadastro.',
+                    object_type='onboarding',
+                    object_id=onboarding.id,
+                )
+        except Exception:
+            pass

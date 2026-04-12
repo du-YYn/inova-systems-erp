@@ -309,6 +309,10 @@ export default function ContratosTab() {
   const [editForm, setEditForm] = useState<FormData>({ ...EMPTY_FORM });
   const [updating, setUpdating] = useState(false);
 
+  // Onboarding data linked to contract
+  const [onboardingData, setOnboardingData] = useState<Record<string, string> | null>(null);
+  const [onboardingExpanded, setOnboardingExpanded] = useState(false);
+
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -479,6 +483,12 @@ export default function ContratosTab() {
       terms: c.terms || '',
     });
     setEditingContract(c);
+    // Fetch onboarding data linked to this contract
+    setOnboardingData(null);
+    setOnboardingExpanded(false);
+    api.get<Record<string, string>>(`/sales/contracts/${c.id}/onboarding-data/`).then(data => {
+      setOnboardingData(data);
+    }).catch(() => { /* no onboarding linked */ });
   };
 
   // ── Update ───────────────────────────────────────────────────────────────
@@ -811,6 +821,44 @@ export default function ContratosTab() {
               </div>
               <form onSubmit={handleUpdate}>
                 <ContractForm {...formProps(editForm, setEditForm, true)} />
+
+                {/* Onboarding data section */}
+                {onboardingData && (
+                  <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOnboardingExpanded(v => !v)}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <span>Dados do Cadastro (Onboarding)</span>
+                      <span className={`transform transition-transform ${onboardingExpanded ? 'rotate-180' : ''}`}>▾</span>
+                    </button>
+                    {onboardingExpanded && (
+                      <div className="px-4 pb-4 text-xs space-y-3 border-t border-gray-100 dark:border-gray-700 pt-3">
+                        <div>
+                          <p className="font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Empresa</p>
+                          <p className="text-gray-900 dark:text-gray-200">{onboardingData.company_legal_name} — CNPJ: {onboardingData.company_cnpj}</p>
+                          <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                            {onboardingData.company_street}, {onboardingData.company_number}
+                            {onboardingData.company_complement ? ` - ${onboardingData.company_complement}` : ''},
+                            {' '}{onboardingData.company_neighborhood}, {onboardingData.company_city}/{onboardingData.company_state} — CEP {onboardingData.company_cep}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Representante Legal</p>
+                          <p className="text-gray-900 dark:text-gray-200">{onboardingData.rep_full_name} — CPF: {onboardingData.rep_cpf}</p>
+                          <p className="text-gray-600 dark:text-gray-400 mt-0.5">{onboardingData.rep_profession} — {onboardingData.rep_marital_status}</p>
+                          <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+                            {onboardingData.rep_street}, {onboardingData.rep_number}
+                            {onboardingData.rep_complement ? ` - ${onboardingData.rep_complement}` : ''},
+                            {' '}{onboardingData.rep_neighborhood}, {onboardingData.rep_city}/{onboardingData.rep_state} — CEP {onboardingData.rep_cep}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex gap-3 pt-6 mt-2">
                   <button type="button" onClick={() => { setEditingContract(null); setShowQuickCreate(false); setQuickCreateName(''); }}
                     className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">

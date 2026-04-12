@@ -130,3 +130,58 @@ def validate_template_phases(value):
             raise ValidationError(
                 f'Fase #{i + 1} possui campos inválidos: {", ".join(invalid_keys)}'
             )
+
+
+# ── Validadores de documentos brasileiros ────────────────────────────────────
+
+def validate_cpf(value):
+    """Valida número de CPF brasileiro."""
+    import re
+    cleaned = re.sub(r'\D', '', value)
+    if len(cleaned) != 11:
+        raise ValidationError('CPF deve conter 11 dígitos.')
+    if len(set(cleaned)) == 1:
+        raise ValidationError('CPF inválido.')
+
+    # Primeiro dígito verificador
+    total = sum(int(cleaned[i]) * (10 - i) for i in range(9))
+    rest = (total * 10) % 11
+    if rest in (10, 11):
+        rest = 0
+    if rest != int(cleaned[9]):
+        raise ValidationError('CPF inválido.')
+
+    # Segundo dígito verificador
+    total = sum(int(cleaned[i]) * (11 - i) for i in range(10))
+    rest = (total * 10) % 11
+    if rest in (10, 11):
+        rest = 0
+    if rest != int(cleaned[10]):
+        raise ValidationError('CPF inválido.')
+
+
+def validate_cnpj(value):
+    """Valida número de CNPJ brasileiro."""
+    import re
+    cleaned = re.sub(r'\D', '', value)
+    if len(cleaned) != 14:
+        raise ValidationError('CNPJ deve conter 14 dígitos.')
+    if len(set(cleaned)) == 1:
+        raise ValidationError('CNPJ inválido.')
+
+    weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+
+    # Primeiro dígito verificador
+    total = sum(int(cleaned[i]) * weights1[i] for i in range(12))
+    rest = total % 11
+    digit1 = 0 if rest < 2 else 11 - rest
+    if int(cleaned[12]) != digit1:
+        raise ValidationError('CNPJ inválido.')
+
+    # Segundo dígito verificador
+    total = sum(int(cleaned[i]) * weights2[i] for i in range(13))
+    rest = total % 11
+    digit2 = 0 if rest < 2 else 11 - rest
+    if int(cleaned[13]) != digit2:
+        raise ValidationError('CNPJ inválido.')

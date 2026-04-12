@@ -1,6 +1,10 @@
 from django.db import transaction
 from rest_framework import serializers
-from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage
+from core.validators import validate_cpf, validate_cnpj
+from .models import (
+    Customer, Prospect, Proposal, Contract, ProspectActivity,
+    WinLossReason, ProspectMessage, ClientOnboarding,
+)
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -452,3 +456,107 @@ class WinLossReasonSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+
+# ── Client Onboarding ────────────────────────────────────────────────────────
+
+class ClientOnboardingPublicSerializer(serializers.ModelSerializer):
+    """Serializer público para o formulário de cadastro do cliente."""
+    prospect_company_name = serializers.CharField(
+        source='prospect.company_name', read_only=True,
+    )
+
+    class Meta:
+        model = ClientOnboarding
+        fields = [
+            'public_token', 'status', 'prospect_company_name',
+            # empresa
+            'company_legal_name', 'company_cnpj',
+            'company_street', 'company_number', 'company_complement',
+            'company_neighborhood', 'company_city', 'company_state', 'company_cep',
+            # representante
+            'rep_full_name', 'rep_marital_status', 'rep_profession', 'rep_cpf',
+            'rep_street', 'rep_number', 'rep_complement',
+            'rep_neighborhood', 'rep_city', 'rep_state', 'rep_cep',
+        ]
+        read_only_fields = ['public_token', 'status', 'prospect_company_name']
+
+    def validate_company_cnpj(self, value):
+        if value:
+            validate_cnpj(value)
+        return value
+
+    def validate_rep_cpf(self, value):
+        if value:
+            validate_cpf(value)
+        return value
+
+    def validate(self, attrs):
+        required_fields = {
+            'company_legal_name': 'Razão Social',
+            'company_cnpj': 'CNPJ',
+            'company_street': 'Rua da empresa',
+            'company_number': 'Número da empresa',
+            'company_neighborhood': 'Bairro da empresa',
+            'company_city': 'Cidade da empresa',
+            'company_state': 'Estado da empresa',
+            'company_cep': 'CEP da empresa',
+            'rep_full_name': 'Nome do representante',
+            'rep_marital_status': 'Estado civil',
+            'rep_profession': 'Profissão',
+            'rep_cpf': 'CPF do representante',
+            'rep_street': 'Rua do representante',
+            'rep_number': 'Número do representante',
+            'rep_neighborhood': 'Bairro do representante',
+            'rep_city': 'Cidade do representante',
+            'rep_state': 'Estado do representante',
+            'rep_cep': 'CEP do representante',
+        }
+        errors = {}
+        for field, label in required_fields.items():
+            if not attrs.get(field, '').strip():
+                errors[field] = f'{label} é obrigatório.'
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class ClientOnboardingInternalSerializer(serializers.ModelSerializer):
+    """Serializer interno para visualização e gestão dos cadastros."""
+    prospect_company_name = serializers.CharField(
+        source='prospect.company_name', read_only=True,
+    )
+    customer_name = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(
+        source='created_by.username', read_only=True,
+    )
+
+    def get_customer_name(self, obj):
+        if obj.customer_id:
+            return obj.customer.company_name or obj.customer.name or ''
+        return ''
+
+    class Meta:
+        model = ClientOnboarding
+        fields = [
+            'id', 'prospect', 'prospect_company_name',
+            'customer', 'customer_name', 'public_token', 'status',
+            # empresa
+            'company_legal_name', 'company_cnpj',
+            'company_street', 'company_number', 'company_complement',
+            'company_neighborhood', 'company_city', 'company_state', 'company_cep',
+            # representante
+            'rep_full_name', 'rep_marital_status', 'rep_profession', 'rep_cpf',
+            'rep_street', 'rep_number', 'rep_complement',
+            'rep_neighborhood', 'rep_city', 'rep_state', 'rep_cep',
+            # rastreamento
+            'submitted_at', 'ip_address', 'user_agent',
+            # auditoria
+            'created_by', 'created_by_name', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'public_token', 'submitted_at',
+            'ip_address', 'user_agent',
+            'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+        ]

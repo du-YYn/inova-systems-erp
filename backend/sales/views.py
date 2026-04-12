@@ -23,12 +23,13 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
-from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage, ClientOnboarding
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer,
     ProspectActivitySerializer, WinLossReasonSerializer,
     WebsiteLeadSerializer, ProspectMessageSerializer,
+    ClientOnboardingInternalSerializer,
 )
 
 logger = logging.getLogger('sales')
@@ -406,6 +407,41 @@ class ProspectViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = ProspectMessageSerializer(qs, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='create-onboarding')
+    def create_onboarding(self, request, pk=None):
+        """Cria formulário de onboarding para um prospect fechado (idempotente)."""
+        prospect = self.get_object()
+        if prospect.status not in ('won', 'production'):
+            return Response(
+                {'error': 'Cadastro só pode ser criado para leads fechados (won/production).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Retorna existente se já criado
+        if hasattr(prospect, 'onboarding'):
+            try:
+                onboarding = prospect.onboarding
+                return Response(
+                    ClientOnboardingInternalSerializer(onboarding).data,
+                    status=status.HTTP_200_OK,
+                )
+            except ClientOnboarding.DoesNotExist:
+                pass
+        onboarding = ClientOnboarding.objects.create(
+            prospect=prospect,
+            customer=prospect.customer,
+            created_by=request.user,
+        )
+        log_crm_activity(
+            prospect, 'other',
+            'Formulário de cadastro criado',
+            request.user,
+        )
+        logger.info(f"Onboarding criado para prospect {prospect.id} por {request.user.username}")
+        return Response(
+            ClientOnboardingInternalSerializer(onboarding).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema(tags=['sales'])
@@ -950,6 +986,26 @@ class ContractViewSet(viewsets.ModelViewSet):
             'expiring_contracts': stats['expiring_count'],
         })
 
+    @action(detail=True, methods=['get'], url_path='onboarding-data')
+    def onboarding_data(self, request, pk=None):
+        """Retorna dados do onboarding vinculado ao contrato."""
+        contract = self.get_object()
+        onboarding = None
+        # Tenta via prospect da proposta
+        if contract.proposal and contract.proposal.prospect_id:
+            onboarding = getattr(contract.proposal.prospect, 'onboarding', None)
+        # Fallback via customer
+        if not onboarding and contract.customer_id:
+            onboarding = contract.customer.onboardings.filter(
+                status__in=('submitted', 'reviewed'),
+            ).first()
+        if not onboarding:
+            return Response(
+                {'detail': 'Nenhum cadastro encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(ClientOnboardingInternalSerializer(onboarding).data)
+
 
 @extend_schema(tags=['sales'])
 class ProspectActivityViewSet(viewsets.ModelViewSet):
@@ -984,6 +1040,46 @@ class WinLossReasonViewSet(viewsets.ModelViewSet):
     serializer_class = WinLossReasonSerializer
     permission_classes = [IsAdminOrManagerOrOperator]
     http_method_names = ['get', 'post', 'head', 'options']
+
+
+@extend_schema(tags=['sales'])
+class ClientOnboardingViewSet(viewsets.ModelViewSet):
+    """CRUD interno dos formulários de onboarding."""
+    queryset = ClientOnboarding.objects.select_related('prospect', 'customer', 'created_by')
+    serializer_class = ClientOnboardingInternalSerializer
+    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    pagination_class = DynamicPageSizePagination
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        onboarding_status = self.request.query_params.get('status', None)
+        search = self.request.query_params.get('search', None)
+        if onboarding_status:
+            queryset = queryset.filter(status=onboarding_status)
+        if search:
+            queryset = queryset.filter(
+                Q(prospect__company_name__icontains=search) |
+                Q(company_legal_name__icontains=search) |
+                Q(rep_full_name__icontains=search)
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='mark-reviewed')
+    def mark_reviewed(self, request, pk=None):
+        """Marca cadastro como revisado pela equipe."""
+        onboarding = self.get_object()
+        if onboarding.status != 'submitted':
+            return Response(
+                {'error': 'Só formulários preenchidos podem ser revisados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        onboarding.status = 'reviewed'
+        onboarding.save(update_fields=['status', 'updated_at'])
+        logger.info(f"Onboarding {onboarding.id} revisado por {request.user.username}")
+        return Response(ClientOnboardingInternalSerializer(onboarding).data)
 
 
 class WebsiteLeadThrottle(AnonRateThrottle):

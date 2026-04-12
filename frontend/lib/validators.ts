@@ -78,6 +78,14 @@ export function formatCNPJ(value: string): string {
 }
 
 /**
+ * Format CEP: 00000-000
+ */
+export function formatCEP(value: string): string {
+  const cleaned = value.replace(/\D/g, '').slice(0, 8);
+  return cleaned.replace(/(\d{5})(\d{1,3})$/, '$1-$2');
+}
+
+/**
  * Format currency BRL
  */
 export function formatCurrency(value: number): string {

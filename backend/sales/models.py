@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -528,3 +530,84 @@ class ProspectMessage(models.Model):
 
     def __str__(self):
         return f"{self.get_direction_display()} - {self.prospect.company_name} - {self.sent_at}"
+
+
+class ClientOnboarding(models.Model):
+    """Formulário de cadastro do cliente para geração de contrato."""
+
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('submitted', 'Preenchido'),
+        ('reviewed', 'Revisado'),
+    ]
+
+    MARITAL_STATUS_CHOICES = [
+        ('solteiro', 'Solteiro(a)'),
+        ('casado', 'Casado(a)'),
+        ('divorciado', 'Divorciado(a)'),
+        ('viuvo', 'Viúvo(a)'),
+        ('separado', 'Separado(a)'),
+        ('uniao_estavel', 'União Estável'),
+    ]
+
+    # ── Relacionamentos ──────────────────────────────────────────────────────
+    prospect = models.OneToOneField(
+        Prospect, on_delete=models.CASCADE, related_name='onboarding',
+    )
+    customer = models.ForeignKey(
+        Customer, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='onboardings',
+    )
+
+    # ── Token + Status ────────────────────────────────────────────────────────
+    public_token = models.UUIDField(
+        default=uuid.uuid4, unique=True, db_index=True,
+        help_text='Token para acesso público ao formulário',
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+
+    # ── Dados da Empresa (CONTRATANTE) ────────────────────────────────────────
+    company_legal_name = models.CharField(max_length=300, blank=True, help_text='Razão Social')
+    company_cnpj = models.CharField(max_length=18, blank=True)
+    company_street = models.CharField(max_length=300, blank=True)
+    company_number = models.CharField(max_length=20, blank=True)
+    company_complement = models.CharField(max_length=100, blank=True)
+    company_neighborhood = models.CharField(max_length=100, blank=True, help_text='Bairro')
+    company_city = models.CharField(max_length=100, blank=True)
+    company_state = models.CharField(max_length=2, blank=True)
+    company_cep = models.CharField(max_length=9, blank=True)
+
+    # ── Representante Legal ───────────────────────────────────────────────────
+    rep_full_name = models.CharField(max_length=300, blank=True)
+    rep_marital_status = models.CharField(
+        max_length=20, choices=MARITAL_STATUS_CHOICES, blank=True,
+    )
+    rep_profession = models.CharField(max_length=200, blank=True)
+    rep_cpf = models.CharField(max_length=14, blank=True)
+    rep_street = models.CharField(max_length=300, blank=True)
+    rep_number = models.CharField(max_length=20, blank=True)
+    rep_complement = models.CharField(max_length=100, blank=True)
+    rep_neighborhood = models.CharField(max_length=100, blank=True, help_text='Bairro')
+    rep_city = models.CharField(max_length=100, blank=True)
+    rep_state = models.CharField(max_length=2, blank=True)
+    rep_cep = models.CharField(max_length=9, blank=True)
+
+    # ── Rastreamento ─────────────────────────────────────────────────────────
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+
+    # ── Auditoria ────────────────────────────────────────────────────────────
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name='created_onboardings',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'client_onboardings'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Onboarding — {self.prospect.company_name} ({self.get_status_display()})"
