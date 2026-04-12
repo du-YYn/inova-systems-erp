@@ -1060,7 +1060,9 @@ class ClientOnboardingViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(prospect__company_name__icontains=search) |
                 Q(company_legal_name__icontains=search) |
-                Q(rep_full_name__icontains=search)
+                Q(rep_full_name__icontains=search) |
+                Q(company_cnpj__icontains=search) |
+                Q(rep_cpf__icontains=search)
             )
         return queryset
 

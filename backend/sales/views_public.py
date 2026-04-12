@@ -1,4 +1,6 @@
 """Views públicas — sem autenticação."""
+import logging
+
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -6,8 +8,10 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
 from django.http import HttpResponse
 from django.utils import timezone
-from .models import Proposal, ProposalView, ClientOnboarding
+from .models import Proposal, ProposalView, ClientOnboarding, Customer
 from .serializers import ClientOnboardingPublicSerializer
+
+logger = logging.getLogger('sales')
 
 
 class ProposalPublicThrottle(AnonRateThrottle):
@@ -137,7 +141,7 @@ class ClientOnboardingPublicView(APIView):
     def post(self, request, token):
         try:
             onboarding = ClientOnboarding.objects.select_related(
-                'prospect'
+                'prospect', 'prospect__customer', 'customer',
             ).get(public_token=token)
         except ClientOnboarding.DoesNotExist:
             return Response(
@@ -170,6 +174,9 @@ class ClientOnboardingPublicView(APIView):
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
         )
 
+        # Atualizar Customer com os dados do formulário
+        self._sync_customer(onboarding)
+
         # Notificar equipe
         self._notify_team(onboarding)
 
@@ -177,6 +184,48 @@ class ClientOnboardingPublicView(APIView):
             {'success': True, 'message': 'Dados recebidos com sucesso!'},
             status=status.HTTP_200_OK,
         )
+
+    @staticmethod
+    def _sync_customer(onboarding):
+        """Atualiza o Customer vinculado com os dados do onboarding."""
+        try:
+            customer = onboarding.customer or getattr(
+                onboarding.prospect, 'customer', None
+            )
+            if not customer:
+                return
+
+            # Montar endereço completo da empresa
+            addr_parts = [onboarding.company_street]
+            if onboarding.company_number:
+                addr_parts.append(onboarding.company_number)
+            if onboarding.company_complement:
+                addr_parts.append(f'- {onboarding.company_complement}')
+            if onboarding.company_neighborhood:
+                addr_parts.append(f'- {onboarding.company_neighborhood}')
+
+            customer.company_name = onboarding.company_legal_name
+            customer.document = onboarding.company_cnpj
+            customer.address = ', '.join(addr_parts)
+            customer.city = onboarding.company_city
+            customer.state = onboarding.company_state
+            customer.cep = onboarding.company_cep
+            customer.save(update_fields=[
+                'company_name', 'document', 'address',
+                'city', 'state', 'cep', 'updated_at',
+            ])
+
+            # Vincular onboarding ao customer se ainda não estiver
+            if not onboarding.customer_id:
+                onboarding.customer = customer
+                onboarding.save(update_fields=['customer'])
+
+            logger.info(
+                f"Customer {customer.id} atualizado via onboarding "
+                f"{onboarding.id} ({onboarding.company_legal_name})"
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao sincronizar customer via onboarding: {e}")
 
     @staticmethod
     def _notify_team(onboarding):
@@ -203,5 +252,9 @@ class ClientOnboardingPublicView(APIView):
                     object_type='onboarding',
                     object_id=onboarding.id,
                 )
-        except Exception:
-            pass
+            logger.info(
+                f"Notificações de onboarding {onboarding.id} enviadas "
+                f"para {recipients.distinct().count()} usuários"
+            )
+        except Exception as e:
+            logger.warning(f"Erro ao notificar equipe sobre onboarding {onboarding.id}: {e}")
