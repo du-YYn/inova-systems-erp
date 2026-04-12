@@ -592,6 +592,11 @@ class ClientOnboarding(models.Model):
     rep_state = models.CharField(max_length=2, blank=True)
     rep_cep = models.CharField(max_length=9, blank=True)
 
+    # ── Setor Financeiro ───────────────────────────────────────────────────
+    finance_contact_name = models.CharField(max_length=300, blank=True, help_text='Nome do contato financeiro')
+    finance_contact_phone = models.CharField(max_length=20, blank=True)
+    finance_contact_email = models.EmailField(blank=True)
+
     # ── Rastreamento ─────────────────────────────────────────────────────────
     submitted_at = models.DateTimeField(null=True, blank=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)

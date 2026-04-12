@@ -478,6 +478,8 @@ class ClientOnboardingPublicSerializer(serializers.ModelSerializer):
             'rep_full_name', 'rep_marital_status', 'rep_profession', 'rep_cpf',
             'rep_street', 'rep_number', 'rep_complement',
             'rep_neighborhood', 'rep_city', 'rep_state', 'rep_cep',
+            # financeiro
+            'finance_contact_name', 'finance_contact_phone', 'finance_contact_email',
         ]
         read_only_fields = ['public_token', 'status', 'prospect_company_name']
 
@@ -513,6 +515,9 @@ class ClientOnboardingPublicSerializer(serializers.ModelSerializer):
             'rep_city': 'Cidade do representante',
             'rep_state': 'Estado do representante',
             'rep_cep': 'CEP do representante',
+            'finance_contact_name': 'Nome do contato financeiro',
+            'finance_contact_phone': 'Telefone do financeiro',
+            'finance_contact_email': 'E-mail do financeiro',
         }
         errors = {}
         for field, label in required_fields.items():
@@ -551,6 +556,8 @@ class ClientOnboardingInternalSerializer(serializers.ModelSerializer):
             'rep_full_name', 'rep_marital_status', 'rep_profession', 'rep_cpf',
             'rep_street', 'rep_number', 'rep_complement',
             'rep_neighborhood', 'rep_city', 'rep_state', 'rep_cep',
+            # financeiro
+            'finance_contact_name', 'finance_contact_phone', 'finance_contact_email',
             # rastreamento
             'submitted_at', 'ip_address', 'user_agent',
             # auditoria

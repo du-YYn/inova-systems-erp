@@ -854,6 +854,13 @@ export default function ContratosTab() {
                             {' '}{onboardingData.rep_neighborhood}, {onboardingData.rep_city}/{onboardingData.rep_state} — CEP {onboardingData.rep_cep}
                           </p>
                         </div>
+                        {onboardingData.finance_contact_name && (
+                          <div>
+                            <p className="font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">Setor Financeiro</p>
+                            <p className="text-gray-900 dark:text-gray-200">{onboardingData.finance_contact_name}</p>
+                            <p className="text-gray-600 dark:text-gray-400 mt-0.5">{onboardingData.finance_contact_phone} — {onboardingData.finance_contact_email}</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

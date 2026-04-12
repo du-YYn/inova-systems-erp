@@ -35,6 +35,9 @@ interface Onboarding {
   rep_city: string;
   rep_state: string;
   rep_cep: string;
+  finance_contact_name: string;
+  finance_contact_phone: string;
+  finance_contact_email: string;
   submitted_at: string | null;
   created_by_name: string;
   created_at: string;
@@ -254,6 +257,16 @@ export default function OnboardingTab() {
                               </p>
                             </div>
                           </div>
+                          {ob.finance_contact_name && (
+                            <div>
+                              <h4 className="font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-1.5">Setor Financeiro</h4>
+                              <div className="grid grid-cols-3 gap-1 text-gray-600 dark:text-gray-400">
+                                <p>Nome: <span className="text-gray-900 dark:text-gray-200">{ob.finance_contact_name}</span></p>
+                                <p>Telefone: <span className="text-gray-900 dark:text-gray-200">{ob.finance_contact_phone}</span></p>
+                                <p>E-mail: <span className="text-gray-900 dark:text-gray-200">{ob.finance_contact_email}</span></p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>

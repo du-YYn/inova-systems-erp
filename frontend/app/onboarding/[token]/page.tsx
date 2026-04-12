@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import {
   Building2, User, MapPin, Loader2, CheckCircle2, AlertCircle,
-  Search, FileText,
+  Search, FileText, Landmark,
 } from 'lucide-react';
-import { isValidCPF, isValidCNPJ, formatCPF, formatCNPJ, formatCEP } from '@/lib/validators';
+import { isValidCPF, isValidCNPJ, formatCPF, formatCNPJ, formatCEP, formatPhone } from '@/lib/validators';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -34,6 +34,9 @@ interface OnboardingData {
   rep_city: string;
   rep_state: string;
   rep_cep: string;
+  finance_contact_name: string;
+  finance_contact_phone: string;
+  finance_contact_email: string;
 }
 
 const MARITAL_OPTIONS = [
@@ -86,6 +89,9 @@ export default function OnboardingPage() {
     rep_city: '',
     rep_state: '',
     rep_cep: '',
+    finance_contact_name: '',
+    finance_contact_phone: '',
+    finance_contact_email: '',
   });
 
   useEffect(() => {
@@ -133,6 +139,7 @@ export default function OnboardingPage() {
     if (field === 'company_cnpj') formatted = formatCNPJ(value);
     else if (field === 'rep_cpf') formatted = formatCPF(value);
     else if (field === 'company_cep' || field === 'rep_cep') formatted = formatCEP(value);
+    else if (field === 'finance_contact_phone') formatted = formatPhone(value);
 
     setForm(prev => ({ ...prev, [field]: formatted }));
     if (errors[field as keyof FormErrors]) {
@@ -196,6 +203,11 @@ export default function OnboardingPage() {
     if (!form.rep_city.trim()) newErrors.rep_city = 'Cidade é obrigatória.';
     if (!form.rep_state.trim()) newErrors.rep_state = 'Estado é obrigatório.';
     if (!form.rep_cep.trim()) newErrors.rep_cep = 'CEP é obrigatório.';
+    // Finance
+    if (!form.finance_contact_name.trim()) newErrors.finance_contact_name = 'Nome é obrigatório.';
+    if (!form.finance_contact_phone.trim()) newErrors.finance_contact_phone = 'Telefone é obrigatório.';
+    if (!form.finance_contact_email.trim()) newErrors.finance_contact_email = 'E-mail é obrigatório.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.finance_contact_email)) newErrors.finance_contact_email = 'E-mail inválido.';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -571,6 +583,48 @@ export default function OnboardingPage() {
                   placeholder="UF"
                 />
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Seção 3: Setor Financeiro ── */}
+        <section className="bg-[#111] border border-[#1a1a1a] rounded-2xl overflow-hidden">
+          <div className="border-b border-[#A6864A]/20 px-6 py-4 flex items-center gap-3">
+            <div className="w-8 h-8 bg-[#A6864A]/10 rounded-lg flex items-center justify-center">
+              <Landmark className="w-4 h-4 text-[#A6864A]" />
+            </div>
+            <div>
+              <h2 className="text-white font-semibold">Setor Financeiro</h2>
+              <p className="text-gray-500 text-xs">Contato para assuntos financeiros e faturamento</p>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <Field
+              label="Nome Completo"
+              required
+              value={form.finance_contact_name}
+              onChange={v => handleChange('finance_contact_name', v)}
+              error={errors.finance_contact_name}
+              placeholder="Nome do responsável financeiro"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field
+                label="Telefone"
+                required
+                value={form.finance_contact_phone}
+                onChange={v => handleChange('finance_contact_phone', v)}
+                error={errors.finance_contact_phone}
+                placeholder="(00) 00000-0000"
+                maxLength={15}
+              />
+              <Field
+                label="E-mail"
+                required
+                value={form.finance_contact_email}
+                onChange={v => handleChange('finance_contact_email', v)}
+                error={errors.finance_contact_email}
+                placeholder="financeiro@empresa.com"
+              />
             </div>
           </div>
         </section>
