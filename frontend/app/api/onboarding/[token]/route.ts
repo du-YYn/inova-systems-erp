@@ -25,6 +25,7 @@ export async function GET(
       const res = await fetch(`${baseUrl}/sales/onboarding/public/${token}/`, {
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
+        signal: AbortSignal.timeout(5000),
       });
       if (res.ok) {
         const data = await res.json();
@@ -65,6 +66,7 @@ export async function POST(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         cache: 'no-store',
+        signal: AbortSignal.timeout(10000),
       });
       const data = await res.json();
       return NextResponse.json(data, { status: res.status });

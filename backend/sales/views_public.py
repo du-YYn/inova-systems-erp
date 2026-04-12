@@ -116,7 +116,7 @@ class ProposalPublicHTMLView(APIView):
 # ── Client Onboarding ────────────────────────────────────────────────────────
 
 class OnboardingPublicThrottle(AnonRateThrottle):
-    rate = '30/hour'
+    rate = '10/hour'
 
 
 class ClientOnboardingPublicView(APIView):
@@ -187,43 +187,65 @@ class ClientOnboardingPublicView(APIView):
 
     @staticmethod
     def _sync_customer(onboarding):
-        """Atualiza o Customer vinculado com os dados do onboarding."""
+        """Atualiza o Customer vinculado com os dados do onboarding (com lock)."""
+        from django.db import transaction as db_tx
+
         try:
-            customer = onboarding.customer or getattr(
-                onboarding.prospect, 'customer', None
-            )
-            if not customer:
+            # Determinar qual customer atualizar
+            customer_id = onboarding.customer_id
+            if not customer_id:
+                prospect_customer = getattr(onboarding.prospect, 'customer', None)
+                if prospect_customer:
+                    customer_id = prospect_customer.id
+            if not customer_id:
                 return
 
-            # Montar endereço completo da empresa
-            addr_parts = [onboarding.company_street]
-            if onboarding.company_number:
-                addr_parts.append(onboarding.company_number)
-            if onboarding.company_complement:
-                addr_parts.append(f'- {onboarding.company_complement}')
-            if onboarding.company_neighborhood:
-                addr_parts.append(f'- {onboarding.company_neighborhood}')
+            # Validar integridade: se ambos existem, devem ser o mesmo
+            if (onboarding.customer_id
+                    and onboarding.prospect.customer_id
+                    and onboarding.customer_id != onboarding.prospect.customer_id):
+                logger.warning(
+                    f"Onboarding {onboarding.id}: customer_id ({onboarding.customer_id}) "
+                    f"difere do prospect.customer_id ({onboarding.prospect.customer_id}). "
+                    f"Sync cancelado para evitar corrupção."
+                )
+                return
 
-            customer.company_name = onboarding.company_legal_name
-            customer.document = onboarding.company_cnpj
-            customer.address = ', '.join(addr_parts)
-            customer.city = onboarding.company_city
-            customer.state = onboarding.company_state
-            customer.cep = onboarding.company_cep
-            customer.save(update_fields=[
-                'company_name', 'document', 'address',
-                'city', 'state', 'cep', 'updated_at',
-            ])
+            # Lock no customer para evitar race condition
+            with db_tx.atomic():
+                customer = Customer.objects.select_for_update().get(id=customer_id)
 
-            # Vincular onboarding ao customer se ainda não estiver
-            if not onboarding.customer_id:
-                onboarding.customer = customer
-                onboarding.save(update_fields=['customer'])
+                # Montar endereço completo da empresa
+                addr_parts = [onboarding.company_street]
+                if onboarding.company_number:
+                    addr_parts.append(onboarding.company_number)
+                if onboarding.company_complement:
+                    addr_parts.append(f'- {onboarding.company_complement}')
+                if onboarding.company_neighborhood:
+                    addr_parts.append(f'- {onboarding.company_neighborhood}')
+
+                customer.company_name = onboarding.company_legal_name
+                customer.document = onboarding.company_cnpj
+                customer.address = ', '.join(addr_parts)
+                customer.city = onboarding.company_city
+                customer.state = onboarding.company_state
+                customer.cep = onboarding.company_cep
+                customer.save(update_fields=[
+                    'company_name', 'document', 'address',
+                    'city', 'state', 'cep', 'updated_at',
+                ])
+
+                # Vincular onboarding ao customer se ainda não estiver
+                if not onboarding.customer_id:
+                    onboarding.customer = customer
+                    onboarding.save(update_fields=['customer'])
 
             logger.info(
-                f"Customer {customer.id} atualizado via onboarding "
+                f"Customer {customer_id} atualizado via onboarding "
                 f"{onboarding.id} ({onboarding.company_legal_name})"
             )
+        except Customer.DoesNotExist:
+            logger.warning(f"Customer {customer_id} não encontrado para onboarding {onboarding.id}")
         except Exception as e:
             logger.warning(f"Erro ao sincronizar customer via onboarding: {e}")
 

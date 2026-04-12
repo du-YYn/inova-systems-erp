@@ -411,6 +411,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='create-onboarding')
     def create_onboarding(self, request, pk=None):
         """Cria formulário de onboarding para um prospect fechado (idempotente)."""
+        from django.db import IntegrityError
+
         prospect = self.get_object()
         if prospect.status not in ('won', 'production'):
             return Response(
@@ -427,11 +429,21 @@ class ProspectViewSet(viewsets.ModelViewSet):
                 )
             except ClientOnboarding.DoesNotExist:
                 pass
-        onboarding = ClientOnboarding.objects.create(
-            prospect=prospect,
-            customer=prospect.customer,
-            created_by=request.user,
-        )
+        # Criar com proteção contra duplicata (race condition)
+        try:
+            with transaction.atomic():
+                onboarding = ClientOnboarding.objects.create(
+                    prospect=prospect,
+                    customer=prospect.customer,
+                    created_by=request.user,
+                )
+        except IntegrityError:
+            # Criação concorrente — retorna o existente
+            onboarding = ClientOnboarding.objects.get(prospect=prospect)
+            return Response(
+                ClientOnboardingInternalSerializer(onboarding).data,
+                status=status.HTTP_200_OK,
+            )
         log_crm_activity(
             prospect, 'other',
             'Formulário de cadastro criado',
