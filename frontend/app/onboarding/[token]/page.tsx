@@ -178,6 +178,7 @@ export default function OnboardingPage() {
     else if (!isValidCNPJ(form.company_cnpj)) newErrors.company_cnpj = 'CNPJ inválido.';
     if (!form.company_street.trim()) newErrors.company_street = 'Endereço é obrigatório.';
     if (!form.company_number.trim()) newErrors.company_number = 'Número é obrigatório.';
+    if (!form.company_complement.trim()) newErrors.company_complement = 'Complemento é obrigatório.';
     if (!form.company_neighborhood.trim()) newErrors.company_neighborhood = 'Bairro é obrigatório.';
     if (!form.company_city.trim()) newErrors.company_city = 'Cidade é obrigatória.';
     if (!form.company_state.trim()) newErrors.company_state = 'Estado é obrigatório.';
@@ -190,6 +191,7 @@ export default function OnboardingPage() {
     else if (!isValidCPF(form.rep_cpf)) newErrors.rep_cpf = 'CPF inválido.';
     if (!form.rep_street.trim()) newErrors.rep_street = 'Endereço é obrigatório.';
     if (!form.rep_number.trim()) newErrors.rep_number = 'Número é obrigatório.';
+    if (!form.rep_complement.trim()) newErrors.rep_complement = 'Complemento é obrigatório.';
     if (!form.rep_neighborhood.trim()) newErrors.rep_neighborhood = 'Bairro é obrigatório.';
     if (!form.rep_city.trim()) newErrors.rep_city = 'Cidade é obrigatória.';
     if (!form.rep_state.trim()) newErrors.rep_state = 'Estado é obrigatório.';
@@ -395,8 +397,10 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <Field
                   label="Complemento"
+                  required
                   value={form.company_complement}
                   onChange={v => handleChange('company_complement', v)}
+                  error={errors.company_complement}
                   placeholder="Sala, andar, bloco..."
                 />
                 <Field
@@ -533,8 +537,10 @@ export default function OnboardingPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                 <Field
                   label="Complemento"
+                  required
                   value={form.rep_complement}
                   onChange={v => handleChange('rep_complement', v)}
+                  error={errors.rep_complement}
                   placeholder="Apt, bloco..."
                 />
                 <Field
