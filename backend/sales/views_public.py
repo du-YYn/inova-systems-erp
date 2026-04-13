@@ -132,8 +132,7 @@ class ProposalPublicHTMLView(APIView):
 
         whatsapp_url = (
             f'https://wa.me/{self.WHATSAPP_NUMBER}'
-            f'?text=Ol%C3%A1!%20Vi%20a%20proposta%20{proposal.number}'
-            f'%20e%20gostaria%20de%20tirar%20algumas%20d%C3%BAvidas.'
+            f'?text=Ol%C3%A1!%20Vi%20a%20proposta%20e%20gostaria%20de%20tirar%20algumas%20d%C3%BAvidas.'
         )
 
         buttons_html = f'''
