@@ -168,7 +168,7 @@ class ProposalPublicHTMLView(APIView):
             box-shadow: 0 4px 14px rgba(166, 134, 74, 0.3);
             transition: transform 0.2s;
         ">
-            &#10003; Aceitar e Cadastrar
+            &#10003; Aceito proposta de investimento
         </a>""" if onboarding_url else ""}
         <a href="{whatsapp_url}" target="_blank" style="
             display: inline-flex; align-items: center; gap: 8px;
