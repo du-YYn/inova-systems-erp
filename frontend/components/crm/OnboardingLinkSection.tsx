@@ -43,7 +43,7 @@ export default function OnboardingLinkSection({ prospectId }: Props) {
 
   const copyLink = useCallback(async () => {
     if (!onboarding) return;
-    const link = `${window.location.origin}/onboarding/${onboarding.public_token}`;
+    const link = `https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`;
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
@@ -108,7 +108,7 @@ export default function OnboardingLinkSection({ prospectId }: Props) {
       {/* Link + Copy */}
       <div className="flex items-center gap-2">
         <div className="flex-1 bg-slate-900 dark:bg-slate-900 rounded-lg px-3 py-2 text-xs text-slate-400 font-mono truncate">
-          {window.location.origin}/onboarding/{onboarding.public_token}
+          cadastro.inovasystemssolutions.com/{onboarding.public_token}
         </div>
         <button
           onClick={copyLink}
@@ -118,7 +118,7 @@ export default function OnboardingLinkSection({ prospectId }: Props) {
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
         </button>
         <a
-          href={`/onboarding/${onboarding.public_token}`}
+          href={`https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`}
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-lg transition-colors shrink-0"
