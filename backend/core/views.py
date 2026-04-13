@@ -120,6 +120,7 @@ def reset_data(request):
         log_audit(
             user=request.user,
             action='reset_data',
+            resource_type='system',
             details=f'Reset completo: {total} registros removidos',
         )
         logger.warning(
