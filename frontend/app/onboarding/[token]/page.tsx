@@ -10,6 +10,16 @@ import { isValidCPF, isValidCNPJ, formatCPF, formatCNPJ, formatCEP, formatPhone 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+// Resolve a URL base para chamadas à API do onboarding.
+// No ERP (erp.inovasystemssolutions.com) usa a API direta.
+// No subdomínio (cadastro.inovasystemssolutions.com) usa proxy Next.js para evitar CORS.
+function getOnboardingUrl(token: string): string {
+  if (typeof window !== 'undefined' && window.location.hostname === 'cadastro.inovasystemssolutions.com') {
+    return `/api/onboarding/${token}`;
+  }
+  return getOnboardingUrl(token);
+}
+
 interface OnboardingData {
   public_token: string;
   status: string;
@@ -97,7 +107,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch(`${API_URL}/sales/onboarding/public/${token}/`);
+        const res = await fetch(getOnboardingUrl(token));
         if (res.status === 404) {
           setError('Formulário não encontrado.');
           setLoading(false);
@@ -224,7 +234,7 @@ export default function OnboardingPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch(`${API_URL}/sales/onboarding/public/${token}/`, {
+      const res = await fetch(getOnboardingUrl(token), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
