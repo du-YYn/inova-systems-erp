@@ -783,6 +783,24 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if not proposal.public_token:
             proposal.public_token = uuid.uuid4()
         proposal.save(update_fields=['proposal_file', 'public_token'])
+
+        # Auto-criar onboarding para o prospect (gera link de cadastro)
+        if proposal.prospect_id:
+            try:
+                if not hasattr(proposal.prospect, 'onboarding'):
+                    raise ClientOnboarding.DoesNotExist
+                proposal.prospect.onboarding  # Verifica se existe
+            except ClientOnboarding.DoesNotExist:
+                ClientOnboarding.objects.create(
+                    prospect=proposal.prospect,
+                    customer=proposal.prospect.customer,
+                    created_by=request.user,
+                )
+                logger.info(
+                    f"Onboarding auto-criado para prospect {proposal.prospect_id} "
+                    f"via upload da proposta {proposal.number}"
+                )
+
         return Response(ProposalSerializer(proposal).data)
 
     @action(detail=True, methods=['get'], url_path='download-pdf')

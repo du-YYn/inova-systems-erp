@@ -77,9 +77,13 @@ class ProposalPublicHTMLView(APIView):
     authentication_classes = []
     throttle_classes = [ProposalPublicThrottle]
 
+    WHATSAPP_NUMBER = '5541998594938'
+
     def get(self, request, token):
         try:
-            proposal = Proposal.objects.get(public_token=token)
+            proposal = Proposal.objects.select_related(
+                'prospect',
+            ).get(public_token=token)
         except Proposal.DoesNotExist:
             return HttpResponse(
                 '<h1>Proposta não encontrada</h1>',
@@ -92,7 +96,7 @@ class ProposalPublicHTMLView(APIView):
                 content_type='text/html', status=404,
             )
 
-        # Ler e servir o HTML diretamente
+        # Ler o HTML
         try:
             proposal.proposal_file.open('rb')
             content = proposal.proposal_file.read()
@@ -103,6 +107,9 @@ class ProposalPublicHTMLView(APIView):
                 content_type='text/html', status=500,
             )
 
+        # Injetar botões CTA no final do HTML
+        content = self._inject_cta_buttons(content, proposal)
+
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
         csp = "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;"
         response['Content-Security-Policy'] = csp
@@ -111,6 +118,86 @@ class ProposalPublicHTMLView(APIView):
         response['Cache-Control'] = 'no-store, no-cache'
         response['X-Robots-Tag'] = 'noindex, nofollow'
         return response
+
+    def _inject_cta_buttons(self, content: bytes, proposal) -> bytes:
+        """Injeta botões de ação no final do HTML (puro CSS, sem JS)."""
+        # Resolver link de onboarding
+        onboarding_url = ''
+        if proposal.prospect_id:
+            try:
+                onboarding = proposal.prospect.onboarding
+                onboarding_url = f'https://cadastro.inovasystemssolutions.com/{onboarding.public_token}'
+            except Exception:
+                pass
+
+        whatsapp_url = (
+            f'https://wa.me/{self.WHATSAPP_NUMBER}'
+            f'?text=Ol%C3%A1!%20Vi%20a%20proposta%20{proposal.number}'
+            f'%20e%20gostaria%20de%20tirar%20algumas%20d%C3%BAvidas.'
+        )
+
+        buttons_html = f'''
+<!-- Inova Systems — Botões CTA -->
+<div style="
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 32px 24px;
+    text-align: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+">
+    <div style="
+        width: 60px; height: 2px;
+        background: linear-gradient(90deg, #A6864A, #c9a75e);
+        margin: 0 auto 24px;
+    "></div>
+    <p style="
+        font-size: 18px; font-weight: 600;
+        color: #1a1a1a; margin: 0 0 8px;
+    ">Gostou da proposta?</p>
+    <p style="
+        font-size: 14px; color: #666;
+        margin: 0 0 28px;
+    ">Aceite e preencha o cadastro para darmos início, ou tire suas dúvidas pelo WhatsApp.</p>
+    <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+        {f"""<a href="{onboarding_url}" style="
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #A6864A, #c9a75e);
+            color: #fff; font-size: 15px; font-weight: 600;
+            text-decoration: none; border-radius: 12px;
+            box-shadow: 0 4px 14px rgba(166, 134, 74, 0.3);
+            transition: transform 0.2s;
+        ">
+            &#10003; Aceitar e Cadastrar
+        </a>""" if onboarding_url else ""}
+        <a href="{whatsapp_url}" target="_blank" style="
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 14px 32px;
+            background: #25D366; color: #fff;
+            font-size: 15px; font-weight: 600;
+            text-decoration: none; border-radius: 12px;
+            box-shadow: 0 4px 14px rgba(37, 211, 102, 0.3);
+        ">
+            &#9993; Tirar Dúvidas
+        </a>
+    </div>
+    <p style="
+        font-size: 11px; color: #999;
+        margin: 20px 0 0;
+    ">Inova Systems Solutions</p>
+</div>
+'''
+
+        content_str = content.decode('utf-8', errors='replace')
+        buttons_bytes = buttons_html.encode('utf-8')
+
+        # Injetar antes de </body> se existir, senão ao final
+        lower = content_str.lower()
+        body_close = lower.rfind('</body>')
+        if body_close != -1:
+            return content[:body_close] + buttons_bytes + content[body_close:]
+        else:
+            return content + buttons_bytes
 
 
 # ── Client Onboarding ────────────────────────────────────────────────────────
