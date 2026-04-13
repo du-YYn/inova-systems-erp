@@ -7,7 +7,11 @@ const ONBOARDING_HOST = 'cadastro.inovasystemssolutions.com';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const hostname = request.headers.get('host')?.split(':')[0] || '';
+  // Detecta hostname real (Traefik/Easypanel pode usar x-forwarded-host)
+  const rawHost = request.headers.get('x-forwarded-host')
+    || request.headers.get('host')
+    || '';
+  const hostname = rawHost.split(':')[0].split(',')[0].trim();
 
   // ── Subdomínio cadastro.inovasystemssolutions.com ──
   // Reescreve /{token} → /onboarding/{token} internamente
