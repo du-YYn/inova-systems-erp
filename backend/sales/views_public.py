@@ -189,15 +189,24 @@ class ProposalPublicHTMLView(APIView):
 '''
 
         content_str = content.decode('utf-8', errors='replace')
-        buttons_bytes = buttons_html.encode('utf-8')
 
-        # Injetar antes de </body> se existir, senão ao final
-        lower = content_str.lower()
-        body_close = lower.rfind('</body>')
-        if body_close != -1:
-            return content[:body_close] + buttons_bytes + content[body_close:]
+        # Injetar antes do último </body> (case-insensitive)
+        import re
+        # Encontra a ÚLTIMA ocorrência de </body> (case-insensitive)
+        matches = list(re.finditer(r'</body>', content_str, re.IGNORECASE))
+        if matches:
+            pos = matches[-1].start()
+            result = content_str[:pos] + buttons_html + content_str[pos:]
         else:
-            return content + buttons_bytes
+            # Sem </body> — encontra último </html>
+            html_matches = list(re.finditer(r'</html>', content_str, re.IGNORECASE))
+            if html_matches:
+                pos = html_matches[-1].start()
+                result = content_str[:pos] + buttons_html + content_str[pos:]
+            else:
+                result = content_str + buttons_html
+
+        return result.encode('utf-8')
 
 
 # ── Client Onboarding ────────────────────────────────────────────────────────
