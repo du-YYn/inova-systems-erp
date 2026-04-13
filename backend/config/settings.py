@@ -187,6 +187,9 @@ CORS_ALLOWED_ORIGINS = [
     for o in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
     if o.strip()
 ]
+# Subdomínio de cadastro do cliente (formulário público de onboarding)
+if 'https://cadastro.inovasystemssolutions.com' not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append('https://cadastro.inovasystemssolutions.com')
 CORS_ALLOW_CREDENTIALS = True
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
