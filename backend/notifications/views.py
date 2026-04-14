@@ -46,12 +46,14 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 @extend_schema(tags=['email-templates'])
 class EmailTemplateViewSet(viewsets.ModelViewSet):
     """CRUD de templates de email (somente admin)."""
-    from accounts.permissions import IsAdmin
-
     queryset = EmailTemplate.objects.all()
     serializer_class = EmailTemplateSerializer
-    permission_classes = [IsAdmin]
     http_method_names = ['get', 'patch', 'head', 'options']
+    pagination_class = None  # Poucos templates — não precisa paginar
+
+    def get_permissions(self):
+        from accounts.permissions import IsAdmin
+        return [IsAdmin()]
 
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
