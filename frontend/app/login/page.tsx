@@ -56,7 +56,14 @@ export default function LoginPage() {
           const { id, username, email, first_name, last_name, role } = data.user;
           localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
         }
-        window.location.replace('/dashboard');
+        // Redirecionar com base no role e subdomínio
+        const isPartnerDomain = window.location.hostname === 'parceiro.inovasystemssolutions.com';
+        const isPartnerRole = data.user?.role === 'partner';
+        if (isPartnerDomain || isPartnerRole) {
+          window.location.replace('/partner/dashboard');
+        } else {
+          window.location.replace('/dashboard');
+        }
       } catch (err) {
         const message = err instanceof ApiError ? (err.data as { error?: string })?.error || err.message : 'Credenciais inválidas';
         setError(message);
