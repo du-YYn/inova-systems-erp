@@ -47,6 +47,46 @@ def system_info(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def email_debug(request):
+    """Diagnóstico temporário — remover após resolver."""
+    from django.db import connection
+    result = {}
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT tablename FROM pg_tables WHERE tablename='email_templates'")
+        row = cursor.fetchone()
+        result['table_exists'] = bool(row)
+    except Exception as e:
+        result['table_error'] = str(e)
+
+    try:
+        from notifications.models import EmailTemplate
+        result['template_count'] = EmailTemplate.objects.count()
+        result['templates'] = list(EmailTemplate.objects.values_list('slug', flat=True))
+    except Exception as e:
+        result['model_error'] = str(e)
+
+    try:
+        from notifications.migrations import __path__ as mig_path
+        import os
+        migs = sorted(os.listdir(mig_path[0]))
+        result['migrations_files'] = [m for m in migs if m.endswith('.py') and m != '__init__.py']
+    except Exception as e:
+        result['migration_list_error'] = str(e)
+
+    try:
+        cursor = connection.cursor()
+        cursor.execute("SELECT app, name FROM django_migrations WHERE app='notifications' ORDER BY id")
+        result['applied_migrations'] = [{'app': r[0], 'name': r[1]} for r in cursor.fetchall()]
+    except Exception as e:
+        result['applied_migrations_error'] = str(e)
+
+    return Response(result)
+
+
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def reset_data(request):
