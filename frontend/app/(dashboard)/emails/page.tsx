@@ -51,7 +51,8 @@ export default function EmailsPage() {
       setTemplates(list);
     } catch (err) {
       console.error('Erro ao carregar templates:', err);
-      toast.error('Erro ao carregar templates.');
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Erro ao carregar templates: ${msg}`);
     }
     setLoading(false);
   }, []);

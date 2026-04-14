@@ -84,6 +84,15 @@ def email_debug(request):
     except Exception as e:
         result['applied_migrations_error'] = str(e)
 
+    # Testar a view diretamente
+    try:
+        from accounts.models import User
+        admin = User.objects.filter(role='admin', is_active=True).first()
+        result['admin_user'] = admin.username if admin else 'NENHUM ADMIN ENCONTRADO'
+        result['admin_role'] = admin.role if admin else None
+    except Exception as e:
+        result['admin_check_error'] = str(e)
+
     return Response(result)
 
 
