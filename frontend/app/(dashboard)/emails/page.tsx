@@ -45,7 +45,7 @@ export default function EmailsPage() {
 
   const fetchTemplates = useCallback(async () => {
     try {
-      const res = await api.get<EmailTemplate[] | { results?: EmailTemplate[] }>('/notifications/email-templates/');
+      const res = await api.get<EmailTemplate[] | { results?: EmailTemplate[] }>('/email-templates/');
       // Suporta resposta paginada ou array direto
       const list = Array.isArray(res) ? res : (res.results || []);
       setTemplates(list);
@@ -74,7 +74,7 @@ export default function EmailsPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      await api.patch(`/notifications/email-templates/${editing.id}/`, {
+      await api.patch(`/email-templates/${editing.id}/`, {
         subject: editSubject,
         body_html: editBody,
         is_active: editActive,
@@ -91,7 +91,7 @@ export default function EmailsPage() {
   const handlePreview = async () => {
     if (!editing) return;
     try {
-      const data = await api.post<{ subject: string; html: string }>(`/notifications/email-templates/${editing.id}/preview/`);
+      const data = await api.post<{ subject: string; html: string }>(`/email-templates/${editing.id}/preview/`);
       setPreviewHtml(data.html);
       setShowPreview(true);
     } catch {
@@ -103,7 +103,7 @@ export default function EmailsPage() {
     if (!editing || !testEmail) return;
     setSending(true);
     try {
-      await api.post(`/notifications/email-templates/${editing.id}/test/`, { email: testEmail });
+      await api.post(`/email-templates/${editing.id}/test/`, { email: testEmail });
       toast.success(`Email de teste enviado para ${testEmail}`);
     } catch {
       toast.error('Erro ao enviar teste. Verifique a configuração de email.');
