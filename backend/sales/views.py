@@ -785,21 +785,26 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.save(update_fields=['proposal_file', 'public_token'])
 
         # Auto-criar onboarding para o prospect (gera link de cadastro)
-        if proposal.prospect_id:
+        # Só cria se prospect tem customer vinculado (evita onboarding órfão)
+        if proposal.prospect_id and proposal.prospect.customer_id:
+            from django.db import IntegrityError as DBIntegrityError
             try:
-                if not hasattr(proposal.prospect, 'onboarding'):
-                    raise ClientOnboarding.DoesNotExist
-                proposal.prospect.onboarding  # Verifica se existe
+                # Verificar se já existe (forma segura para OneToOne)
+                ClientOnboarding.objects.get(prospect=proposal.prospect)
             except ClientOnboarding.DoesNotExist:
-                ClientOnboarding.objects.create(
-                    prospect=proposal.prospect,
-                    customer=proposal.prospect.customer,
-                    created_by=request.user,
-                )
-                logger.info(
-                    f"Onboarding auto-criado para prospect {proposal.prospect_id} "
-                    f"via upload da proposta {proposal.number}"
-                )
+                try:
+                    with transaction.atomic():
+                        ClientOnboarding.objects.create(
+                            prospect=proposal.prospect,
+                            customer=proposal.prospect.customer,
+                            created_by=request.user,
+                        )
+                    logger.info(
+                        f"Onboarding auto-criado para prospect {proposal.prospect_id} "
+                        f"via upload da proposta {proposal.number}"
+                    )
+                except DBIntegrityError:
+                    pass  # Criação concorrente — já existe
 
         return Response(ProposalSerializer(proposal).data)
 

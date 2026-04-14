@@ -886,6 +886,7 @@ export default function FunilTab() {
       await api.patch(`/sales/prospects/${wonModalProspect.id}/`, paymentData);
 
       // 2. Criar cliente mínimo (dados completos virão via onboarding)
+      let customerCreated = false;
       try {
         await api.post('/sales/customers/', {
           customer_type: 'PJ',
@@ -893,19 +894,24 @@ export default function FunilTab() {
           email: wonModalProspect.contact_email,
           phone: wonModalProspect.contact_phone,
         });
+        customerCreated = true;
       } catch {
-        // Pode já existir — não bloqueia o fluxo
+        // Pode já existir — tenta continuar
+        customerCreated = true; // Se falhou por duplicata, customer já existe
       }
 
       // 3. Gerar link de onboarding automaticamente
-      try {
-        const onboarding = await api.post<{ public_token: string }>(`/sales/prospects/${wonModalProspect.id}/create-onboarding/`);
-        setOnboardingLink(`https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`);
-      } catch {
-        // Não bloqueia — pode gerar depois no drawer
+      if (customerCreated) {
+        try {
+          const onboarding = await api.post<{ public_token: string }>(`/sales/prospects/${wonModalProspect.id}/create-onboarding/`);
+          setOnboardingLink(`https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`);
+          toast.success('Lead fechado! Link de cadastro gerado.');
+        } catch {
+          toast.success('Lead fechado! Gere o link de cadastro no drawer do prospect.');
+        }
+      } else {
+        toast.warning('Lead fechado, mas houve erro ao criar o cliente.');
       }
-
-      toast.success('Lead fechado! Link de cadastro gerado.');
       fetchProspects();
       fetchAllProspects();
     } catch {

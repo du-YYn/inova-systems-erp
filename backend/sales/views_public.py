@@ -96,7 +96,7 @@ class ProposalPublicHTMLView(APIView):
                 content_type='text/html', status=404,
             )
 
-        # Ler o HTML
+        # Ler o arquivo
         try:
             proposal.proposal_file.open('rb')
             content = proposal.proposal_file.read()
@@ -107,7 +107,15 @@ class ProposalPublicHTMLView(APIView):
                 content_type='text/html', status=500,
             )
 
-        # Injetar botões CTA no final do HTML
+        # PDF — servir diretamente sem injeção de botões
+        if proposal.proposal_file.name.lower().endswith('.pdf'):
+            response = HttpResponse(content, content_type='application/pdf')
+            response['Content-Disposition'] = f'inline; filename="proposta-{proposal.number}.pdf"'
+            response['Cache-Control'] = 'no-store, no-cache'
+            response['X-Robots-Tag'] = 'noindex, nofollow'
+            return response
+
+        # HTML — injetar botões CTA no final
         content = self._inject_cta_buttons(content, proposal)
 
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
@@ -126,9 +134,12 @@ class ProposalPublicHTMLView(APIView):
         if proposal.prospect_id:
             try:
                 onboarding = proposal.prospect.onboarding
-                onboarding_url = f'https://cadastro.inovasystemssolutions.com/{onboarding.public_token}'
-            except Exception:
-                pass
+                if onboarding and onboarding.public_token:
+                    onboarding_url = f'https://cadastro.inovasystemssolutions.com/{onboarding.public_token}'
+            except ClientOnboarding.DoesNotExist:
+                pass  # Prospect sem onboarding — botão não aparece
+            except Exception as e:
+                logger.warning(f"Erro ao resolver onboarding para proposta {proposal.number}: {e}")
 
         whatsapp_url = (
             f'https://wa.me/{self.WHATSAPP_NUMBER}'

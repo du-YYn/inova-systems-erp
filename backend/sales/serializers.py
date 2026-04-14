@@ -143,18 +143,24 @@ class ProspectSerializer(serializers.ModelSerializer):
 
 
 class ProposalSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(
-        source="customer.company_name", read_only=True
-    )
-    prospect_company = serializers.CharField(
-        source="prospect.company_name", read_only=True
-    )
+    customer_name = serializers.SerializerMethodField()
+    prospect_company = serializers.SerializerMethodField()
     assigned_to_name = serializers.CharField(
         source="assigned_to.username", read_only=True
     )
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+
+    def get_customer_name(self, obj):
+        if obj.customer_id:
+            return obj.customer.company_name or obj.customer.name or ''
+        return ''
+
+    def get_prospect_company(self, obj):
+        if obj.prospect_id:
+            return obj.prospect.company_name or ''
+        return ''
 
     class Meta:
         model = Proposal
