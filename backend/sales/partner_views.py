@@ -1,15 +1,24 @@
-"""API do Portal do Parceiro — endpoints restritos a role=partner."""
+"""API do Portal do Parceiro."""
 import logging
+import secrets
+import string
 
+from django.conf import settings
 from django.db.models import Sum, Count, Q
 from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from accounts.permissions import IsPartner
+from accounts.permissions import IsAdmin, IsPartner
 from .models import Prospect, PartnerCommission
 
 logger = logging.getLogger('sales')
+
+
+def _generate_password(length=12):
+    """Gera senha aleatória segura."""
+    alphabet = string.ascii_letters + string.digits + '!@#$%'
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
 # ── Serializers ──────────────────────────────────────────────────────────────
@@ -73,7 +82,123 @@ class PartnerCommissionSerializer(serializers.ModelSerializer):
         ]
 
 
-# ── Views ────────────────────────────────────────────────────────────────────
+# ── Admin: Registrar Parceiro ─────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])
+def register_partner(request):
+    """Admin cria parceiro: gera senha, cria profile, envia email boas-vindas."""
+    from django.contrib.auth import get_user_model
+    from accounts.models import PartnerProfile
+    from notifications.email_renderer import send_template_email
+
+    User = get_user_model()
+
+    first_name = request.data.get('first_name', '').strip()
+    last_name = request.data.get('last_name', '').strip()
+    email = request.data.get('email', '').strip()
+    phone = request.data.get('phone', '').strip()
+    company_name = request.data.get('company_name', '').strip()
+
+    if not first_name or not email:
+        return Response(
+            {'error': 'Nome e e-mail são obrigatórios.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if User.objects.filter(email=email).exists():
+        return Response(
+            {'error': 'Já existe um usuário com este e-mail.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Gerar senha aleatória
+    password = _generate_password()
+
+    # Criar user
+    user = User.objects.create_user(
+        username=email,
+        email=email,
+        password=password,
+        first_name=first_name,
+        last_name=last_name,
+        phone=phone,
+        role='partner',
+        is_active=True,
+    )
+
+    # Criar PartnerProfile (ID auto-gerado PRC-XXXXX)
+    profile = PartnerProfile(user=user, company_name=company_name, phone=phone)
+    profile.save()
+
+    # Enviar email de boas-vindas com credenciais
+    portal_url = 'https://parceiro.inovasystemssolutions.com'
+    send_template_email.delay('welcome_partner', email, {
+        'nome': user.get_full_name() or first_name,
+        'email': email,
+        'senha': password,
+        'link_portal': portal_url,
+    })
+
+    logger.info(f"Parceiro {profile.partner_id} ({email}) criado por {request.user.username}")
+
+    return Response({
+        'id': user.id,
+        'partner_id': profile.partner_id,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'email': user.email,
+        'message': f'Parceiro {profile.partner_id} criado. Email de boas-vindas enviado para {email}.',
+    }, status=status.HTTP_201_CREATED)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAdmin])
+def update_partner(request, pk):
+    """Admin ativa/desativa parceiro."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    try:
+        user = User.objects.get(pk=pk, role='partner')
+    except User.DoesNotExist:
+        return Response({'error': 'Parceiro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if 'is_active' in request.data:
+        user.is_active = request.data['is_active']
+        user.save(update_fields=['is_active'])
+        action = 'ativado' if user.is_active else 'desativado'
+        logger.info(f"Parceiro {user.email} {action} por {request.user.username}")
+
+    return Response({
+        'id': user.id,
+        'is_active': user.is_active,
+        'message': f'Parceiro {action}.',
+    })
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAdmin])
+def delete_partner(request, pk):
+    """Admin exclui parceiro."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+
+    try:
+        user = User.objects.get(pk=pk, role='partner')
+    except User.DoesNotExist:
+        return Response({'error': 'Parceiro não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    email = user.email
+    # Reatribuir prospects para não quebrar FK PROTECT
+    Prospect.objects.filter(created_by=user).update(created_by=request.user)
+    user.delete()
+    logger.info(f"Parceiro {email} excluído por {request.user.username}")
+
+    return Response({'message': f'Parceiro {email} excluído.'})
+
+
+# ── Views do Parceiro ─────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsPartner])

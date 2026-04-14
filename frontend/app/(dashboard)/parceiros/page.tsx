@@ -2,15 +2,16 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Plus, Search, Users2, X, Loader2, Copy, Check, Eye,
-  Send, DollarSign, CheckCircle, Clock,
+  Plus, Search, Users2, X, Loader2, Eye, Power, Trash2, CheckCircle,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { TableSkeleton } from '@/components/ui/Skeleton';
 import { Badge } from '@/components/ui/Badge';
 import { Sensitive } from '@/components/ui/Sensitive';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api, { ApiError } from '@/lib/api';
+import { formatPhone } from '@/lib/validators';
 
 interface Partner {
   id: number;
@@ -25,31 +26,24 @@ interface Partner {
   created_at: string;
 }
 
-interface PartnerDetail extends Partner {
-  referrals_count: number;
-  closed_count: number;
-  total_commission: number;
-  pending_commission: number;
-  partner_id: string;
-}
-
-const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
-
 export default function ParceirosPage() {
   const toast = useToast();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Modal criar
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [detailData, setDetailData] = useState<PartnerDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-
+  const [created, setCreated] = useState<{ partner_id: string; email: string } | null>(null);
   const [form, setForm] = useState({
-    first_name: '', last_name: '', email: '', username: '', password: '', phone: '',
-    company_name: '',
+    first_name: '', last_name: '', email: '', phone: '', company_name: '',
   });
+
+  // Ações
+  const [toggling, setToggling] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Partner | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchPartners = useCallback(async () => {
     try {
@@ -63,71 +57,54 @@ export default function ParceirosPage() {
 
   useEffect(() => { fetchPartners(); }, [fetchPartners]);
 
+  const openModal = () => {
+    setForm({ first_name: '', last_name: '', email: '', phone: '', company_name: '' });
+    setCreated(null);
+    setShowModal(true);
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.first_name.trim() || !form.email.trim() || !form.password.trim()) return;
+    if (!form.first_name.trim() || !form.email.trim()) return;
     setSaving(true);
     try {
-      // 1. Criar user com role=partner
-      const user = await api.post<{ id: number }>('/accounts/users/', {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        username: form.username || form.email,
-        password: form.password,
-        role: 'partner',
-        is_active: true,
-      });
-
-      // 2. Criar PartnerProfile
-      try {
-        await api.post('/accounts/partner-profiles/', {
-          user: user.id,
-          company_name: form.company_name,
-          phone: form.phone,
-        });
-      } catch {
-        // Profile pode falhar se endpoint não existir ainda — não bloqueia
-      }
-
-      toast.success('Parceiro cadastrado com sucesso!');
-      setShowModal(false);
-      setForm({ first_name: '', last_name: '', email: '', username: '', password: '', phone: '', company_name: '' });
+      const data = await api.post<{ partner_id: string; email: string; message: string }>('/sales/partner/register/', form);
+      setCreated({ partner_id: data.partner_id, email: data.email });
+      toast.success(data.message);
       fetchPartners();
     } catch (err) {
-      const msg = err instanceof ApiError ? JSON.stringify(err.data) : 'Erro ao criar parceiro.';
+      const msg = err instanceof ApiError
+        ? (err.data as Record<string, string>)?.error || JSON.stringify(err.data)
+        : 'Erro ao criar parceiro.';
       toast.error(msg);
     }
     setSaving(false);
   };
 
-  const toggleDetail = async (partner: Partner) => {
-    if (expandedId === partner.id) {
-      setExpandedId(null);
-      setDetailData(null);
-      return;
-    }
-    setExpandedId(partner.id);
-    setLoadingDetail(true);
+  const handleToggle = async (partner: Partner) => {
+    setToggling(partner.id);
     try {
-      // Buscar leads e comissões deste parceiro
-      const [leads, commissions] = await Promise.all([
-        api.get<{ id: number; status: string }[]>('/sales/partner/leads/').catch(() => []),
-        api.get<{ commission_value: string; status: string }[]>('/sales/partner/commissions/').catch(() => []),
-      ]);
-      // Como estamos no admin, precisamos de uma abordagem diferente
-      // Por agora mostramos dados básicos
-      setDetailData({
-        ...partner,
-        full_name: `${partner.first_name} ${partner.last_name}`.trim(),
-        referrals_count: 0,
-        closed_count: 0,
-        total_commission: 0,
-        pending_commission: 0,
-        partner_id: '',
-      });
-    } catch { /* ignore */ }
-    setLoadingDetail(false);
+      await api.patch(`/sales/partner/${partner.id}/update/`, { is_active: !partner.is_active });
+      toast.success(`Parceiro ${partner.is_active ? 'desativado' : 'ativado'}.`);
+      fetchPartners();
+    } catch {
+      toast.error('Erro ao atualizar parceiro.');
+    }
+    setToggling(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/sales/partner/${deleteTarget.id}/delete/`);
+      toast.success('Parceiro excluído.');
+      setDeleteTarget(null);
+      fetchPartners();
+    } catch {
+      toast.error('Erro ao excluir parceiro.');
+    }
+    setDeleting(false);
   };
 
   const filtered = partners.filter(p =>
@@ -144,7 +121,7 @@ export default function ParceirosPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gestão de parceiros de indicação</p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openModal}
           className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white rounded-xl text-sm font-medium hover:bg-accent-gold-dark transition-colors"
         >
           <Plus className="w-4 h-4" /> Novo Parceiro
@@ -186,7 +163,6 @@ export default function ParceirosPage() {
                     <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                       <Sensitive>{p.first_name} {p.last_name}</Sensitive>
                     </p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500"><Sensitive>{p.phone}</Sensitive></p>
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
                     <Sensitive>{p.email}</Sensitive>
@@ -199,14 +175,24 @@ export default function ParceirosPage() {
                   <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                     {new Date(p.created_at).toLocaleDateString('pt-BR')}
                   </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => toggleDetail(p)}
-                      className="p-1.5 text-gray-400 hover:text-accent-gold rounded-lg transition-colors"
-                      title="Ver detalhes"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </button>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => handleToggle(p)}
+                        disabled={toggling === p.id}
+                        className={`p-1.5 rounded-lg transition-colors ${p.is_active ? 'text-gray-400 hover:text-yellow-500' : 'text-gray-400 hover:text-green-500'}`}
+                        title={p.is_active ? 'Desativar' : 'Ativar'}
+                      >
+                        {toggling === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(p)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -223,68 +209,106 @@ export default function ParceirosPage() {
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Novo Parceiro</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Criar conta de parceiro de indicação</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">A senha será gerada automaticamente e enviada por email</p>
                 </div>
                 <button onClick={() => setShowModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
                   <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
-                    <input type="text" required value={form.first_name}
-                      onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
-                      className="input-field" placeholder="Nome" />
+              {created ? (
+                /* Sucesso */
+                <div className="space-y-4">
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/30 rounded-xl p-4 text-center">
+                    <CheckCircle className="w-8 h-8 text-green-600 dark:text-green-400 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Parceiro cadastrado!</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">ID: <span className="font-mono text-accent-gold">{created.partner_id}</span></p>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Sobrenome</label>
-                    <input type="text" value={form.last_name}
-                      onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
-                      className="input-field" placeholder="Sobrenome" />
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 rounded-xl p-4">
+                    <p className="text-sm text-blue-800 dark:text-blue-300">
+                      Email de boas-vindas enviado para <strong>{created.email}</strong> com login, senha e link do portal.
+                    </p>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Empresa</label>
-                  <input type="text" value={form.company_name}
-                    onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
-                    className="input-field" placeholder="Nome da empresa do parceiro" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">E-mail *</label>
-                  <input type="email" required value={form.email}
-                    onChange={e => setForm(f => ({ ...f, email: e.target.value, username: e.target.value }))}
-                    className="input-field" placeholder="email@parceiro.com" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Telefone</label>
-                  <input type="text" value={form.phone}
-                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                    className="input-field" placeholder="(00) 00000-0000" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Senha *</label>
-                  <input type="password" required minLength={8} value={form.password}
-                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                    className="input-field" placeholder="Mínimo 8 caracteres" />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowModal(false)}
-                    className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                    Cancelar
-                  </button>
-                  <button type="submit" disabled={saving}
-                    className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
-                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users2 className="w-4 h-4" />}
-                    {saving ? 'Criando...' : 'Criar Parceiro'}
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                  >
+                    Fechar
                   </button>
                 </div>
-              </form>
+              ) : (
+                /* Formulário */
+                <form onSubmit={handleCreate} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nome *</label>
+                      <input type="text" required value={form.first_name}
+                        onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+                        autoComplete="off"
+                        className="input-field" placeholder="Nome" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Sobrenome</label>
+                      <input type="text" value={form.last_name}
+                        onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+                        autoComplete="off"
+                        className="input-field" placeholder="Sobrenome" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Empresa</label>
+                    <input type="text" value={form.company_name}
+                      onChange={e => setForm(f => ({ ...f, company_name: e.target.value }))}
+                      autoComplete="off"
+                      className="input-field" placeholder="Nome da empresa do parceiro" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">E-mail *</label>
+                    <input type="email" required value={form.email}
+                      onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                      autoComplete="off"
+                      className="input-field" placeholder="email@parceiro.com" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Telefone</label>
+                    <input type="text" value={form.phone}
+                      onChange={e => setForm(f => ({ ...f, phone: formatPhone(e.target.value) }))}
+                      autoComplete="off"
+                      className="input-field" placeholder="(00) 00000-0000" />
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      A senha será gerada automaticamente e enviada por email junto com o link de acesso ao portal.
+                    </p>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowModal(false)}
+                      className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={saving}
+                      className="flex-1 px-4 py-2 bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60 flex items-center justify-center gap-2">
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Users2 className="w-4 h-4" />}
+                      {saving ? 'Criando...' : 'Criar Parceiro'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </FocusTrap>
         </div>
       )}
+
+      {/* Confirmação de exclusão */}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title="Excluir Parceiro"
+        description={`Tem certeza que deseja excluir o parceiro "${deleteTarget?.first_name} ${deleteTarget?.last_name}" (${deleteTarget?.email})?`}
+        confirmLabel={deleting ? 'Excluindo...' : 'Excluir'}
+        danger
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
