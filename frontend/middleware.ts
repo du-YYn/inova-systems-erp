@@ -56,6 +56,13 @@ export function middleware(request: NextRequest) {
 
   // ── ERP principal ──
 
+  // Parceiros no domínio do ERP → redirecionar para portal
+  // (inova_role cookie setado no login para detecção rápida no middleware)
+  const roleHint = request.cookies.get('inova_role')?.value;
+  if (roleHint === 'partner' && !pathname.startsWith('/login') && !pathname.startsWith('/partner/')) {
+    return NextResponse.redirect(new URL('https://parceiro.inovasystemssolutions.com/'));
+  }
+
   // Libera rotas públicas
   if (PUBLIC_PATHS.some(p => pathname.startsWith(p))) {
     return NextResponse.next();

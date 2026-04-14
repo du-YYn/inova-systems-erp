@@ -71,6 +71,10 @@ class ProspectSerializer(serializers.ModelSerializer):
         return None
 
     def get_referred_by_partner_id(self, obj):
+        # Só expõe partner_id para admin/manager (proteção de dados do parceiro)
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.role not in ('admin', 'manager'):
+            return None
         if obj.referred_by_id:
             try:
                 return obj.referred_by.partner_profile.partner_id

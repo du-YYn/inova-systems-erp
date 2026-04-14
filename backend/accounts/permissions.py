@@ -64,13 +64,14 @@ class IsAdminOrReadOnly(BasePermission):
 
 
 class IsPartner(BasePermission):
-    """Somente parceiros de indicação."""
+    """Somente parceiros de indicação ativos."""
     message = 'Acesso restrito a parceiros.'
 
     def has_permission(self, request, view):
         return (
             request.user
             and request.user.is_authenticated
+            and request.user.is_active
             and request.user.role == 'partner'
         )
 

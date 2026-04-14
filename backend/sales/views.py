@@ -146,16 +146,23 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Gera comissão do parceiro (se lead foi indicado por parceiro)."""
         if not prospect.referred_by_id:
             return
-        # Evitar duplicata
-        if hasattr(prospect, 'partner_commission'):
-            try:
-                prospect.partner_commission
-                return  # Já existe
-            except PartnerCommission.DoesNotExist:
-                pass
+        # Parceiro inativo não recebe comissão
+        if not prospect.referred_by.is_active:
+            logger.warning(
+                f"Comissão não gerada: parceiro {prospect.referred_by_id} está inativo "
+                f"(prospect {prospect.id})"
+            )
+            return
+        # Evitar duplicata (forma segura para OneToOne)
+        if PartnerCommission.objects.filter(prospect=prospect).exists():
+            return
         project_value = float(prospect.proposal_value or prospect.estimated_value or 0)
         if project_value < 10_000:
-            return  # Abaixo da faixa mínima
+            logger.info(
+                f"Comissão não gerada: valor R${project_value:.2f} abaixo da faixa mínima "
+                f"(prospect {prospect.id}, parceiro {prospect.referred_by_id})"
+            )
+            return
         result = PartnerCommission.calculate(project_value)
         if result['value'] > 0:
             PartnerCommission.objects.create(

@@ -164,12 +164,14 @@ class PartnerProfile(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.partner_id:
-            last = PartnerProfile.objects.order_by('-id').first()
-            seq = 1
-            if last and last.partner_id.startswith('PRC-'):
-                try:
-                    seq = int(last.partner_id.split('-')[1]) + 1
-                except (IndexError, ValueError):
-                    pass
-            self.partner_id = f'PRC-{seq:05d}'
+            from django.db import transaction
+            with transaction.atomic():
+                last = PartnerProfile.objects.select_for_update().order_by('-id').first()
+                seq = 1
+                if last and last.partner_id.startswith('PRC-'):
+                    try:
+                        seq = int(last.partner_id.split('-')[1]) + 1
+                    except (IndexError, ValueError):
+                        pass
+                self.partner_id = f'PRC-{seq:05d}'
         super().save(*args, **kwargs)

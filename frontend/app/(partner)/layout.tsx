@@ -27,6 +27,11 @@ export default function PartnerLayout({ children }: { children: React.ReactNode 
   const handleLogout = async () => {
     try { await api.post('/accounts/logout/'); } catch { /* ignore */ }
     localStorage.removeItem('user');
+    const domain = '; domain=.inovasystemssolutions.com';
+    document.cookie = `inova_session=; Max-Age=0; path=/${domain}`;
+    document.cookie = `access_token=; Max-Age=0; path=/${domain}`;
+    document.cookie = `refresh_token=; Max-Age=0; path=/${domain}`;
+    // Fallback sem domain (localhost)
     document.cookie = 'inova_session=; Max-Age=0; path=/';
     document.cookie = 'access_token=; Max-Age=0; path=/';
     document.cookie = 'refresh_token=; Max-Age=0; path=/';

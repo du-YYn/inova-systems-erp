@@ -633,13 +633,13 @@ class PartnerCommission(models.Model):
         ('paid', 'Pago'),
     ]
 
-    # Tabela de faixas de comissão
+    # Tabela de faixas de comissão (max exclusivo — usa < para comparar)
     COMMISSION_TIERS = [
-        # (min_value, max_value, pct, min_commission, max_commission)
-        (10_000, 25_000, 10, 1_000, 2_500),
-        (25_001, 50_000, 8, 2_000, 4_000),
-        (50_001, 100_000, 6, 3_000, 6_000),
-        (100_001, 200_000, 5, 5_000, 10_000),
+        # (min_value, max_exclusive, pct, min_commission, max_commission)
+        (10_000, 25_001, 10, 1_000, 2_500),
+        (25_001, 50_001, 8, 2_000, 4_000),
+        (50_001, 100_001, 6, 3_000, 6_000),
+        (100_001, 200_001, 5, 5_000, 10_000),
         (200_001, None, 4, 8_000, 12_000),
     ]
 
@@ -648,7 +648,8 @@ class PartnerCommission(models.Model):
         related_name='commissions',
     )
     prospect = models.OneToOneField(
-        Prospect, on_delete=models.CASCADE,
+        Prospect, on_delete=models.SET_NULL,
+        null=True, blank=True,
         related_name='partner_commission',
     )
     project_value = models.DecimalField(max_digits=12, decimal_places=2)
@@ -671,7 +672,7 @@ class PartnerCommission(models.Model):
         from decimal import Decimal, ROUND_HALF_UP
         value = float(project_value)
         for min_val, max_val, pct, min_comm, max_comm in cls.COMMISSION_TIERS:
-            if value >= min_val and (max_val is None or value <= max_val):
+            if value >= min_val and (max_val is None or value < max_val):
                 raw = value * pct / 100
                 clamped = max(min_comm, min(raw, max_comm))
                 return {

@@ -37,7 +37,7 @@ _SAMESITE = getattr(django_settings, 'JWT_COOKIE_SAMESITE', 'Lax')
 _COOKIE_DOMAIN = getattr(django_settings, 'JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com
 
 
-def _set_auth_cookies(response: Response, refresh: RefreshToken) -> None:
+def _set_auth_cookies(response: Response, refresh: RefreshToken, user=None) -> None:
     """Define os cookies httpOnly de access e refresh token na resposta."""
     common = dict(
         secure=_SECURE,
@@ -69,12 +69,24 @@ def _set_auth_cookies(response: Response, refresh: RefreshToken) -> None:
         httponly=False,
         **common,
     )
+    # Role hint para middleware redirecionar parceiros ao portal correto
+    if user and hasattr(user, 'role'):
+        response.set_cookie(
+            'inova_role',
+            user.role,
+            max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+            httponly=False,
+            **common,
+        )
 
 
 def _clear_auth_cookies(response: Response) -> None:
     """Remove todos os cookies de autenticação."""
-    for name in ('access_token', 'refresh_token', 'inova_session'):
-        response.delete_cookie(name, path='/')
+    kwargs = {'path': '/'}
+    if _COOKIE_DOMAIN:
+        kwargs['domain'] = _COOKIE_DOMAIN
+    for name in ('access_token', 'refresh_token', 'inova_session', 'inova_role'):
+        response.delete_cookie(name, **kwargs)
 
 
 @extend_schema(tags=['auth'])
@@ -127,7 +139,7 @@ class LoginView(APIView):
         log_audit(user, 'login', 'user', user.id)
         refresh = RefreshToken.for_user(user)
         response = Response({'user': UserSerializer(user).data})
-        _set_auth_cookies(response, refresh)
+        _set_auth_cookies(response, refresh, user=user)
         return response
 
 
@@ -168,7 +180,7 @@ class TwoFactorVerifyView(APIView):
         logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
         response = Response({'user': UserSerializer(user).data})
-        _set_auth_cookies(response, refresh)
+        _set_auth_cookies(response, refresh, user=user)
         return response
 
 
@@ -344,6 +356,22 @@ class UserListView(generics.ListCreateAPIView):
     queryset = User.objects.all().order_by('-created_at')
     serializer_class = AdminUserSerializer
     permission_classes = [IsAdmin]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        role = self.request.query_params.get('role')
+        search = self.request.query_params.get('search')
+        if role:
+            qs = qs.filter(role=role)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search) |
+                Q(email__icontains=search) |
+                Q(username__icontains=search)
+            )
+        return qs
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
