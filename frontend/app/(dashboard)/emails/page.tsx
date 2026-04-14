@@ -51,11 +51,9 @@ export default function EmailsPage() {
       setTemplates(list);
     } catch (err) {
       console.error('Erro ao carregar templates:', err);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const apiErr = err as any;
-      const status = apiErr?.status || '';
-      const msg = apiErr?.message || String(err);
-      toast.error(`Erro (${status}): ${msg}`);
+      const status = err instanceof Object && 'status' in err ? String((err as Record<string, unknown>).status) : '';
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Erro${status ? ` (${status})` : ''}: ${msg}`);
     }
     setLoading(false);
   }, []);
