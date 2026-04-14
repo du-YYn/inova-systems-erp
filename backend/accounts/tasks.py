@@ -8,8 +8,9 @@ logger = logging.getLogger('accounts')
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_password_reset_email(self, user_id: int, token: str):
-    """Envia email de reset de senha de forma assíncrona."""
+    """Envia email de reset de senha via template."""
     from django.contrib.auth import get_user_model
+    from notifications.email_renderer import send_template_email_sync
     User = get_user_model()
 
     try:
@@ -21,20 +22,19 @@ def send_password_reset_email(self, user_id: int, token: str):
     reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
 
     try:
-        send_mail(
-            subject='Redefinição de senha — Inova Systems ERP',
-            message=(
-                f'Olá {user.get_full_name() or user.username},\n\n'
-                f'Você solicitou a redefinição de sua senha.\n\n'
-                f'Acesse o link abaixo para criar uma nova senha (válido por 24 horas):\n'
-                f'{reset_url}\n\n'
-                f'Se você não solicitou isso, ignore este email.\n\n'
-                f'Equipe Inova Systems'
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
+        success = send_template_email_sync('password_reset', user.email, {
+            'nome': user.get_full_name() or user.username,
+            'link_reset': reset_url,
+        })
+        if not success:
+            # Fallback para texto puro se template não existir
+            send_mail(
+                subject='Redefinição de senha — Inova Systems',
+                message=f'Olá {user.get_full_name() or user.username},\n\nLink: {reset_url}\n\nEquipe Inova Systems',
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
         logger.info(f"Email de reset enviado para: {user.email}")
     except Exception as exc:
         logger.error(f"Falha ao enviar email para {user.email}: {exc}")

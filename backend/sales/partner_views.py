@@ -108,6 +108,27 @@ def partner_leads(request):
         f"Lead indicado por parceiro {request.user.username}: "
         f"{prospect.company_name} (prospect {prospect.id})"
     )
+
+    # Notificar equipe por email
+    from notifications.email_renderer import send_template_email
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    partner_id = ''
+    try:
+        partner_id = request.user.partner_profile.partner_id
+    except Exception:
+        pass
+    team_emails = User.objects.filter(
+        role__in=['admin', 'manager'], is_active=True,
+    ).values_list('email', flat=True)
+    for email in team_emails:
+        if email:
+            send_template_email.delay('lead_received', email, {
+                'nome_parceiro': request.user.full_name,
+                'partner_id': partner_id,
+                'empresa_lead': prospect.company_name,
+            })
+
     return Response(
         PartnerLeadListSerializer(prospect).data,
         status=status.HTTP_201_CREATED,

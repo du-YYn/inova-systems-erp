@@ -283,8 +283,11 @@ class ClientOnboardingPublicView(APIView):
         # Atualizar Customer com os dados do formulário
         self._sync_customer(onboarding)
 
-        # Notificar equipe
+        # Notificar equipe (in-app)
         self._notify_team(onboarding)
+
+        # Enviar emails (isolados — cada um para o destinatário correto)
+        self._send_onboarding_emails(onboarding)
 
         return Response(
             {'success': True, 'message': 'Dados recebidos com sucesso!'},
@@ -354,6 +357,33 @@ class ClientOnboardingPublicView(APIView):
             logger.warning(f"Customer {customer_id} não encontrado para onboarding {onboarding.id}")
         except Exception as e:
             logger.warning(f"Erro ao sincronizar customer via onboarding: {e}")
+
+    @staticmethod
+    def _send_onboarding_emails(onboarding):
+        """Envia emails de confirmação — isolados por destinatário."""
+        from notifications.email_renderer import send_template_email
+
+        # Email 1 → SOMENTE o cliente (email do prospect)
+        client_email = onboarding.prospect.contact_email
+        if client_email:
+            send_template_email.delay('onboarding_submitted_client', client_email, {
+                'nome_representante': onboarding.rep_full_name,
+                'empresa': onboarding.company_legal_name,
+            })
+
+        # Email 2 → SOMENTE a equipe Inova (admins/managers)
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        team_emails = User.objects.filter(
+            role__in=['admin', 'manager'], is_active=True,
+        ).values_list('email', flat=True)
+        for email in team_emails:
+            if email:
+                send_template_email.delay('onboarding_submitted_team', email, {
+                    'empresa': onboarding.company_legal_name,
+                    'nome_representante': onboarding.rep_full_name,
+                    'cnpj': onboarding.company_cnpj,
+                })
 
     @staticmethod
     def _notify_team(onboarding):

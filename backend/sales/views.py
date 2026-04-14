@@ -176,6 +176,16 @@ class ProspectViewSet(viewsets.ModelViewSet):
                 f"Comissão {result['pct']}% = R${result['value']} gerada para "
                 f"parceiro {prospect.referred_by.full_name} — prospect {prospect.id}"
             )
+            # Email de comissão → SOMENTE o parceiro que indicou
+            from notifications.email_renderer import send_template_email
+            fmt_val = f"R$ {project_value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            fmt_comm = f"R$ {float(result['value']):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+            send_template_email.delay('lead_closed', prospect.referred_by.email, {
+                'nome_parceiro': prospect.referred_by.full_name,
+                'empresa_lead': prospect.company_name,
+                'valor_projeto': fmt_val,
+                'valor_comissao': fmt_comm,
+            })
 
     @staticmethod
     def _generate_receivables(prospect, user):

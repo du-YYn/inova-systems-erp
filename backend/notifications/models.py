@@ -55,3 +55,34 @@ class Notification(models.Model):
             self.is_read = True
             self.read_at = timezone.now()
             self.save(update_fields=['is_read', 'read_at'])
+
+
+class EmailTemplate(models.Model):
+    """Template de email editável pelo admin."""
+
+    RECIPIENT_TYPE_CHOICES = [
+        ('client', 'Cliente'),
+        ('partner', 'Parceiro'),
+        ('team', 'Equipe Inova'),
+        ('requester', 'Solicitante'),
+    ]
+
+    slug = models.SlugField(max_length=50, unique=True, help_text='Identificador único (ex: welcome_partner)')
+    name = models.CharField(max_length=200, help_text='Nome amigável')
+    subject = models.CharField(max_length=300, help_text='Assunto do email (aceita {{variáveis}})')
+    body_html = models.TextField(help_text='Corpo HTML do email (aceita {{variáveis}})')
+    variables = models.JSONField(
+        default=list,
+        help_text='Lista de variáveis disponíveis: [{"key": "nome", "description": "Nome do destinatário"}]',
+    )
+    recipient_type = models.CharField(max_length=20, choices=RECIPIENT_TYPE_CHOICES, default='team')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'email_templates'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.slug})"
