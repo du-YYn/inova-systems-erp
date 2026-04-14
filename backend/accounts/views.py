@@ -105,10 +105,19 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = authenticate(
-            username=serializer.validated_data['username'],
-            password=serializer.validated_data['password']
-        )
+        login_input = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+
+        # Aceitar email ou username no campo de login
+        User = get_user_model()
+        username = login_input
+        if '@' in login_input:
+            try:
+                username = User.objects.get(email=login_input).username
+            except User.DoesNotExist:
+                pass
+
+        user = authenticate(username=username, password=password)
 
         if not user:
             logger.warning("Login falhou: credenciais inválidas")
