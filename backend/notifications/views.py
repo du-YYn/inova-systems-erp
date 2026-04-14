@@ -3,6 +3,7 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from accounts.permissions import IsAdmin
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 
@@ -51,9 +52,7 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'patch', 'post', 'head', 'options']
     pagination_class = None  # Poucos templates — não precisa paginar
 
-    def get_permissions(self):
-        from accounts.permissions import IsAdmin
-        return [IsAdmin()]
+    permission_classes = [IsAdmin]
 
     def list(self, request, *args, **kwargs):
         # Se não há templates, criar os padrão
