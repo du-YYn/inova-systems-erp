@@ -93,21 +93,23 @@ def email_debug(request):
     except Exception as e:
         result['admin_check_error'] = str(e)
 
-    # Listar URLs registradas para notifications
+    # Testar a rota do email-templates diretamente
     try:
-        from django.urls import get_resolver
-        resolver = get_resolver()
-        notification_urls = []
-        for pattern in resolver.url_patterns:
-            prefix = getattr(pattern, 'pattern', '')
-            if 'notification' in str(prefix).lower() or 'email' in str(prefix).lower():
-                notification_urls.append(str(prefix))
-                if hasattr(pattern, 'url_patterns'):
-                    for sub in pattern.url_patterns:
-                        notification_urls.append(f"  {prefix}{sub.pattern}")
-        result['notification_urls'] = notification_urls
+        from django.urls import reverse
+        result['email_templates_url'] = reverse('email-template-list')
     except Exception as e:
-        result['url_scan_error'] = str(e)
+        result['reverse_error'] = str(e)
+
+    # Testar o ViewSet diretamente
+    try:
+        from notifications.views import EmailTemplateViewSet
+        from notifications.models import EmailTemplate
+        qs = EmailTemplateViewSet.queryset
+        result['viewset_queryset_count'] = qs.count()
+        result['viewset_class'] = str(EmailTemplateViewSet)
+        result['viewset_permissions'] = str(EmailTemplateViewSet.permission_classes)
+    except Exception as e:
+        result['viewset_error'] = str(e)
 
     return Response(result)
 
