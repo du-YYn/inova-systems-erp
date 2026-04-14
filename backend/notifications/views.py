@@ -48,12 +48,60 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
     """CRUD de templates de email (somente admin)."""
     queryset = EmailTemplate.objects.all()
     serializer_class = EmailTemplateSerializer
-    http_method_names = ['get', 'patch', 'head', 'options']
+    http_method_names = ['get', 'patch', 'post', 'head', 'options']
     pagination_class = None  # Poucos templates — não precisa paginar
 
     def get_permissions(self):
         from accounts.permissions import IsAdmin
         return [IsAdmin()]
+
+    def list(self, request, *args, **kwargs):
+        # Se não há templates, criar os padrão
+        if not EmailTemplate.objects.exists():
+            self._create_defaults()
+        return super().list(request, *args, **kwargs)
+
+    @staticmethod
+    def _create_defaults():
+        """Cria templates padrão se a tabela estiver vazia."""
+        BASE = (
+            '<div style="background:#0a0a0a;padding:40px 20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">'
+            '<div style="max-width:560px;margin:0 auto;background:#111;border-radius:16px;border:1px solid #1a1a1a;overflow:hidden;">'
+            '<div style="padding:24px 32px;border-bottom:1px solid #1a1a1a;text-align:center;">'
+            '<h1 style="color:#A6864A;font-size:24px;margin:0;">Inova.</h1>'
+            '<p style="color:#666;font-size:12px;margin:4px 0 0;">Systems Solutions</p></div>'
+            '<div style="padding:32px;">{body}</div>'
+            '<div style="padding:16px 32px;border-top:1px solid #1a1a1a;text-align:center;">'
+            '<p style="color:#555;font-size:11px;margin:0;">Inova Systems Solutions</p></div></div></div>'
+        )
+        def w(body):
+            return BASE.replace('{body}', body)
+
+        defaults = [
+            ('welcome_partner', 'Boas-vindas Parceiro', 'Bem-vindo ao programa de parceiros — Inova Systems', 'partner',
+             [{'key': 'nome', 'description': 'Nome do parceiro'}, {'key': 'email', 'description': 'Email'}, {'key': 'senha', 'description': 'Senha'}, {'key': 'link_portal', 'description': 'Link do portal'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Bem-vindo, {{nome}}!</h2><p style="color:#999;font-size:14px;">Seus dados de acesso:</p><p style="color:#999;">Email: {{email}}<br>Senha: {{senha}}</p><div style="text-align:center;margin:20px 0;"><a href="{{link_portal}}" style="padding:14px 32px;background:#A6864A;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;">Acessar Portal</a></div>')),
+            ('password_reset', 'Redefinição de Senha', 'Redefinição de senha — Inova Systems', 'requester',
+             [{'key': 'nome', 'description': 'Nome'}, {'key': 'link_reset', 'description': 'Link de reset'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Redefinição de Senha</h2><p style="color:#999;font-size:14px;">Olá, {{nome}}. Clique abaixo para redefinir sua senha (válido por 24h).</p><div style="text-align:center;margin:20px 0;"><a href="{{link_reset}}" style="padding:14px 32px;background:#A6864A;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;">Redefinir Senha</a></div>')),
+            ('lead_received', 'Novo Lead de Parceiro', 'Novo lead indicado: {{empresa_lead}}', 'team',
+             [{'key': 'nome_parceiro', 'description': 'Parceiro'}, {'key': 'partner_id', 'description': 'ID'}, {'key': 'empresa_lead', 'description': 'Empresa'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Novo Lead</h2><p style="color:#999;font-size:14px;">Parceiro <strong style="color:#A6864A;">{{nome_parceiro}}</strong> ({{partner_id}}) indicou: <strong style="color:#fff;">{{empresa_lead}}</strong></p>')),
+            ('lead_closed', 'Lead Fechado — Comissão', 'Seu lead {{empresa_lead}} foi fechado!', 'partner',
+             [{'key': 'nome_parceiro', 'description': 'Parceiro'}, {'key': 'empresa_lead', 'description': 'Empresa'}, {'key': 'valor_projeto', 'description': 'Valor'}, {'key': 'valor_comissao', 'description': 'Comissão'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Lead Fechado!</h2><p style="color:#999;">{{nome_parceiro}}, seu lead <strong style="color:#fff;">{{empresa_lead}}</strong> fechou!</p><p style="color:#999;">Projeto: {{valor_projeto}}</p><p style="color:#A6864A;font-size:18px;font-weight:700;">Comissão: {{valor_comissao}}</p>')),
+            ('onboarding_submitted_client', 'Cadastro Recebido — Cliente', 'Cadastro recebido — Inova Systems', 'client',
+             [{'key': 'nome_representante', 'description': 'Representante'}, {'key': 'empresa', 'description': 'Empresa'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Cadastro Recebido!</h2><p style="color:#999;font-size:14px;">Olá, {{nome_representante}}. Os dados de <strong style="color:#fff;">{{empresa}}</strong> foram recebidos. O projeto está em andamento!</p>')),
+            ('onboarding_submitted_team', 'Cadastro Recebido — Equipe', 'Cadastro preenchido: {{empresa}}', 'team',
+             [{'key': 'empresa', 'description': 'Empresa'}, {'key': 'nome_representante', 'description': 'Representante'}, {'key': 'cnpj', 'description': 'CNPJ'}],
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Cadastro Preenchido</h2><p style="color:#999;">Empresa: <strong style="color:#fff;">{{empresa}}</strong><br>Representante: {{nome_representante}}<br>CNPJ: {{cnpj}}</p>')),
+        ]
+        for slug, name, subject, rtype, variables, body_html in defaults:
+            EmailTemplate.objects.get_or_create(slug=slug, defaults={
+                'name': name, 'subject': subject, 'recipient_type': rtype,
+                'variables': variables, 'body_html': body_html,
+            })
 
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):

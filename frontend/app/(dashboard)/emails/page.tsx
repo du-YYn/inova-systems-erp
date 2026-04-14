@@ -45,9 +45,12 @@ export default function EmailsPage() {
 
   const fetchTemplates = useCallback(async () => {
     try {
-      const data = await api.get<EmailTemplate[]>('/notifications/email-templates/');
-      setTemplates(data);
-    } catch {
+      const res = await api.get<EmailTemplate[] | { results?: EmailTemplate[] }>('/notifications/email-templates/');
+      // Suporta resposta paginada ou array direto
+      const list = Array.isArray(res) ? res : (res.results || []);
+      setTemplates(list);
+    } catch (err) {
+      console.error('Erro ao carregar templates:', err);
       toast.error('Erro ao carregar templates.');
     }
     setLoading(false);
