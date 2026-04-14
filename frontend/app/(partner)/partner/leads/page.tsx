@@ -109,7 +109,7 @@ export default function PartnerLeadsPage() {
         <div className="bg-[#111] border border-[#1a1a1a] rounded-xl p-8 text-center">
           <Send className="w-10 h-10 text-gray-600 mx-auto mb-3" />
           <p className="text-gray-400 font-medium">Nenhuma indicação ainda</p>
-          <p className="text-gray-600 text-sm mt-1">Clique em "Nova Indicação" para começar</p>
+          <p className="text-gray-600 text-sm mt-1">Clique em &ldquo;Nova Indicação&rdquo; para começar</p>
         </div>
       ) : (
         <div className="space-y-2">
