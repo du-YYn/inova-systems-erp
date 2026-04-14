@@ -17,7 +17,7 @@ function getOnboardingUrl(token: string): string {
   if (typeof window !== 'undefined' && window.location.hostname === 'cadastro.inovasystemssolutions.com') {
     return `/api/onboarding/${token}`;
   }
-  return getOnboardingUrl(token);
+  return `${API_URL}/sales/onboarding/public/${token}/`;
 }
 
 interface OnboardingData {
