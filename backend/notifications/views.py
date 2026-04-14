@@ -79,7 +79,17 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
         defaults = [
             ('welcome_partner', 'Boas-vindas Parceiro', 'Bem-vindo ao programa de parceiros — Inova Systems', 'partner',
              [{'key': 'nome', 'description': 'Nome do parceiro'}, {'key': 'email', 'description': 'Email'}, {'key': 'senha', 'description': 'Senha'}, {'key': 'link_portal', 'description': 'Link do portal'}],
-             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Bem-vindo, {{nome}}!</h2><p style="color:#999;font-size:14px;">Seus dados de acesso:</p><p style="color:#999;">Email: {{email}}<br>Senha: {{senha}}</p><div style="text-align:center;margin:20px 0;"><a href="{{link_portal}}" style="padding:14px 32px;background:#A6864A;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;">Acessar Portal</a></div>')),
+             w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Bem-vindo, {{nome}}!</h2>'
+               '<p style="color:#999;font-size:14px;line-height:1.6;">Você foi cadastrado como parceiro de indicação da Inova Systems. Abaixo estão seus dados de acesso:</p>'
+               '<div style="background:#0a0a0a;border-radius:12px;padding:20px;margin:20px 0;">'
+               '<p style="color:#999;font-size:13px;margin:0 0 8px;"><strong style="color:#ccc;">Email:</strong> {{email}}</p>'
+               '<p style="color:#999;font-size:13px;margin:0;"><strong style="color:#ccc;">Senha:</strong> {{senha}}</p>'
+               '</div>'
+               '<p style="color:#999;font-size:14px;">Recomendamos alterar sua senha no primeiro acesso.</p>'
+               '<div style="text-align:center;margin:28px 0 0;">'
+               '<a href="{{link_portal}}" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,#A6864A,#c9a75e);color:#fff;font-size:15px;font-weight:600;text-decoration:none;border-radius:12px;">Acessar Portal do Parceiro</a>'
+               '</div>'
+               '<p style="color:#666;font-size:12px;margin:16px 0 0;text-align:center;">Ou copie e cole este link no navegador:<br><span style="color:#A6864A;">{{link_portal}}</span></p>')),
             ('password_reset', 'Redefinição de Senha', 'Redefinição de senha — Inova Systems', 'requester',
              [{'key': 'nome', 'description': 'Nome'}, {'key': 'link_reset', 'description': 'Link de reset'}],
              w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Redefinição de Senha</h2><p style="color:#999;font-size:14px;">Olá, {{nome}}. Clique abaixo para redefinir sua senha (válido por 24h).</p><div style="text-align:center;margin:20px 0;"><a href="{{link_reset}}" style="padding:14px 32px;background:#A6864A;color:#fff;text-decoration:none;border-radius:12px;font-weight:600;">Redefinir Senha</a></div>')),
@@ -97,10 +107,15 @@ class EmailTemplateViewSet(viewsets.ModelViewSet):
              w('<h2 style="color:#fff;font-size:20px;margin:0 0 8px;">Cadastro Preenchido</h2><p style="color:#999;">Empresa: <strong style="color:#fff;">{{empresa}}</strong><br>Representante: {{nome_representante}}<br>CNPJ: {{cnpj}}</p>')),
         ]
         for slug, name, subject, rtype, variables, body_html in defaults:
-            EmailTemplate.objects.get_or_create(slug=slug, defaults={
+            obj, created = EmailTemplate.objects.get_or_create(slug=slug, defaults={
                 'name': name, 'subject': subject, 'recipient_type': rtype,
                 'variables': variables, 'body_html': body_html,
             })
+            if not created:
+                # Atualizar template existente se body estiver diferente
+                obj.body_html = body_html
+                obj.variables = variables
+                obj.save(update_fields=['body_html', 'variables'])
 
     @action(detail=True, methods=['post'])
     def preview(self, request, pk=None):
