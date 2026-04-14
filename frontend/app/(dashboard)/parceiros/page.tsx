@@ -68,9 +68,13 @@ export default function ParceirosPage() {
     if (!form.first_name.trim() || !form.email.trim()) return;
     setSaving(true);
     try {
-      const data = await api.post<{ partner_id: string; email: string; message: string }>('/sales/partner/register/', form);
+      const data = await api.post<{ partner_id: string; email: string; message: string; email_status?: string; email_error?: string }>('/sales/partner/register/', form);
       setCreated({ partner_id: data.partner_id, email: data.email });
-      toast.success(data.message);
+      if (data.email_status === 'sent') {
+        toast.success(data.message);
+      } else {
+        toast.warning(data.message);
+      }
       fetchPartners();
     } catch (err) {
       const msg = err instanceof ApiError

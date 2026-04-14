@@ -131,16 +131,37 @@ def register_partner(request):
     profile = PartnerProfile(user=user, company_name=company_name, phone=phone)
     profile.save()
 
-    # Enviar email de boas-vindas com credenciais
+    # Enviar email de boas-vindas com credenciais (síncrono para ver erros)
     portal_url = 'https://parceiro.inovasystemssolutions.com'
-    send_template_email.delay('welcome_partner', email, {
-        'nome': user.get_full_name() or first_name,
-        'email': email,
-        'senha': password,
-        'link_portal': portal_url,
-    })
+    email_status = 'not_sent'
+    email_error = ''
+    try:
+        from notifications.email_renderer import send_template_email_sync
+        success = send_template_email_sync('welcome_partner', email, {
+            'nome': user.get_full_name() or first_name,
+            'email': email,
+            'senha': password,
+            'link_portal': portal_url,
+        })
+        if success:
+            email_status = 'sent'
+        else:
+            email_status = 'template_inactive'
+            email_error = 'Template welcome_partner não encontrado ou inativo'
+    except Exception as e:
+        email_status = 'error'
+        email_error = str(e)
+        logger.error(f"Erro ao enviar email de boas-vindas para {email}: {e}")
 
-    logger.info(f"Parceiro {profile.partner_id} ({email}) criado por {request.user.username}")
+    logger.info(f"Parceiro {profile.partner_id} ({email}) criado por {request.user.username} | email: {email_status}")
+
+    msg = f'Parceiro {profile.partner_id} criado.'
+    if email_status == 'sent':
+        msg += f' Email de boas-vindas enviado para {email}.'
+    elif email_error:
+        msg += f' ATENÇÃO: Email não enviado — {email_error}'
+    else:
+        msg += ' Email não enviado.'
 
     return Response({
         'id': user.id,
@@ -148,7 +169,9 @@ def register_partner(request):
         'first_name': user.first_name,
         'last_name': user.last_name,
         'email': user.email,
-        'message': f'Parceiro {profile.partner_id} criado. Email de boas-vindas enviado para {email}.',
+        'email_status': email_status,
+        'email_error': email_error,
+        'message': msg,
     }, status=status.HTTP_201_CREATED)
 
 
