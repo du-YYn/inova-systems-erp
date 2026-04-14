@@ -23,7 +23,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
-from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage, ClientOnboarding
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage, ClientOnboarding, PartnerCommission
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer,
@@ -136,9 +136,39 @@ class ProspectViewSet(viewsets.ModelViewSet):
         # Gerar faturas ao fechar lead
         if old_status != 'won' and instance.status == 'won':
             self._generate_receivables(instance, self.request.user)
+            self._generate_partner_commission(instance)
         # Marcar entrada como paga ao ir para produção
         if old_status != 'production' and instance.status == 'production':
             self._mark_entry_paid(instance, self.request.user)
+
+    @staticmethod
+    def _generate_partner_commission(prospect):
+        """Gera comissão do parceiro (se lead foi indicado por parceiro)."""
+        if not prospect.referred_by_id:
+            return
+        # Evitar duplicata
+        if hasattr(prospect, 'partner_commission'):
+            try:
+                prospect.partner_commission
+                return  # Já existe
+            except PartnerCommission.DoesNotExist:
+                pass
+        project_value = float(prospect.proposal_value or prospect.estimated_value or 0)
+        if project_value < 10_000:
+            return  # Abaixo da faixa mínima
+        result = PartnerCommission.calculate(project_value)
+        if result['value'] > 0:
+            PartnerCommission.objects.create(
+                partner=prospect.referred_by,
+                prospect=prospect,
+                project_value=project_value,
+                commission_pct=result['pct'],
+                commission_value=result['value'],
+            )
+            logger.info(
+                f"Comissão {result['pct']}% = R${result['value']} gerada para "
+                f"parceiro {prospect.referred_by.full_name} — prospect {prospect.id}"
+            )
 
     @staticmethod
     def _generate_receivables(prospect, user):

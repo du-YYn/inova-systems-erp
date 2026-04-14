@@ -63,6 +63,18 @@ class IsAdminOrReadOnly(BasePermission):
         return request.user.role == 'admin'
 
 
+class IsPartner(BasePermission):
+    """Somente parceiros de indicação."""
+    message = 'Acesso restrito a parceiros.'
+
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == 'partner'
+        )
+
+
 class IsOwnerOrAdmin(BasePermission):
     """Dono do objeto ou admin pode modificar."""
     message = 'Você não tem permissão para modificar este objeto.'

@@ -251,6 +251,13 @@ class Prospect(models.Model):
     payment_duration_months = models.IntegerField(default=12, help_text='Duração em meses')
     payment_first_due = models.DateField(null=True, blank=True, help_text='Vencimento da primeira parcela/entrada')
 
+    # ── Parceiro de indicação ──────────────────────────────────────────────
+    referred_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='referrals',
+        help_text='Parceiro que indicou este lead',
+    )
+
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_prospects')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -616,3 +623,59 @@ class ClientOnboarding(models.Model):
 
     def __str__(self):
         return f"Onboarding — {self.prospect.company_name} ({self.get_status_display()})"
+
+
+class PartnerCommission(models.Model):
+    """Comissão do parceiro por lead fechado."""
+
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('paid', 'Pago'),
+    ]
+
+    # Tabela de faixas de comissão
+    COMMISSION_TIERS = [
+        # (min_value, max_value, pct, min_commission, max_commission)
+        (10_000, 25_000, 10, 1_000, 2_500),
+        (25_001, 50_000, 8, 2_000, 4_000),
+        (50_001, 100_000, 6, 3_000, 6_000),
+        (100_001, 200_000, 5, 5_000, 10_000),
+        (200_001, None, 4, 8_000, 12_000),
+    ]
+
+    partner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='commissions',
+    )
+    prospect = models.OneToOneField(
+        Prospect, on_delete=models.CASCADE,
+        related_name='partner_commission',
+    )
+    project_value = models.DecimalField(max_digits=12, decimal_places=2)
+    commission_pct = models.DecimalField(max_digits=5, decimal_places=2)
+    commission_value = models.DecimalField(max_digits=12, decimal_places=2)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    paid_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'partner_commissions'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Comissão {self.partner.full_name} — {self.prospect.company_name} — R${self.commission_value}"
+
+    @classmethod
+    def calculate(cls, project_value: float) -> dict:
+        """Calcula comissão pela tabela de faixas."""
+        from decimal import Decimal, ROUND_HALF_UP
+        value = float(project_value)
+        for min_val, max_val, pct, min_comm, max_comm in cls.COMMISSION_TIERS:
+            if value >= min_val and (max_val is None or value <= max_val):
+                raw = value * pct / 100
+                clamped = max(min_comm, min(raw, max_comm))
+                return {
+                    'pct': Decimal(str(pct)),
+                    'value': Decimal(str(clamped)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+                }
+        return {'pct': Decimal('0'), 'value': Decimal('0')}

@@ -173,6 +173,7 @@ SIMPLE_JWT = {
 # Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
 JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
+JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com em prod
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
@@ -187,9 +188,11 @@ CORS_ALLOWED_ORIGINS = [
     for o in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
     if o.strip()
 ]
-# Subdomínio de cadastro do cliente (formulário público de onboarding)
-if 'https://cadastro.inovasystemssolutions.com' not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append('https://cadastro.inovasystemssolutions.com')
+# Subdomínios públicos
+for subdomain in ['cadastro', 'parceiro']:
+    origin = f'https://{subdomain}.inovasystemssolutions.com'
+    if origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(origin)
 CORS_ALLOW_CREDENTIALS = True
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────

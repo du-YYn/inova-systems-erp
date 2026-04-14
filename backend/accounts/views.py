@@ -34,27 +34,32 @@ User = get_user_model()
 
 _SECURE = getattr(django_settings, 'JWT_COOKIE_SECURE', False)
 _SAMESITE = getattr(django_settings, 'JWT_COOKIE_SAMESITE', 'Lax')
+_COOKIE_DOMAIN = getattr(django_settings, 'JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com
 
 
 def _set_auth_cookies(response: Response, refresh: RefreshToken) -> None:
     """Define os cookies httpOnly de access e refresh token na resposta."""
+    common = dict(
+        secure=_SECURE,
+        samesite=_SAMESITE,
+        path='/',
+    )
+    if _COOKIE_DOMAIN:
+        common['domain'] = _COOKIE_DOMAIN
+
     response.set_cookie(
         'access_token',
         str(refresh.access_token),
         max_age=int(django_settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
         httponly=True,
-        secure=_SECURE,
-        samesite=_SAMESITE,
-        path='/',
+        **common,
     )
     response.set_cookie(
         'refresh_token',
         str(refresh),
         max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
         httponly=True,
-        secure=_SECURE,
-        samesite=_SAMESITE,
-        path='/',
+        **common,
     )
     # Cookie não-httpOnly lido pelo middleware Next.js para proteção de rotas
     response.set_cookie(
@@ -62,9 +67,7 @@ def _set_auth_cookies(response: Response, refresh: RefreshToken) -> None:
         '1',
         max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
         httponly=False,
-        secure=_SECURE,
-        samesite=_SAMESITE,
-        path='/',
+        **common,
     )
 
 

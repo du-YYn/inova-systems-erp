@@ -10,6 +10,7 @@ class User(AbstractUser):
         ('manager', 'Gerente'),
         ('operator', 'Operador'),
         ('viewer', 'Visualizador'),
+        ('partner', 'Parceiro'),
     ]
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
@@ -136,3 +137,39 @@ class Absence(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.absence_type} ({self.start_date} ~ {self.end_date})"
+
+
+class PartnerProfile(models.Model):
+    """Perfil do parceiro de indicação com ID único."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='partner_profile',
+    )
+    partner_id = models.CharField(
+        max_length=10, unique=True, db_index=True,
+        help_text='ID único do parceiro (PRC-00001)',
+    )
+    company_name = models.CharField(max_length=200, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'partner_profiles'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.partner_id} — {self.user.full_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.partner_id:
+            last = PartnerProfile.objects.order_by('-id').first()
+            seq = 1
+            if last and last.partner_id.startswith('PRC-'):
+                try:
+                    seq = int(last.partner_id.split('-')[1]) + 1
+                except (IndexError, ValueError):
+                    pass
+            self.partner_id = f'PRC-{seq:05d}'
+        super().save(*args, **kwargs)

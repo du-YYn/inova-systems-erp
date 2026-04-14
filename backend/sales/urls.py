@@ -21,6 +21,7 @@ urlpatterns = [
     path('proposals/public/<uuid:token>/html/', ProposalPublicHTMLView.as_view(), name='proposal-public-html'),
     path('onboarding/public/<uuid:token>/', ClientOnboardingPublicView.as_view(), name='onboarding-public'),
     path('website-lead/', WebsiteLeadCreateView.as_view(), name='website-lead'),
+    path('partner/', include('sales.partner_urls')),
     path('n8n/', include('sales.n8n_urls')),
     path('', include(router.urls)),
 ]

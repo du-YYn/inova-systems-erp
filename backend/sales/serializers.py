@@ -55,6 +55,8 @@ class ProspectSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+    referred_by_name = serializers.SerializerMethodField()
+    referred_by_partner_id = serializers.SerializerMethodField()
     meets_qualification = serializers.SerializerMethodField()
     days_since_created = serializers.SerializerMethodField()
     service_interest = serializers.ListField(
@@ -62,6 +64,19 @@ class ProspectSerializer(serializers.ModelSerializer):
         default=list,
         allow_empty=True,
     )
+
+    def get_referred_by_name(self, obj):
+        if obj.referred_by_id:
+            return obj.referred_by.full_name
+        return None
+
+    def get_referred_by_partner_id(self, obj):
+        if obj.referred_by_id:
+            try:
+                return obj.referred_by.partner_profile.partner_id
+            except Exception:
+                return None
+        return None
 
     def get_meets_qualification(self, obj):
         return obj.qualification_score >= 3
@@ -129,6 +144,10 @@ class ProspectSerializer(serializers.ModelSerializer):
             "payment_due_day",
             "payment_duration_months",
             "payment_first_due",
+            # parceiro
+            "referred_by",
+            "referred_by_name",
+            "referred_by_partner_id",
             # meta
             "created_by",
             "created_by_name",

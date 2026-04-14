@@ -18,6 +18,7 @@ import {
   Headphones,
   Target,
   BellRing,
+  Users2,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -58,6 +59,7 @@ const navSections: NavSection[] = [
     title: 'COMERCIAL',
     items: [
       { href: '/crm',       label: 'CRM',        icon: Target        },
+      { href: '/parceiros', label: 'Parceiros',  icon: Users2     },
     ],
   },
   {
