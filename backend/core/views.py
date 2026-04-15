@@ -48,57 +48,6 @@ def system_info(request):
 
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@throttle_classes([])
-def auth_debug(request):
-    """Diagnóstico: testa login com email+senha. NÃO altera dados. REMOVER após resolver."""
-    from django.contrib.auth import authenticate, get_user_model
-    User = get_user_model()
-
-    email = request.data.get('email', '')
-    password = request.data.get('password', '')
-
-    if not email or not password:
-        # GET — info geral
-        partners = User.objects.filter(role='partner').values('id', 'username', 'email', 'is_active')
-        return Response({
-            'partners': list(partners),
-            'usage': 'POST com {"email": "...", "password": "..."} para testar login',
-        })
-
-    result = {'email_input': email, 'password_length': len(password)}
-
-    # Passo 1: Buscar user por email
-    try:
-        user = User.objects.get(email=email)
-        result['step1_user_found'] = True
-        result['step1_username'] = user.username
-        result['step1_is_active'] = user.is_active
-        result['step1_has_password'] = user.has_usable_password()
-        result['step1_role'] = user.role
-    except User.DoesNotExist:
-        result['step1_user_found'] = False
-        result['step1_error'] = f'Nenhum user com email={email}'
-        return Response(result)
-
-    # Passo 2: Testar check_password direto
-    result['step2_check_password'] = user.check_password(password)
-
-    # Passo 3: Testar authenticate
-    auth_result = authenticate(username=user.username, password=password)
-    result['step3_authenticate'] = 'OK' if auth_result else 'FALHOU'
-
-    # Passo 4: Se check_password OK mas authenticate falha, o problema é no backend
-    if result['step2_check_password'] and not auth_result:
-        result['step4_diagnosis'] = 'check_password OK mas authenticate falhou — possível AUTHENTICATION_BACKENDS customizado'
-    elif not result['step2_check_password']:
-        result['step4_diagnosis'] = 'Senha INCORRETA — a senha fornecida não bate com o hash no banco'
-    else:
-        result['step4_diagnosis'] = 'Tudo OK — login deveria funcionar'
-
-    return Response(result)
-
 
 @api_view(['POST'])
 @permission_classes([IsAdmin])
