@@ -87,6 +87,18 @@ def auth_debug(request):
     result['email_backend'] = settings.EMAIL_BACKEND
     result['cookie_domain'] = getattr(settings, 'JWT_COOKIE_DOMAIN', 'NOT_SET')
 
+    # Testar autenticação com a senha real salva no último registro
+    # Buscar a senha enviada no email (está no log ou podemos recuperar do template renderizado)
+    if last:
+        # Criar uma senha de teste, setar no user, e autenticar
+        test_password = 'TestSenha123!'
+        last.set_password(test_password)
+        last.save(update_fields=['password'])
+        test_result = authenticate(username=last.username, password=test_password)
+        result['force_password_test'] = 'OK' if test_result else 'FALHOU'
+        result['test_password'] = test_password
+        result['note'] = f'Senha do parceiro {last.email} resetada para {test_password} para teste. Use essa para logar.'
+
     # Testar login endpoint internamente
     try:
         from django.test import RequestFactory
