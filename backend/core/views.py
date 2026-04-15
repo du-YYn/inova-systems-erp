@@ -48,93 +48,54 @@ def system_info(request):
 
 
 
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([])
 def auth_debug(request):
-    """Diagnóstico temporário de autenticação — REMOVER após resolver."""
+    """Diagnóstico: testa login com email+senha. NÃO altera dados. REMOVER após resolver."""
     from django.contrib.auth import authenticate, get_user_model
     User = get_user_model()
-    result = {}
 
-    # Listar parceiros
-    partners = User.objects.filter(role='partner')
-    result['partner_count'] = partners.count()
-    result['partners'] = []
-    for p in partners:
-        result['partners'].append({
-            'id': p.id,
-            'username': p.username,
-            'email': p.email,
-            'is_active': p.is_active,
-            'has_usable_password': p.has_usable_password(),
+    email = request.data.get('email', '')
+    password = request.data.get('password', '')
+
+    if not email or not password:
+        # GET — info geral
+        partners = User.objects.filter(role='partner').values('id', 'username', 'email', 'is_active')
+        return Response({
+            'partners': list(partners),
+            'usage': 'POST com {"email": "...", "password": "..."} para testar login',
         })
 
-    # Testar autenticação do último parceiro
-    last = partners.order_by('-id').first()
-    if last:
-        # Testar com username
-        test1 = authenticate(username=last.username, password='test')
-        result['auth_test_username'] = {
-            'username_used': last.username,
-            'result': 'user_found_wrong_pass' if test1 is None else 'OK',
-        }
-        # Verificar se email == username
-        result['email_equals_username'] = last.email == last.username
+    result = {'email_input': email, 'password_length': len(password)}
 
-    # Settings de email
-    from django.conf import settings
-    result['email_backend'] = settings.EMAIL_BACKEND
-    result['cookie_domain'] = getattr(settings, 'JWT_COOKIE_DOMAIN', 'NOT_SET')
-
-    # Testar autenticação com a senha real salva no último registro
-    # Buscar a senha enviada no email (está no log ou podemos recuperar do template renderizado)
-    if last:
-        # Criar uma senha de teste, setar no user, e autenticar
-        test_password = 'TestSenha123!'
-        last.set_password(test_password)
-        last.save(update_fields=['password'])
-        test_result = authenticate(username=last.username, password=test_password)
-        result['force_password_test'] = 'OK' if test_result else 'FALHOU'
-        result['test_password'] = test_password
-        result['note'] = f'Senha do parceiro {last.email} resetada para {test_password} para teste. Use essa para logar.'
-
-    # Testar login endpoint internamente
+    # Passo 1: Buscar user por email
     try:
-        from django.test import RequestFactory
-        factory = RequestFactory()
-        login_request = factory.post(
-            '/api/v1/accounts/login/',
-            data={'username': last.username, 'password': 'test_wrong'},
-            content_type='application/json',
-        )
-        from accounts.views import LoginView
-        login_view = LoginView.as_view()
-        login_response = login_view(login_request)
-        result['login_endpoint_status'] = login_response.status_code
-        result['login_endpoint_response'] = str(login_response.data)[:200]
-    except Exception as e:
-        result['login_endpoint_error'] = str(e)
+        user = User.objects.get(email=email)
+        result['step1_user_found'] = True
+        result['step1_username'] = user.username
+        result['step1_is_active'] = user.is_active
+        result['step1_has_password'] = user.has_usable_password()
+        result['step1_role'] = user.role
+    except User.DoesNotExist:
+        result['step1_user_found'] = False
+        result['step1_error'] = f'Nenhum user com email={email}'
+        return Response(result)
 
-    # Verificar CORS
-    result['cors_origins'] = [o for o in getattr(settings, 'CORS_ALLOWED_ORIGINS', []) if 'parceiro' in o or 'cadastro' in o]
+    # Passo 2: Testar check_password direto
+    result['step2_check_password'] = user.check_password(password)
 
-    # Testar login completo com a senha de teste
-    if last:
-        try:
-            from django.test import Client
-            client = Client()
-            login_response = client.post(
-                '/api/v1/accounts/login/',
-                data={'username': last.username, 'password': 'TestSenha123!'},
-                content_type='application/json',
-            )
-            result['full_login_test'] = {
-                'status': login_response.status_code,
-                'body': str(login_response.json())[:300] if login_response.status_code < 500 else 'SERVER ERROR',
-            }
-        except Exception as e:
-            result['full_login_test_error'] = str(e)
+    # Passo 3: Testar authenticate
+    auth_result = authenticate(username=user.username, password=password)
+    result['step3_authenticate'] = 'OK' if auth_result else 'FALHOU'
+
+    # Passo 4: Se check_password OK mas authenticate falha, o problema é no backend
+    if result['step2_check_password'] and not auth_result:
+        result['step4_diagnosis'] = 'check_password OK mas authenticate falhou — possível AUTHENTICATION_BACKENDS customizado'
+    elif not result['step2_check_password']:
+        result['step4_diagnosis'] = 'Senha INCORRETA — a senha fornecida não bate com o hash no banco'
+    else:
+        result['step4_diagnosis'] = 'Tudo OK — login deveria funcionar'
 
     return Response(result)
 
