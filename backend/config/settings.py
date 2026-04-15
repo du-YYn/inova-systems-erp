@@ -27,9 +27,6 @@ _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.
 for _docker_host in ['backend', 'grupo_ry_inova-erp_backend', 'localhost', '127.0.0.1']:
     if _docker_host not in _allowed:
         _allowed.append(_docker_host)
-# Wildcard para aceitar qualquer host (proxy interno pode enviar qualquer Host header)
-if '*' not in _allowed:
-    _allowed.append('*')
 ALLOWED_HOSTS = _allowed
 
 INSTALLED_APPS = [
@@ -119,6 +116,9 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() == 'true'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    CSRF_TRUSTED_ORIGINS = [
+        o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')
+    ] + ['https://*.inovasystemssolutions.com']
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
