@@ -84,7 +84,7 @@ export default function OnboardingTab() {
   useEffect(() => { fetchOnboardings(); }, [fetchOnboardings]);
 
   const copyLink = async (onboarding: Onboarding) => {
-    const link = `https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`;
+    const link = `https://${process.env.NEXT_PUBLIC_ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com'}/${onboarding.public_token}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch {

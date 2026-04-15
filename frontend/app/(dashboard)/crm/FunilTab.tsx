@@ -904,7 +904,7 @@ export default function FunilTab() {
       if (customerCreated) {
         try {
           const onboarding = await api.post<{ public_token: string }>(`/sales/prospects/${wonModalProspect.id}/create-onboarding/`);
-          setOnboardingLink(`https://cadastro.inovasystemssolutions.com/${onboarding.public_token}`);
+          setOnboardingLink(`https://${process.env.NEXT_PUBLIC_ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com'}/${onboarding.public_token}`);
           toast.success('Lead fechado! Link de cadastro gerado.');
         } catch {
           toast.success('Lead fechado! Gere o link de cadastro no drawer do prospect.');

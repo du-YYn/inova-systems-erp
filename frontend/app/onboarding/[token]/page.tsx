@@ -14,7 +14,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1
 // No ERP (erp.inovasystemssolutions.com) usa a API direta.
 // No subdomínio (cadastro.inovasystemssolutions.com) usa proxy Next.js para evitar CORS.
 function getOnboardingUrl(token: string): string {
-  if (typeof window !== 'undefined' && window.location.hostname === 'cadastro.inovasystemssolutions.com') {
+  if (typeof window !== 'undefined' && window.location.hostname === (process.env.NEXT_PUBLIC_ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com')) {
     return `/api/onboarding/${token}`;
   }
   return `${API_URL}/sales/onboarding/public/${token}/`;

@@ -1,5 +1,6 @@
 """Views públicas — sem autenticação."""
 import logging
+import os
 
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
@@ -77,7 +78,7 @@ class ProposalPublicHTMLView(APIView):
     authentication_classes = []
     throttle_classes = [ProposalPublicThrottle]
 
-    WHATSAPP_NUMBER = '5541998594938'
+    WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '5541998594938')
 
     def get(self, request, token):
         try:
@@ -135,7 +136,8 @@ class ProposalPublicHTMLView(APIView):
             try:
                 onboarding = proposal.prospect.onboarding
                 if onboarding and onboarding.public_token:
-                    onboarding_url = f'https://cadastro.inovasystemssolutions.com/{onboarding.public_token}'
+                    onboarding_host = os.environ.get('ONBOARDING_HOST', 'cadastro.inovasystemssolutions.com')
+                    onboarding_url = f'https://{onboarding_host}/{onboarding.public_token}'
             except ClientOnboarding.DoesNotExist:
                 pass  # Prospect sem onboarding — botão não aparece
             except Exception as e:

@@ -3,8 +3,8 @@ import type { NextRequest } from 'next/server';
 
 const PUBLIC_PATHS = ['/login', '/reset-password', '/forgot-password', '/p/', '/api/proposal/', '/onboarding/', '/api/onboarding/'];
 
-const ONBOARDING_HOST = 'cadastro.inovasystemssolutions.com';
-const PARTNER_HOST = 'parceiro.inovasystemssolutions.com';
+const ONBOARDING_HOST = process.env.ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com';
+const PARTNER_HOST = process.env.PARTNER_HOST || 'parceiro.inovasystemssolutions.com';
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -60,7 +60,7 @@ export function middleware(request: NextRequest) {
   // (inova_role cookie setado no login para detecção rápida no middleware)
   const roleHint = request.cookies.get('inova_role')?.value;
   if (roleHint === 'partner' && !pathname.startsWith('/login') && !pathname.startsWith('/partner/')) {
-    return NextResponse.redirect(new URL('https://parceiro.inovasystemssolutions.com/'));
+    return NextResponse.redirect(new URL(`https://${PARTNER_HOST}/`));
   }
 
   // Libera rotas públicas

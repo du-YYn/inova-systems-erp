@@ -57,7 +57,7 @@ export default function LoginPage() {
           localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
         }
         // Redirecionar com base no role e subdomínio
-        const isPartnerDomain = window.location.hostname === 'parceiro.inovasystemssolutions.com';
+        const isPartnerDomain = window.location.hostname === (process.env.NEXT_PUBLIC_PARTNER_HOST || 'parceiro.inovasystemssolutions.com');
         const isPartnerRole = data.user?.role === 'partner';
         if (isPartnerDomain || isPartnerRole) {
           window.location.replace('/partner/dashboard');

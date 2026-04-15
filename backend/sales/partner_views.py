@@ -1,5 +1,6 @@
 """API do Portal do Parceiro."""
 import logging
+import os
 import secrets
 import string
 
@@ -141,7 +142,7 @@ def register_partner(request):
     profile.save()
 
     # Enviar email de boas-vindas com credenciais (síncrono para ver erros)
-    portal_url = 'https://parceiro.inovasystemssolutions.com'
+    portal_url = os.environ.get('PARTNER_PORTAL_URL', 'https://parceiro.inovasystemssolutions.com')
     email_status = 'not_sent'
     email_error = ''
     try:
