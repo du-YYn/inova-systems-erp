@@ -27,6 +27,9 @@ _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.
 for _docker_host in ['backend', 'grupo_ry_inova-erp_backend', 'localhost', '127.0.0.1']:
     if _docker_host not in _allowed:
         _allowed.append(_docker_host)
+# Wildcard para aceitar qualquer host (proxy interno pode enviar qualquer Host header)
+if '*' not in _allowed:
+    _allowed.append('*')
 ALLOWED_HOSTS = _allowed
 
 INSTALLED_APPS = [
