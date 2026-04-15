@@ -116,9 +116,6 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() == 'true'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    CSRF_TRUSTED_ORIGINS = [
-        o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')
-    ] + ['https://*.inovasystemssolutions.com']
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
@@ -199,6 +196,12 @@ for subdomain in ['cadastro', 'parceiro']:
     if origin not in CORS_ALLOWED_ORIGINS:
         CORS_ALLOWED_ORIGINS.append(origin)
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF trusted origins (deve vir DEPOIS de CORS_ALLOWED_ORIGINS)
+if not DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')
+    ] + ['https://*.inovasystemssolutions.com']
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
 
