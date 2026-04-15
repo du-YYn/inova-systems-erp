@@ -31,11 +31,19 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-Forwarded-Proto': 'https',
         },
         body: JSON.stringify(body),
         cache: 'no-store',
+        redirect: 'manual',
         signal: AbortSignal.timeout(8000),
       });
+
+      // Se o backend redireciona (HTTPS redirect), pular esta URL
+      if (res.status >= 300 && res.status < 400) {
+        lastError = `${baseUrl} redirect (${res.status})`;
+        continue;
+      }
 
       // Se retornou HTML (Django error), tentar próxima URL
       const ct = res.headers.get('content-type') || '';
