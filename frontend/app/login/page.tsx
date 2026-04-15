@@ -42,7 +42,15 @@ export default function LoginPage() {
       }
 
       try {
-        const data = await api.post<{ requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/login/', formData);
+        // Login via proxy server-side para evitar problemas de CSP/CORS em subdomínios
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+          credentials: 'include',
+        });
+        const data = await loginRes.json() as { requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string }; error?: string };
+        if (!loginRes.ok) throw new ApiError(data.error || 'Credenciais inválidas', loginRes.status, data);
 
         if (data.requires_2fa) {
           setRequires2FA(true);
