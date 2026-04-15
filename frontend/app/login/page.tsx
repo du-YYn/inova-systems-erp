@@ -42,7 +42,22 @@ export default function LoginPage() {
       }
 
       try {
-        const data = await api.post<{ requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/login/', formData);
+        // No subdomínio parceiro, usar proxy local para evitar problemas de cookies cross-domain
+        const onPartnerDomain = typeof window !== 'undefined' && window.location.hostname === 'parceiro.inovasystemssolutions.com';
+        interface LoginResponse { requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string }; error?: string }
+        let data: LoginResponse;
+        if (onPartnerDomain) {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+            credentials: 'include',
+          });
+          data = await res.json();
+          if (!res.ok) throw new ApiError(data.error || 'Credenciais inválidas', res.status, data);
+        } else {
+          data = await api.post<LoginResponse>('/accounts/login/', formData);
+        }
 
         if (data.requires_2fa) {
           setRequires2FA(true);
