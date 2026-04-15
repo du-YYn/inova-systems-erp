@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('sales', '0021_merge_0008_prospectmessage_0020_proposal_file_token_views'),
+        ('sales', '0022_clientonboarding'),
     ]
 
     operations = [
