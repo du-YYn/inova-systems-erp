@@ -119,6 +119,23 @@ def auth_debug(request):
     # Verificar CORS
     result['cors_origins'] = [o for o in getattr(settings, 'CORS_ALLOWED_ORIGINS', []) if 'parceiro' in o or 'cadastro' in o]
 
+    # Testar login completo com a senha de teste
+    if last:
+        try:
+            from django.test import Client
+            client = Client()
+            login_response = client.post(
+                '/api/v1/accounts/login/',
+                data={'username': last.username, 'password': 'TestSenha123!'},
+                content_type='application/json',
+            )
+            result['full_login_test'] = {
+                'status': login_response.status_code,
+                'body': str(login_response.json())[:300] if login_response.status_code < 500 else 'SERVER ERROR',
+            }
+        except Exception as e:
+            result['full_login_test_error'] = str(e)
+
     return Response(result)
 
 
