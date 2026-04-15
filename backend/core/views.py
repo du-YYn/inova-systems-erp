@@ -87,6 +87,26 @@ def auth_debug(request):
     result['email_backend'] = settings.EMAIL_BACKEND
     result['cookie_domain'] = getattr(settings, 'JWT_COOKIE_DOMAIN', 'NOT_SET')
 
+    # Testar login endpoint internamente
+    try:
+        from django.test import RequestFactory
+        factory = RequestFactory()
+        login_request = factory.post(
+            '/api/v1/accounts/login/',
+            data={'username': last.username, 'password': 'test_wrong'},
+            content_type='application/json',
+        )
+        from accounts.views import LoginView
+        login_view = LoginView.as_view()
+        login_response = login_view(login_request)
+        result['login_endpoint_status'] = login_response.status_code
+        result['login_endpoint_response'] = str(login_response.data)[:200]
+    except Exception as e:
+        result['login_endpoint_error'] = str(e)
+
+    # Verificar CORS
+    result['cors_origins'] = [o for o in getattr(settings, 'CORS_ALLOWED_ORIGINS', []) if 'parceiro' in o or 'cadastro' in o]
+
     return Response(result)
 
 
