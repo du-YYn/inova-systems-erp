@@ -23,8 +23,10 @@ if not DEBUG and not _is_ci:
         raise ValueError('WEBSITE_API_KEY must be set in production')
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
-if DEBUG:
-    _allowed += ['backend', 'host.docker.internal']
+# Hosts internos do Docker (necessários para proxy Next.js → Django)
+for _docker_host in ['backend', 'grupo_ry_inova-erp_backend', 'localhost', '127.0.0.1']:
+    if _docker_host not in _allowed:
+        _allowed.append(_docker_host)
 ALLOWED_HOSTS = _allowed
 
 INSTALLED_APPS = [

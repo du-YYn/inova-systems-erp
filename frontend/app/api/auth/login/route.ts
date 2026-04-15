@@ -20,10 +20,20 @@ export async function POST(request: NextRequest) {
     try {
       const res = await fetch(`${baseUrl}/accounts/login/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Host': 'localhost',
+          'X-Forwarded-Host': request.headers.get('host') || '',
+        },
         body: JSON.stringify(body),
         cache: 'no-store',
       });
+
+      // Se o backend retornou HTML (erro Django), tentar próxima URL
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('json')) {
+        continue;
+      }
 
       const data = await res.json();
 
