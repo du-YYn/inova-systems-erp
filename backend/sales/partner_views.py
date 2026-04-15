@@ -116,16 +116,25 @@ def register_partner(request):
     password = _generate_password()
 
     # Criar user
-    user = User.objects.create_user(
+    user = User(
         username=email,
         email=email,
-        password=password,
         first_name=first_name,
         last_name=last_name,
         phone=phone,
         role='partner',
         is_active=True,
     )
+    user.set_password(password)
+    user.save()
+
+    # Verificar que a senha funciona
+    from django.contrib.auth import authenticate
+    test_auth = authenticate(username=email, password=password)
+    if not test_auth:
+        logger.error(f"ALERTA: Senha do parceiro {email} não passou no teste de autenticação!")
+    else:
+        logger.info(f"Senha do parceiro {email} verificada com sucesso")
 
     # Criar PartnerProfile (ID auto-gerado PRC-XXXXX)
     profile = PartnerProfile(user=user, company_name=company_name, phone=phone)
@@ -169,6 +178,8 @@ def register_partner(request):
         'first_name': user.first_name,
         'last_name': user.last_name,
         'email': user.email,
+        'username': user.username,
+        'auth_test': 'OK' if test_auth else 'FALHOU',
         'email_status': email_status,
         'email_error': email_error,
         'message': msg,

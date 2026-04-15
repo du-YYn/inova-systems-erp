@@ -113,14 +113,21 @@ class LoginView(APIView):
         username = login_input
         if '@' in login_input:
             try:
-                username = User.objects.get(email=login_input).username
+                found_user = User.objects.get(email=login_input)
+                username = found_user.username
+                logger.info(f"Login: email '{login_input}' resolvido para username '{username}' (active={found_user.is_active})")
             except User.DoesNotExist:
-                pass
+                logger.warning(f"Login: email '{login_input}' não encontrado no banco")
 
         user = authenticate(username=username, password=password)
 
         if not user:
-            logger.warning("Login falhou: credenciais inválidas")
+            # Diagnóstico: verificar se user existe
+            try:
+                db_user = User.objects.get(username=username)
+                logger.warning(f"Login falhou: user '{username}' existe (active={db_user.is_active}) mas senha incorreta")
+            except User.DoesNotExist:
+                logger.warning(f"Login falhou: user '{username}' não encontrado")
             return Response(
                 {'error': 'Credenciais inválidas'},
                 status=status.HTTP_401_UNAUTHORIZED
