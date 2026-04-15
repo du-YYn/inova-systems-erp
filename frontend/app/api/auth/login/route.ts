@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URLS = [
+  'https://erp.inovasystemssolutions.com/api/v1',
   process.env.NEXT_PUBLIC_API_URL,
   process.env.INTERNAL_API_URL,
   'http://backend:8000/api/v1',
   'http://grupo_ry_inova-erp_backend:8000/api/v1',
 ].filter(Boolean) as string[];
+
+// Deduplicar URLs
+const UNIQUE_URLS = [...new Set(BACKEND_URLS)];
 
 // POST /api/auth/login — proxy para login no subdomínio parceiro
 // Necessário porque CSP connect-src 'self' bloqueia chamadas cross-domain
@@ -17,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 });
   }
 
-  for (const baseUrl of BACKEND_URLS) {
+  for (const baseUrl of UNIQUE_URLS) {
     try {
       const url = `${baseUrl}/accounts/login/`;
       const res = await fetch(url, {
