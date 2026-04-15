@@ -9,7 +9,7 @@ const BACKEND_URLS = [
 ].filter(Boolean) as string[];
 
 // Deduplicar URLs
-const UNIQUE_URLS = [...new Set(BACKEND_URLS)];
+const UNIQUE_URLS = BACKEND_URLS.filter((url, i) => BACKEND_URLS.indexOf(url) === i);
 
 // POST /api/auth/login — proxy para login no subdomínio parceiro
 // Necessário porque CSP connect-src 'self' bloqueia chamadas cross-domain
