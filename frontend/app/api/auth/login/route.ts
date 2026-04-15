@@ -7,7 +7,8 @@ const BACKEND_URLS = [
   process.env.NEXT_PUBLIC_API_URL,
 ].filter(Boolean) as string[];
 
-// POST /api/auth/login — proxy login para evitar problemas de cookies cross-domain
+// POST /api/auth/login — proxy para login no subdomínio parceiro
+// Necessário porque CSP connect-src 'self' bloqueia chamadas cross-domain
 export async function POST(request: NextRequest) {
   let body;
   try {
@@ -18,31 +19,33 @@ export async function POST(request: NextRequest) {
 
   for (const baseUrl of BACKEND_URLS) {
     try {
-      const res = await fetch(`${baseUrl}/accounts/login/`, {
+      const url = `${baseUrl}/accounts/login/`;
+      const res = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Host': 'localhost',
-          'X-Forwarded-Host': request.headers.get('host') || '',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
         cache: 'no-store',
+        signal: AbortSignal.timeout(10000),
       });
 
-      // Se o backend retornou HTML (erro Django), tentar próxima URL
+      // Se retornou HTML (Django ALLOWED_HOSTS error), pular para próxima URL
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('json')) {
         continue;
       }
 
       const data = await res.json();
-
-      // Criar resposta com os mesmos headers/cookies do backend
       const response = NextResponse.json(data, { status: res.status });
 
-      // Repassar Set-Cookie headers do backend para o browser
-      const setCookies = res.headers.getSetCookie?.() || [];
-      for (const cookie of setCookies) {
+      // Repassar Set-Cookie do backend
+      const rawHeaders = res.headers;
+      const setCookieValues: string[] = [];
+      rawHeaders.forEach((value, key) => {
+        if (key.toLowerCase() === 'set-cookie') {
+          setCookieValues.push(value);
+        }
+      });
+      for (const cookie of setCookieValues) {
         response.headers.append('Set-Cookie', cookie);
       }
 
@@ -51,5 +54,5 @@ export async function POST(request: NextRequest) {
       continue;
     }
   }
-  return NextResponse.json({ error: 'Erro de conexão.' }, { status: 502 });
+  return NextResponse.json({ error: 'Erro de conexão com o servidor.' }, { status: 502 });
 }
