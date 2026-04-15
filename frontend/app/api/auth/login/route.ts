@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URLS = [
+  process.env.NEXT_PUBLIC_API_URL,
   process.env.INTERNAL_API_URL,
   'http://backend:8000/api/v1',
   'http://grupo_ry_inova-erp_backend:8000/api/v1',
-  process.env.NEXT_PUBLIC_API_URL,
 ].filter(Boolean) as string[];
 
 // POST /api/auth/login — proxy para login no subdomínio parceiro
