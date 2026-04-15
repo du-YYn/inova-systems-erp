@@ -1612,8 +1612,8 @@ export default function FunilTab() {
                       className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="(11) 99999-9999" />
                   </div>
                   <div>
-                    <label className={labelInput}>E-mail *</label>
-                    <input type="email" required value={formData.contact_email}
+                    <label className={labelInput}>E-mail</label>
+                    <input type="email" value={formData.contact_email}
                       onChange={(e) => setField('contact_email', e.target.value)}
                       className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="email@empresa.com" />
                   </div>

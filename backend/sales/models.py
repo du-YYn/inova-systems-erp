@@ -155,7 +155,7 @@ class Prospect(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='prospects', null=True, blank=True)
     company_name = models.CharField(max_length=200)
     contact_name = models.CharField(max_length=200)
-    contact_email = models.EmailField()
+    contact_email = models.EmailField(blank=True, default='')
     contact_phone = models.CharField(max_length=20, blank=True)
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='website')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
