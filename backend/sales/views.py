@@ -832,18 +832,17 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.save(update_fields=['proposal_file', 'public_token'])
 
         # Auto-criar onboarding para o prospect (gera link de cadastro)
-        # Só cria se prospect tem customer vinculado (evita onboarding órfão)
-        if proposal.prospect_id and proposal.prospect.customer_id:
+        # Cria mesmo sem customer — será vinculado ao fechar o lead
+        if proposal.prospect_id:
             from django.db import IntegrityError as DBIntegrityError
             try:
-                # Verificar se já existe (forma segura para OneToOne)
                 ClientOnboarding.objects.get(prospect=proposal.prospect)
             except ClientOnboarding.DoesNotExist:
                 try:
                     with transaction.atomic():
                         ClientOnboarding.objects.create(
                             prospect=proposal.prospect,
-                            customer=proposal.prospect.customer,
+                            customer=proposal.prospect.customer,  # pode ser None
                             created_by=request.user,
                         )
                     logger.info(
