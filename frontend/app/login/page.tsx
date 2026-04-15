@@ -43,7 +43,7 @@ export default function LoginPage() {
 
       try {
         // Login via proxy server-side para evitar problemas de CSP/CORS em subdomínios
-        const loginRes = await fetch('/api/auth/login', {
+        const loginRes = await fetch('/api/proxy-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData),
