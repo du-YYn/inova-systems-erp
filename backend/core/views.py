@@ -48,6 +48,48 @@ def system_info(request):
 
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+@throttle_classes([])
+def auth_debug(request):
+    """Diagnóstico temporário de autenticação — REMOVER após resolver."""
+    from django.contrib.auth import authenticate, get_user_model
+    User = get_user_model()
+    result = {}
+
+    # Listar parceiros
+    partners = User.objects.filter(role='partner')
+    result['partner_count'] = partners.count()
+    result['partners'] = []
+    for p in partners:
+        result['partners'].append({
+            'id': p.id,
+            'username': p.username,
+            'email': p.email,
+            'is_active': p.is_active,
+            'has_usable_password': p.has_usable_password(),
+        })
+
+    # Testar autenticação do último parceiro
+    last = partners.order_by('-id').first()
+    if last:
+        # Testar com username
+        test1 = authenticate(username=last.username, password='test')
+        result['auth_test_username'] = {
+            'username_used': last.username,
+            'result': 'user_found_wrong_pass' if test1 is None else 'OK',
+        }
+        # Verificar se email == username
+        result['email_equals_username'] = last.email == last.username
+
+    # Settings de email
+    from django.conf import settings
+    result['email_backend'] = settings.EMAIL_BACKEND
+    result['cookie_domain'] = getattr(settings, 'JWT_COOKIE_DOMAIN', 'NOT_SET')
+
+    return Response(result)
+
+
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def reset_data(request):
