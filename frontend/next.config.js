@@ -21,7 +21,7 @@ const nextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
-              `connect-src 'self' https://*.inovasystemssolutions.com https://erp.inovasystemssolutions.com https://cadastro.inovasystemssolutions.com https://parceiro.inovasystemssolutions.com ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}`,
+              `connect-src 'self' https://*.inovasystemssolutions.com https://erp.inovasystemssolutions.com https://cadastro.inovasystemssolutions.com https://parceiro.inovasystemssolutions.com https://viacep.com.br ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}`,
               "font-src 'self'",
               "frame-ancestors 'none'",
             ].join('; '),
