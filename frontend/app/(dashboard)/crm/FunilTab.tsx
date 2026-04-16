@@ -1403,8 +1403,8 @@ export default function FunilTab() {
       {/* ─── Pipeline View ─────────────────────────────────────────────────── */}
       {viewMode === 'pipeline' && (
         <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-3 min-w-max">
+        <div className="overflow-x-auto pb-4" style={{ transform: 'rotateX(180deg)' }}>
+          <div className="flex gap-3 min-w-max" style={{ transform: 'rotateX(180deg)' }}>
             {PIPELINE_COLUMNS.map((status) => {
               const col = allProspects.filter(p => p.status === status);
               const colValue = col.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
