@@ -1403,7 +1403,14 @@ export default function FunilTab() {
       {/* ─── Pipeline View ─────────────────────────────────────────────────── */}
       {viewMode === 'pipeline' && (
         <DndContext sensors={sensors} collisionDetection={rectIntersection} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="overflow-x-auto pb-4" style={{ transform: 'rotateX(180deg)' }}>
+        <div className="overflow-x-auto pb-4 kanban-scroll" style={{ transform: 'rotateX(180deg)' }}>
+          <style>{`
+            .kanban-scroll::-webkit-scrollbar { height: 12px; }
+            .kanban-scroll::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 6px; }
+            .kanban-scroll::-webkit-scrollbar-thumb { background: #A6864A; border-radius: 6px; }
+            .kanban-scroll::-webkit-scrollbar-thumb:hover { background: #c9a75e; }
+            .kanban-scroll { scrollbar-width: auto; scrollbar-color: #A6864A #1a1a2e; }
+          `}</style>
           <div className="flex gap-3 min-w-max" style={{ transform: 'rotateX(180deg)' }}>
             {PIPELINE_COLUMNS.map((status) => {
               const col = allProspects.filter(p => p.status === status);
