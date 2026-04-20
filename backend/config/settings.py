@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'support.apps.SupportConfig',
     'notifications.apps.NotificationsConfig',
+    'integrations.apps.IntegrationsConfig',
     'drf_spectacular',
 ]
 
@@ -156,6 +157,7 @@ REST_FRAMEWORK = {
         'password_reset': '3/hour',
         'two_factor': '10/hour',
         'n8n': '300/hour',
+        'presentation_launch': '20/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -176,6 +178,15 @@ SIMPLE_JWT = {
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
 JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
 JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com em prod
+
+# ─── PRESENTATIONS (Inova Apresentação SSO) ────────────────────────────────────
+# URL base do produto Apresentação. Ex: https://apresentacao.inovasystemssolutions.com
+PRESENTATION_BASE_URL = os.environ.get('PRESENTATION_BASE_URL', 'http://localhost:5173')
+# Segredo compartilhado para assinar tokens SSO HS256 entre ERP ↔ Apresentação.
+# Ambos os produtos PRECISAM usar exatamente o mesmo valor.
+PRESENTATION_SHARED_SECRET = os.environ.get('PRESENTATION_SHARED_SECRET', '')
+if not PRESENTATION_SHARED_SECRET and not DEBUG and not _is_ci:
+    raise ValueError('PRESENTATION_SHARED_SECRET must be set in production')
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
