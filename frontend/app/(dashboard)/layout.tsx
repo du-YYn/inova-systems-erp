@@ -20,6 +20,7 @@ import {
   BellRing,
   Users2,
   Mail,
+  Presentation,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -61,6 +62,12 @@ const navSections: NavSection[] = [
     items: [
       { href: '/crm',       label: 'CRM',        icon: Target        },
       { href: '/parceiros', label: 'Parceiros',  icon: Users2     },
+    ],
+  },
+  {
+    title: 'APRESENTAÇÕES',
+    items: [
+      { href: '/apresentacoes', label: 'Apresentações', icon: Presentation },
     ],
   },
   {

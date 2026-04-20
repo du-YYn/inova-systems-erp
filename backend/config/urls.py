@@ -2,6 +2,9 @@ from django.conf import settings as django_settings
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+
+from presentations.urls import public_urlpatterns as _presentations_public_urls
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/accounts/', include('accounts.urls')),
@@ -12,6 +15,8 @@ urlpatterns = [
     path('api/v1/support/', include('support.urls')),
     path('api/v1/', include('notifications.urls')),
     path('api/v1/notifications/', include('notifications.urls')),  # compat: frontend build antigo usa path duplo
+    path('api/v1/presentations/', include(('presentations.urls', 'presentations'), namespace='presentations')),
+    path('api/v1/public-presentations/', include((_presentations_public_urls, 'presentations-public'), namespace='presentations-public')),
 ]
 
 # Swagger/ReDoc apenas em desenvolvimento — nunca expor em produção
