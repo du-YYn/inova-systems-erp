@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'support.apps.SupportConfig',
     'notifications.apps.NotificationsConfig',
+    'presentations.apps.PresentationsConfig',
     'drf_spectacular',
 ]
 
@@ -156,6 +157,9 @@ REST_FRAMEWORK = {
         'password_reset': '3/hour',
         'two_factor': '10/hour',
         'n8n': '300/hour',
+        'presentations_public_read':      '60/minute',
+        'presentations_public_unlock':    '5/minute',
+        'presentations_public_heartbeat': '30/minute',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

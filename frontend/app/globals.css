@@ -333,3 +333,60 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ───── Presentations module (dark imersivo com escopo isolado) ─────────────── */
+.presentations-dark {
+  --pr-bg:            #08080E;
+  --pr-bg-secondary:  #0C0C12;
+  --pr-bg-elevated:   #131320;
+  --pr-border:        #1f1f2e;
+  --pr-border-strong: #2a2a3e;
+  --pr-gold:          #A6864A;
+  --pr-gold-soft:     #8B6F3D;
+  --pr-text-primary:  #ffffff;
+  --pr-text-secondary:#c8c8d2;
+  --pr-text-tertiary: #6b6b75;
+  background: var(--pr-bg);
+  color: var(--pr-text-primary);
+}
+
+.presentations-dark .pr-label-caps {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pr-text-tertiary);
+}
+
+.presentations-dark ::selection {
+  background: var(--pr-gold);
+  color: var(--pr-bg);
+}
+
+.presentations-dark input:focus-visible,
+.presentations-dark textarea:focus-visible,
+.presentations-dark select:focus-visible,
+.presentations-dark button:focus-visible {
+  outline: 1px solid var(--pr-gold);
+  outline-offset: 2px;
+}
+
+@keyframes inova-dash {
+  to { stroke-dashoffset: -20; }
+}
+
+@keyframes inova-blink {
+  0%,      50%   { opacity: 1; }
+  50.01%, 100%   { opacity: 0; }
+}
+
+.presentations-dark .react-flow__controls-button {
+  background: var(--pr-bg-elevated) !important;
+  border-bottom: 1px solid var(--pr-border) !important;
+  color: var(--pr-text-secondary) !important;
+  fill: currentColor !important;
+}
+.presentations-dark .react-flow__controls-button:hover {
+  background: var(--pr-border) !important;
+  color: var(--pr-text-primary) !important;
+}
