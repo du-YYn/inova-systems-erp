@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CustomerViewSet, ProspectViewSet, ProposalViewSet, ContractViewSet,
     ProspectActivityViewSet, WinLossReasonViewSet, WebsiteLeadCreateView,
-    ClientOnboardingViewSet,
+    ClientOnboardingViewSet, ServiceViewSet,
 )
 from .views_public import ProposalPublicView, ProposalPublicHTMLView, ClientOnboardingPublicView
 
@@ -15,6 +15,7 @@ router.register(r'contracts', ContractViewSet)
 router.register(r'prospect-activities', ProspectActivityViewSet)
 router.register(r'win-loss', WinLossReasonViewSet)
 router.register(r'onboardings', ClientOnboardingViewSet)
+router.register(r'services', ServiceViewSet)
 
 urlpatterns = [
     path('proposals/public/<uuid:token>/', ProposalPublicView.as_view(), name='proposal-public'),
