@@ -10,8 +10,6 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import api, { ApiError } from '@/lib/api';
-import ProposalScopeEditor from './ProposalScopeEditor';
-import type { Service, PaymentPlanData } from './ProposalFormModal';
 
 interface Contract {
   id: number;
@@ -315,19 +313,6 @@ export default function ContratosTab() {
   const [onboardingData, setOnboardingData] = useState<Record<string, string> | null>(null);
   const [onboardingExpanded, setOnboardingExpanded] = useState(false);
 
-  // Escopo + Pagamento (edição de contrato)
-  const [catalogServices, setCatalogServices] = useState<Service[]>([]);
-  const [editServiceIds, setEditServiceIds] = useState<number[]>([]);
-  const [editPaymentPlan, setEditPaymentPlan] = useState<PaymentPlanData>({
-    plan_type: 'one_time',
-    one_time_amount: '', one_time_method: 'pix', one_time_installments: 1,
-    one_time_first_due: '', one_time_notes: '',
-    recurring_amount: '', recurring_method: 'pix', recurring_day_of_month: 10,
-    recurring_duration_months: 12, recurring_first_due: '', recurring_notes: '',
-  });
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [scopeExpanded, setScopeExpanded] = useState(false);
-
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -498,50 +483,13 @@ export default function ContratosTab() {
       terms: c.terms || '',
     });
     setEditingContract(c);
-    setScopeExpanded(false);
     // Fetch onboarding data linked to this contract
     setOnboardingData(null);
     setOnboardingExpanded(false);
     api.get<Record<string, string>>(`/sales/contracts/${c.id}/onboarding-data/`).then(data => {
       setOnboardingData(data);
     }).catch(() => { /* no onboarding linked */ });
-
-    // Catálogo de serviços
-    if (catalogServices.length === 0) {
-      api.get<Service[] | { results: Service[] }>('/sales/services/').then(data => {
-        const list = Array.isArray(data) ? data : (data.results ?? []);
-        setCatalogServices(list.filter(s => s.is_active));
-      }).catch(() => { /* silencioso */ });
-    }
-
-    // Serviços + plano de pagamento do contrato
-    api.get<{
-      services?: { service: number }[];
-      payment_plan?: Partial<PaymentPlanData> & { one_time_amount?: string | number; recurring_amount?: string | number };
-    }>(`/sales/contracts/${c.id}/`).then(full => {
-      setEditServiceIds((full.services || []).map(s => s.service));
-      if (full.payment_plan) {
-        setEditPaymentPlan(prev => ({
-          ...prev,
-          ...full.payment_plan,
-          one_time_amount: String(full.payment_plan?.one_time_amount ?? ''),
-          recurring_amount: String(full.payment_plan?.recurring_amount ?? ''),
-        } as PaymentPlanData));
-      } else {
-        setEditServiceIds([]);
-      }
-    }).catch(() => { /* silencioso */ });
   };
-
-  useEffect(() => {
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        setIsAdmin(parsed?.role === 'admin');
-      }
-    } catch {/* */}
-  }, []);
 
   // ── Update ───────────────────────────────────────────────────────────────
   const handleUpdate = async (e: React.FormEvent) => {
@@ -554,25 +502,7 @@ export default function ContratosTab() {
     setUpdating(true);
     try {
       const customerId = await resolveCustomerId(editForm.customer);
-      const body: Record<string, unknown> = {
-        ...buildBody(editForm, customerId),
-        service_ids: editServiceIds,
-        payment_plan: {
-          plan_type: editPaymentPlan.plan_type,
-          one_time_amount: editPaymentPlan.one_time_amount || '0',
-          one_time_method: editPaymentPlan.one_time_method || '',
-          one_time_installments: editPaymentPlan.one_time_installments || 1,
-          one_time_first_due: editPaymentPlan.one_time_first_due || null,
-          one_time_notes: editPaymentPlan.one_time_notes || '',
-          recurring_amount: editPaymentPlan.recurring_amount || '0',
-          recurring_method: editPaymentPlan.recurring_method || '',
-          recurring_day_of_month: editPaymentPlan.recurring_day_of_month,
-          recurring_duration_months: editPaymentPlan.recurring_duration_months,
-          recurring_first_due: editPaymentPlan.recurring_first_due || null,
-          recurring_notes: editPaymentPlan.recurring_notes || '',
-        },
-      };
-      await api.patch(`/sales/contracts/${editingContract.id}/`, body);
+      await api.patch(`/sales/contracts/${editingContract.id}/`, buildBody(editForm, customerId));
       toast.success('Contrato atualizado!');
       setEditingContract(null);
       fetchData();
@@ -891,32 +821,6 @@ export default function ContratosTab() {
               </div>
               <form onSubmit={handleUpdate}>
                 <ContractForm {...formProps(editForm, setEditForm, true)} />
-
-                {/* Escopo e Forma de Pagamento (ajuste opcional — editável) */}
-                <div className="mt-4 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setScopeExpanded(v => !v)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    <span>Escopo &amp; Forma de Pagamento</span>
-                    <span className={`transform transition-transform ${scopeExpanded ? 'rotate-180' : ''}`}>▾</span>
-                  </button>
-                  {scopeExpanded && (
-                    <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-4">
-                      <ProposalScopeEditor
-                        services={catalogServices}
-                        selectedServiceIds={editServiceIds}
-                        onServicesChange={setEditServiceIds}
-                        paymentPlan={editPaymentPlan}
-                        onPaymentPlanChange={setEditPaymentPlan}
-                        totalValue={editForm.monthly_value || '0'}
-                        isAdmin={isAdmin}
-                        onServiceCreated={s => setCatalogServices(prev => [...prev, s])}
-                      />
-                    </div>
-                  )}
-                </div>
 
                 {/* Onboarding data section */}
                 {onboardingData && (

@@ -22,22 +22,14 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
-from accounts.permissions import (
-    IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict, IsAdminOrReadOnly,
-)
-from .models import (
-    Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason,
-    ProspectMessage, ClientOnboarding, PartnerCommission,
-    Service, ProposalService, ProposalPaymentPlan,
-    ContractService, ContractPaymentPlan,
-)
+from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict
+from .models import Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason, ProspectMessage, ClientOnboarding, PartnerCommission
 from .serializers import (
     CustomerSerializer, ProspectSerializer,
     ProposalSerializer, ContractSerializer,
     ProspectActivitySerializer, WinLossReasonSerializer,
     WebsiteLeadSerializer, ProspectMessageSerializer,
     ClientOnboardingInternalSerializer,
-    ServiceSerializer,
 )
 
 logger = logging.getLogger('sales')
@@ -792,34 +784,6 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 created_by=request.user
             )
 
-            # Copia serviços da proposta para o contrato
-            for item in proposal.service_items.all():
-                ContractService.objects.create(
-                    contract=contract,
-                    service=item.service,
-                    notes=item.notes,
-                    display_order=item.display_order,
-                )
-
-            # Copia plano de pagamento da proposta para o contrato (editável depois)
-            src_plan = getattr(proposal, 'payment_plan', None)
-            if src_plan is not None:
-                ContractPaymentPlan.objects.create(
-                    contract=contract,
-                    plan_type=src_plan.plan_type,
-                    one_time_amount=src_plan.one_time_amount,
-                    one_time_method=src_plan.one_time_method,
-                    one_time_installments=src_plan.one_time_installments,
-                    one_time_first_due=src_plan.one_time_first_due,
-                    one_time_notes=src_plan.one_time_notes,
-                    recurring_amount=src_plan.recurring_amount,
-                    recurring_method=src_plan.recurring_method,
-                    recurring_day_of_month=src_plan.recurring_day_of_month,
-                    recurring_duration_months=src_plan.recurring_duration_months,
-                    recurring_first_due=src_plan.recurring_first_due,
-                    recurring_notes=src_plan.recurring_notes,
-                )
-
         # Log de atividade no CRM
         if proposal.prospect:
             log_crm_activity(
@@ -1199,41 +1163,6 @@ class ClientOnboardingViewSet(viewsets.ModelViewSet):
         onboarding.save(update_fields=['status', 'updated_at'])
         logger.info(f"Onboarding {onboarding.id} revisado por {request.user.username}")
         return Response(ClientOnboardingInternalSerializer(onboarding).data)
-
-
-@extend_schema(tags=['sales'])
-class ServiceViewSet(viewsets.ModelViewSet):
-    """Catálogo de serviços. Leitura para todos autenticados; escrita apenas admin."""
-    queryset = Service.objects.all()
-    serializer_class = ServiceSerializer
-    permission_classes = [IsAdminOrReadOnly]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        # Writes do admin enxergam tudo; leituras mostram apenas ativos por padrão
-        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
-            include_inactive = self.request.query_params.get('include_inactive') == '1'
-            if not include_inactive:
-                queryset = queryset.filter(is_active=True)
-        search = self.request.query_params.get('search')
-        if search:
-            queryset = queryset.filter(
-                Q(name__icontains=search) | Q(code__icontains=search)
-            )
-        return queryset
-
-    def destroy(self, request, *args, **kwargs):
-        """Soft delete: marca como inativo para preservar propostas/contratos existentes."""
-        service = self.get_object()
-        used_in_proposals = ProposalService.objects.filter(service=service).exists()
-        used_in_contracts = ContractService.objects.filter(service=service).exists()
-        if used_in_proposals or used_in_contracts:
-            service.is_active = False
-            service.save(update_fields=['is_active', 'updated_at'])
-            logger.info(f"Serviço {service.id} ({service.code}) desativado por {request.user.username}")
-            return Response(ServiceSerializer(service).data, status=status.HTTP_200_OK)
-        logger.info(f"Serviço {service.id} ({service.code}) excluído por {request.user.username}")
-        return super().destroy(request, *args, **kwargs)
 
 
 class WebsiteLeadThrottle(AnonRateThrottle):

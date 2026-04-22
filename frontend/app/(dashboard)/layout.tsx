@@ -20,7 +20,6 @@ import {
   BellRing,
   Users2,
   Mail,
-  Package,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -81,7 +80,6 @@ const navSections: NavSection[] = [
     title: 'ADMINISTRAÇÃO',
     items: [
       { href: '/usuarios',    label: 'Usuários',      icon: ShieldCheck },
-      { href: '/catalogo',    label: 'Catálogo',      icon: Package     },
       { href: '/notificacoes', label: 'Notificações', icon: BellRing    },
       { href: '/emails',       label: 'E-mails',      icon: Mail        },
       { href: '/perfil',      label: 'Meu Perfil',    icon: UserCircle  },
