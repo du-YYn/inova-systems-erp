@@ -459,3 +459,152 @@ class TestProposalActions:
         )
         response = admin_client.delete(f'/api/v1/sales/proposals/{prop.id}/')
         assert response.status_code == status.HTTP_204_NO_CONTENT
+
+
+# ─── CONTRACT ACTIONS (submit/activate/cancel/renew) ──────────────────────────
+
+@pytest.mark.django_db
+class TestContractActions:
+    """Cobre as @action endpoints do ContractViewSet."""
+
+    def _make_contract(self, admin_user, customer, status_='pending_signature'):
+        return Contract.objects.create(
+            customer=customer, number=f'CTR-ACT-{timezone.now().timestamp():.0f}',
+            title='Test', contract_type='software_dev', billing_type='fixed',
+            start_date=timezone.now().date(),
+            monthly_value=1000,
+            status=status_, created_by=admin_user,
+        )
+
+    def test_activate_pending_signature_contract(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'pending_signature')
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/activate/')
+        assert response.status_code == status.HTTP_200_OK
+        c.refresh_from_db()
+        assert c.status == 'active'
+
+    def test_activate_draft_contract_blocked(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'draft')
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/activate/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_cancel_active_contract(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'active')
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/cancel/')
+        assert response.status_code == status.HTTP_200_OK
+        c.refresh_from_db()
+        assert c.status == 'cancelled'
+
+    def test_cancel_expired_contract_blocked(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'expired')
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/cancel/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_submit_draft_contract(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'draft')
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/submit/')
+        assert response.status_code == status.HTTP_200_OK
+        c.refresh_from_db()
+        assert c.status == 'pending_signature'
+
+    def test_renew_active_contract(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'active')
+        c.start_date = timezone.now().date() - timedelta(days=300)
+        c.end_date = timezone.now().date() + timedelta(days=65)
+        c.save(update_fields=['start_date', 'end_date'])
+        response = admin_client.post(f'/api/v1/sales/contracts/{c.id}/renew/')
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_contracts_dashboard(self, admin_client, admin_user, customer):
+        self._make_contract(admin_user, customer, 'active')
+        response = admin_client.get('/api/v1/sales/contracts/dashboard/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'active_contracts' in response.data
+
+    def test_list_contracts_filter_status(self, admin_client, admin_user, customer):
+        self._make_contract(admin_user, customer, 'active')
+        response = admin_client.get('/api/v1/sales/contracts/?status=active')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_list_contracts_search(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer)
+        response = admin_client.get(f'/api/v1/sales/contracts/?search={c.title}')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_delete_cancelled_contract(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'cancelled')
+        response = admin_client.delete(f'/api/v1/sales/contracts/{c.id}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_delete_active_contract_blocked(self, admin_client, admin_user, customer):
+        c = self._make_contract(admin_user, customer, 'active')
+        response = admin_client.delete(f'/api/v1/sales/contracts/{c.id}/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ─── PROSPECT ACTIONS — cobre mais de views.py ────────────────────────────────
+
+@pytest.mark.django_db
+class TestProspectActions:
+    def test_prospect_pipeline(self, admin_client, prospect):
+        response = admin_client.get('/api/v1/sales/prospects/pipeline/')
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data, list)
+
+    def test_prospect_qualify_high_score(self, admin_client, admin_user):
+        p = Prospect.objects.create(
+            company_name='Q1', contact_name='X', contact_email='q1@t.com',
+            contact_phone='1', source='website', status='new',
+            created_by=admin_user,
+        )
+        response = admin_client.post(
+            f'/api/v1/sales/prospects/{p.id}/qualify/',
+            {'has_operation': True, 'has_budget': True,
+             'is_decision_maker': True, 'has_urgency': True},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        p.refresh_from_db()
+        assert p.status == 'qualified'
+
+    def test_prospect_qualify_low_score(self, admin_client, admin_user):
+        p = Prospect.objects.create(
+            company_name='Q2', contact_name='X', contact_email='q2@t.com',
+            contact_phone='1', source='website', status='new',
+            created_by=admin_user,
+        )
+        response = admin_client.post(
+            f'/api/v1/sales/prospects/{p.id}/qualify/',
+            {'has_operation': True, 'has_budget': False,
+             'is_decision_maker': False, 'has_urgency': False},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        p.refresh_from_db()
+        assert p.status == 'disqualified'
+
+    def test_prospect_mark_no_show(self, admin_client, admin_user):
+        p = Prospect.objects.create(
+            company_name='NS', contact_name='X', contact_email='ns@t.com',
+            contact_phone='1', source='website', status='scheduled',
+            created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/prospects/{p.id}/mark_no_show/')
+        assert response.status_code == status.HTTP_200_OK
+        p.refresh_from_db()
+        assert p.status == 'no_show'
+
+    def test_prospect_mark_attended(self, admin_client, admin_user):
+        p = Prospect.objects.create(
+            company_name='MA', contact_name='X', contact_email='ma@t.com',
+            contact_phone='1', source='website', status='scheduled',
+            created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/prospects/{p.id}/mark_attended/')
+        assert response.status_code == status.HTTP_200_OK
+        p.refresh_from_db()
+        assert p.status == 'meeting_done'
+
+    def test_prospect_messages_endpoint(self, admin_client, prospect):
+        response = admin_client.get(f'/api/v1/sales/prospects/{prospect.id}/messages/')
+        assert response.status_code == status.HTTP_200_OK
