@@ -371,3 +371,91 @@ class TestModelStr:
         )
         cp = ContractPaymentPlan.objects.create(contract=contract, plan_type='recurring_only')
         assert 'CTR-STR-002' in str(cp)
+
+
+# ─── PROPOSAL ACTIONS (send, approve, reject) — aumenta cobertura de views.py ─
+
+@pytest.mark.django_db
+class TestProposalActions:
+    """Cobre as @action endpoints do ProposalViewSet (send/approve/reject)."""
+
+    def test_send_draft_proposal(self, admin_client, admin_user, customer):
+        prop = Proposal.objects.create(
+            customer=customer, number='PROP-SEND-001',
+            title='Send Test', proposal_type='software_dev',
+            billing_type='fixed', total_value=1000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='draft', created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/proposals/{prop.id}/send/')
+        assert response.status_code == status.HTTP_200_OK
+        prop.refresh_from_db()
+        assert prop.status == 'sent'
+
+    def test_send_non_draft_proposal_rejected(self, admin_client, proposal):
+        # proposal fixture vem com status='approved'
+        response = admin_client.post(f'/api/v1/sales/proposals/{proposal.id}/send/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_approve_sent_proposal(self, admin_client, admin_user, customer):
+        prop = Proposal.objects.create(
+            customer=customer, number='PROP-APP-001',
+            title='Approve Test', proposal_type='software_dev',
+            billing_type='fixed', total_value=5000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='sent', created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/proposals/{prop.id}/approve/')
+        assert response.status_code == status.HTTP_200_OK
+        prop.refresh_from_db()
+        assert prop.status == 'approved'
+
+    def test_reject_sent_proposal(self, admin_client, admin_user, customer):
+        prop = Proposal.objects.create(
+            customer=customer, number='PROP-REJ-001',
+            title='Reject Test', proposal_type='software_dev',
+            billing_type='fixed', total_value=1000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='sent', created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/proposals/{prop.id}/reject/')
+        assert response.status_code == status.HTTP_200_OK
+        prop.refresh_from_db()
+        assert prop.status == 'rejected'
+
+    def test_reject_already_approved_blocked(self, admin_client, proposal):
+        response = admin_client.post(f'/api/v1/sales/proposals/{proposal.id}/reject/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_convert_non_approved_proposal_blocked(self, admin_client, admin_user, customer):
+        prop = Proposal.objects.create(
+            customer=customer, number='PROP-CNV-001',
+            title='Draft', proposal_type='software_dev',
+            billing_type='fixed', total_value=1000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='draft', created_by=admin_user,
+        )
+        response = admin_client.post(f'/api/v1/sales/proposals/{prop.id}/convert_to_contract/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_proposals_dashboard(self, admin_client, proposal):
+        response = admin_client.get('/api/v1/sales/proposals/dashboard/')
+        assert response.status_code == status.HTTP_200_OK
+        assert 'approved_count' in response.data
+
+    def test_list_proposals_filter_status(self, admin_client, proposal):
+        response = admin_client.get('/api/v1/sales/proposals/?status=approved')
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data.get('results', response.data)
+        assert len(results) >= 1
+
+    def test_delete_proposal(self, admin_client, admin_user, customer):
+        prop = Proposal.objects.create(
+            customer=customer, number='PROP-DEL-001',
+            title='Delete Me', proposal_type='software_dev',
+            billing_type='fixed', total_value=100,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='draft', created_by=admin_user,
+        )
+        response = admin_client.delete(f'/api/v1/sales/proposals/{prop.id}/')
+        assert response.status_code == status.HTTP_204_NO_CONTENT
