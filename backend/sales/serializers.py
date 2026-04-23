@@ -240,19 +240,23 @@ def _sync_proposal_services(proposal, service_ids):
     """Sincroniza serviços da proposta de forma atômica e segura.
 
     Usa transaction.atomic — ou deleta e recria todos, ou mantém intocado.
-    Exceções narrow (Service.DoesNotExist especificamente) logadas como warning.
+    IDs inexistentes são pulados silenciosamente (logged warning) — sem
+    IntegrityError de FK. Faz .get() primeiro para validar o Service existe,
+    em vez de depender do DB reclamar da FK depois.
     """
     with transaction.atomic():
         proposal.service_items.all().delete()
         for order, sid in enumerate(service_ids):
             try:
-                ProposalService.objects.create(
-                    proposal=proposal, service_id=sid, display_order=order,
-                )
+                service = Service.objects.get(id=sid)
             except Service.DoesNotExist:
                 logger.warning(
                     f'Service id={sid} não existe — ignorado em proposal {proposal.id}'
                 )
+                continue
+            ProposalService.objects.create(
+                proposal=proposal, service=service, display_order=order,
+            )
 
 
 def _sync_contract_services(contract, service_ids):
@@ -261,13 +265,15 @@ def _sync_contract_services(contract, service_ids):
         contract.service_items.all().delete()
         for order, sid in enumerate(service_ids):
             try:
-                ContractService.objects.create(
-                    contract=contract, service_id=sid, display_order=order,
-                )
+                service = Service.objects.get(id=sid)
             except Service.DoesNotExist:
                 logger.warning(
                     f'Service id={sid} não existe — ignorado em contract {contract.id}'
                 )
+                continue
+            ContractService.objects.create(
+                contract=contract, service=service, display_order=order,
+            )
 
 
 class ProposalSerializer(serializers.ModelSerializer):
