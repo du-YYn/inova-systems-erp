@@ -27,6 +27,8 @@ jobs:
             cd /opt/inova-systems-erp
 
             PREV_COMMIT=$(git rev-parse HEAD)
+            NEW_COMMIT_SHORT=$(git rev-parse --short origin/main 2>/dev/null || echo "pending")
+            echo "Deploy iniciado: $(date) — target=$NEW_COMMIT_SHORT previous=${PREV_COMMIT:0:7}"
 
             # Atualizar código
             git fetch origin main
@@ -35,23 +37,45 @@ jobs:
             # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend)
             docker compose up -d --build --remove-orphans
 
-            # Smoke test com retry
-            echo "Executando smoke test..."
+            # Smoke test com retry — 18 tentativas × 5s = 90s total (comporta migrations mais pesadas)
+            echo "Executando smoke test (até 90s)..."
             SUCCESS=false
-            for i in $(seq 1 12); do
-              HTTP_STATUS=$(docker compose exec -T backend curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ || echo "000")
+            for i in $(seq 1 18); do
+              HTTP_STATUS=$(docker compose exec -T backend curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ 2>/dev/null || echo "000")
               if [ "$HTTP_STATUS" = "200" ]; then
                 SUCCESS=true
                 break
               fi
-              echo "Tentativa $i — HTTP $HTTP_STATUS — aguardando..."
+              echo "Tentativa $i/18 — HTTP $HTTP_STATUS — aguardando..."
               sleep 5
             done
 
             if [ "$SUCCESS" != "true" ]; then
-              echo "Smoke test falhou! Rollback para $PREV_COMMIT..."
+              echo ""
+              echo "=============================================="
+              echo "=== SMOKE TEST FALHOU — DIAGNÓSTICO =========="
+              echo "=============================================="
+              echo ""
+              echo "--- Status dos containers ---"
+              docker compose ps --all 2>&1 || true
+              echo ""
+              echo "--- Últimos 200 logs do backend ---"
+              docker compose logs backend --tail 200 2>&1 || true
+              echo ""
+              echo "--- Últimos 50 logs do celery_worker ---"
+              docker compose logs celery_worker --tail 50 2>&1 || true
+              echo ""
+              echo "--- Últimos 30 logs do postgres ---"
+              docker compose logs postgres --tail 30 2>&1 || true
+              echo ""
+              echo "--- Health endpoint (última tentativa) ---"
+              docker compose exec -T backend curl -v http://localhost:8000/api/v1/core/health/ 2>&1 || true
+              echo "=============================================="
+              echo ""
+
+              echo "Iniciando rollback para ${PREV_COMMIT:0:7}..."
               git reset --hard "$PREV_COMMIT"
-              docker compose up -d --build --remove-orphans
+              docker compose up -d --build --remove-orphans || true
               exit 1
             fi
 
