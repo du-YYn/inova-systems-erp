@@ -61,6 +61,10 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Cabeçalhos de segurança complementares (CSP, Permissions-Policy, COOP).
+    # Idempotente: views que já setaram CSP específico (ex: ProposalPublicHTMLView)
+    # mantêm o valor delas.
+    'core.middleware.SecurityHeadersMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
