@@ -1,10 +1,16 @@
+import logging
+
 from django.db import transaction
 from rest_framework import serializers
 from core.validators import validate_cpf, validate_cnpj
 from .models import (
     Customer, Prospect, Proposal, Contract, ProspectActivity,
     WinLossReason, ProspectMessage, ClientOnboarding,
+    Service, ProposalService, ProposalPaymentPlan,
+    ContractService, ContractPaymentPlan,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -165,6 +171,105 @@ class ProspectSerializer(serializers.ModelSerializer):
         ]
 
 
+class ServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = [
+            "id", "code", "name", "description",
+            "default_recurrence", "is_active", "display_order",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ProposalServiceSerializer(serializers.ModelSerializer):
+    service_code = serializers.CharField(source='service.code', read_only=True)
+    service_name = serializers.CharField(source='service.name', read_only=True)
+    service_default_recurrence = serializers.CharField(
+        source='service.default_recurrence', read_only=True,
+    )
+
+    class Meta:
+        model = ProposalService
+        fields = [
+            "id", "service", "service_code", "service_name",
+            "service_default_recurrence", "notes", "display_order",
+        ]
+
+
+class ProposalPaymentPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProposalPaymentPlan
+        fields = [
+            "plan_type",
+            "one_time_amount", "one_time_method", "one_time_installments",
+            "one_time_first_due", "one_time_notes",
+            "recurring_amount", "recurring_method", "recurring_day_of_month",
+            "recurring_duration_months", "recurring_first_due", "recurring_notes",
+        ]
+
+
+class ContractServiceSerializer(serializers.ModelSerializer):
+    service_code = serializers.CharField(source='service.code', read_only=True)
+    service_name = serializers.CharField(source='service.name', read_only=True)
+    service_default_recurrence = serializers.CharField(
+        source='service.default_recurrence', read_only=True,
+    )
+
+    class Meta:
+        model = ContractService
+        fields = [
+            "id", "service", "service_code", "service_name",
+            "service_default_recurrence", "notes", "display_order",
+        ]
+
+
+class ContractPaymentPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContractPaymentPlan
+        fields = [
+            "plan_type",
+            "one_time_amount", "one_time_method", "one_time_installments",
+            "one_time_first_due", "one_time_notes",
+            "recurring_amount", "recurring_method", "recurring_day_of_month",
+            "recurring_duration_months", "recurring_first_due", "recurring_notes",
+        ]
+
+
+def _sync_proposal_services(proposal, service_ids):
+    """Sincroniza serviços da proposta de forma atômica e segura.
+
+    Usa transaction.atomic — ou deleta e recria todos, ou mantém intocado.
+    Exceções narrow (Service.DoesNotExist especificamente) logadas como warning.
+    """
+    with transaction.atomic():
+        proposal.service_items.all().delete()
+        for order, sid in enumerate(service_ids):
+            try:
+                ProposalService.objects.create(
+                    proposal=proposal, service_id=sid, display_order=order,
+                )
+            except Service.DoesNotExist:
+                logger.warning(
+                    f'Service id={sid} não existe — ignorado em proposal {proposal.id}'
+                )
+
+
+def _sync_contract_services(contract, service_ids):
+    """Sincroniza serviços do contrato (mesma estratégia da proposta)."""
+    with transaction.atomic():
+        contract.service_items.all().delete()
+        for order, sid in enumerate(service_ids):
+            try:
+                ContractService.objects.create(
+                    contract=contract, service_id=sid, display_order=order,
+                )
+            except Service.DoesNotExist:
+                logger.warning(
+                    f'Service id={sid} não existe — ignorado em contract {contract.id}'
+                )
+
+
 class ProposalSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     prospect_company = serializers.SerializerMethodField()
@@ -173,6 +278,14 @@ class ProposalSerializer(serializers.ModelSerializer):
     )
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
+    )
+    services = ProposalServiceSerializer(
+        many=True, source='service_items', read_only=True,
+    )
+    payment_plan = ProposalPaymentPlanSerializer(required=False, allow_null=True)
+    service_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True, required=False,
     )
 
     def get_customer_name(self, obj):
@@ -221,6 +334,9 @@ class ProposalSerializer(serializers.ModelSerializer):
             "created_by_name",
             "created_at",
             "updated_at",
+            "services",
+            "payment_plan",
+            "service_ids",
         ]
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
 
@@ -231,12 +347,44 @@ class ProposalSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def create(self, validated_data):
+        service_ids = validated_data.pop('service_ids', None)
+        payment_plan_data = validated_data.pop('payment_plan', None)
+        proposal = super().create(validated_data)
+        if service_ids is not None:
+            _sync_proposal_services(proposal, service_ids)
+        if payment_plan_data is not None:
+            ProposalPaymentPlan.objects.update_or_create(
+                proposal=proposal, defaults=payment_plan_data,
+            )
+        return proposal
+
+    def update(self, instance, validated_data):
+        service_ids = validated_data.pop('service_ids', None)
+        payment_plan_data = validated_data.pop('payment_plan', None)
+        proposal = super().update(instance, validated_data)
+        if service_ids is not None:
+            _sync_proposal_services(proposal, service_ids)
+        if payment_plan_data is not None:
+            ProposalPaymentPlan.objects.update_or_create(
+                proposal=proposal, defaults=payment_plan_data,
+            )
+        return proposal
+
 
 class ContractSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     proposal_title = serializers.CharField(source="proposal.title", read_only=True)
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
+    )
+    services = ContractServiceSerializer(
+        many=True, source='service_items', read_only=True,
+    )
+    payment_plan = ContractPaymentPlanSerializer(required=False, allow_null=True)
+    service_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True, required=False,
     )
 
     def get_customer_name(self, obj):
@@ -272,6 +420,9 @@ class ContractSerializer(serializers.ModelSerializer):
             "created_by_name",
             "created_at",
             "updated_at",
+            "services",
+            "payment_plan",
+            "service_ids",
         ]
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
 
@@ -282,6 +433,30 @@ class ContractSerializer(serializers.ModelSerializer):
             if not value.name.lower().endswith('.pdf'):
                 raise serializers.ValidationError('Apenas arquivos PDF são permitidos.')
         return value
+
+    def create(self, validated_data):
+        service_ids = validated_data.pop('service_ids', None)
+        payment_plan_data = validated_data.pop('payment_plan', None)
+        contract = super().create(validated_data)
+        if service_ids is not None:
+            _sync_contract_services(contract, service_ids)
+        if payment_plan_data is not None:
+            ContractPaymentPlan.objects.update_or_create(
+                contract=contract, defaults=payment_plan_data,
+            )
+        return contract
+
+    def update(self, instance, validated_data):
+        service_ids = validated_data.pop('service_ids', None)
+        payment_plan_data = validated_data.pop('payment_plan', None)
+        contract = super().update(instance, validated_data)
+        if service_ids is not None:
+            _sync_contract_services(contract, service_ids)
+        if payment_plan_data is not None:
+            ContractPaymentPlan.objects.update_or_create(
+                contract=contract, defaults=payment_plan_data,
+            )
+        return contract
 
 
 class ProspectActivitySerializer(serializers.ModelSerializer):
