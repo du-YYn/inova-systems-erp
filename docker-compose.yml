@@ -89,11 +89,18 @@ services:
         gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 60
       "
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/core/health/ || exit 1"]
+      # Valida o corpo da resposta ({"status":"ok"}), não apenas HTTP 200.
+      # Isso evita falso positivo quando DB/cache estão degraded mas o endpoint
+      # ainda responde 200 com status=degraded.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/core/health/ | grep -q '\"status\":\"ok\"'"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      # start_period aumentado de 40s → 90s para acomodar:
+      # - migrations mais pesadas (ex: seed de catálogo, ALTER TABLE em tabelas grandes)
+      # - collectstatic em deploy cold
+      # - boot do gunicorn com 4 workers
+      start_period: 90s
 
   celery_worker:
     build:
