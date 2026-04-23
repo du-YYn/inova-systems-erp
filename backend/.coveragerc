@@ -1,26 +1,20 @@
-# Configuração de cobertura — excluir integrações externas e arquivos triviais
-# que exigem testes de integração (com servidores externos) em vez de unit tests.
+# Configuração de cobertura — omitir apenas integrações externas e testes.
+# Migrations são mantidas pois o pytest-django as exercita (100% cov) e
+# refletem código que vai para produção.
 
 [run]
 source = .
 omit =
-    # Ambiente Django gerado
-    manage.py
-    config/asgi.py
-    config/wsgi.py
-    config/settings.py
-    */migrations/*
+    # Testes não entram no numerador
     */tests/*
-    */__pycache__/*
-    # Integrações externas (webhooks n8n com auth proprietária) —
-    # cobertas por testes de integração, não unit
+    # Integrações externas com auth proprietária (webhooks n8n, portal
+    # de parceiros, endpoints públicos com token) — cobertas por testes
+    # de integração em staging, não unit tests
     sales/n8n_auth.py
     sales/n8n_views.py
     sales/n8n_urls.py
     sales/partner_urls.py
     sales/partner_views.py
-    # Endpoints públicos para clientes (token-based) — testados via
-    # smoke test no deploy
     sales/views_public.py
 
 [report]
@@ -28,10 +22,8 @@ exclude_lines =
     pragma: no cover
     raise NotImplementedError
     if __name__ == .__main__.:
-    if settings.DEBUG
     if TYPE_CHECKING:
     except ImportError
-    pass
 
 show_missing = True
 skip_covered = False
