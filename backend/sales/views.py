@@ -1027,10 +1027,11 @@ class ContractViewSet(viewsets.ModelViewSet):
         - `anticipate`: bool (cartão apenas)
         - `repass_fee`: bool (cartão apenas)
 
-        Se o payload vier, os parâmetros são validados. A geração de invoices
-        com base neles é feita na fase F4.
+        Se o payload vier, gera Invoices (setup + recorrência) automaticamente
+        usando `finance.invoice_generator`.
         """
         from finance.models import PaymentProvider
+        from finance.invoice_generator import generate_activation_invoices
 
         contract = self.get_object()
         if contract.status != 'pending_signature':
@@ -1043,7 +1044,12 @@ class ContractViewSet(viewsets.ModelViewSet):
         valid_modes = ('pix', 'card_anticipated', 'card_installments', 'boleto')
         provider_id = data.get('payment_provider')
         mode = data.get('activation_mode')
-        if provider_id or mode:
+        installments = int(data.get('installments') or 1)
+        anticipate = bool(data.get('anticipate', False))
+        repass_fee = bool(data.get('repass_fee', False))
+
+        generate_invoices = bool(provider_id or mode)
+        if generate_invoices:
             if mode not in valid_modes:
                 return Response(
                     {'activation_mode': f'Deve ser um de: {", ".join(valid_modes)}.'},
@@ -1059,14 +1065,49 @@ class ContractViewSet(viewsets.ModelViewSet):
                     {'payment_provider': 'Provider não encontrado ou inativo.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if installments < 1:
+                return Response(
+                    {'installments': 'Deve ser >= 1.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        contract.status = 'active'
-        contract.save()
+        invoices_summary = None
+        with transaction.atomic():
+            contract.status = 'active'
+            contract.save()
+
+            if generate_invoices:
+                try:
+                    result = generate_activation_invoices(
+                        contract=contract,
+                        user=request.user,
+                        provider_id=provider_id,
+                        mode=mode,
+                        installments=installments,
+                        anticipate=anticipate,
+                        repass_fee=repass_fee,
+                    )
+                except ValueError as exc:
+                    return Response(
+                        {'error': str(exc)},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                invoices_summary = {
+                    'setup_count': len(result['setup_invoices']),
+                    'recurring_count': len(result['recurring_invoices']),
+                    'total_fees_setup': str(result['total_fees_setup']),
+                    'total_fees_recurring': str(result['total_fees_recurring']),
+                }
+
         logger.info(
-            "Contrato %s ativado por %s (mode=%s, provider=%s)",
+            "Contrato %s ativado por %s (mode=%s, provider=%s, invoices=%s)",
             contract.id, request.user.username, mode, provider_id,
+            invoices_summary,
         )
-        return Response(ContractSerializer(contract).data)
+        response = ContractSerializer(contract).data
+        if invoices_summary is not None:
+            response['invoices_generated'] = invoices_summary
+        return Response(response)
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
