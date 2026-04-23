@@ -130,10 +130,11 @@ def register_partner(request):
     # Verificar que a senha funciona
     from django.contrib.auth import authenticate
     test_auth = authenticate(username=email, password=password)
+    from core.logging_utils import mask_email
     if not test_auth:
-        logger.error(f"ALERTA: Senha do parceiro {email} não passou no teste de autenticação!")
+        logger.error(f"ALERTA: Senha do parceiro {mask_email(email)} não passou no teste de autenticação!")
     else:
-        logger.info(f"Senha do parceiro {email} verificada com sucesso")
+        logger.info(f"Senha do parceiro {mask_email(email)} verificada com sucesso")
 
     # Criar PartnerProfile (ID auto-gerado PRC-XXXXX)
     profile = PartnerProfile(user=user, company_name=company_name, phone=phone)
@@ -159,9 +160,9 @@ def register_partner(request):
     except Exception as e:
         email_status = 'error'
         email_error = str(e)
-        logger.error(f"Erro ao enviar email de boas-vindas para {email}: {e}")
+        logger.error(f"Erro ao enviar email de boas-vindas para {mask_email(email)}: {e}")
 
-    logger.info(f"Parceiro {profile.partner_id} ({email}) criado por {request.user.username} | email: {email_status}")
+    logger.info(f"Parceiro {profile.partner_id} ({mask_email(email)}) criado por {request.user.username} | email: {email_status}")
 
     msg = f'Parceiro {profile.partner_id} criado.'
     if email_status == 'sent':
@@ -201,7 +202,8 @@ def update_partner(request, pk):
         user.is_active = request.data['is_active']
         user.save(update_fields=['is_active'])
         action = 'ativado' if user.is_active else 'desativado'
-        logger.info(f"Parceiro {user.email} {action} por {request.user.username}")
+        from core.logging_utils import mask_email as _me
+        logger.info(f"Parceiro {_me(user.email)} {action} por {request.user.username}")
 
     return Response({
         'id': user.id,
@@ -226,7 +228,8 @@ def delete_partner(request, pk):
     # Reatribuir prospects para não quebrar FK PROTECT
     Prospect.objects.filter(created_by=user).update(created_by=request.user)
     user.delete()
-    logger.info(f"Parceiro {email} excluído por {request.user.username}")
+    from core.logging_utils import mask_email as _me
+    logger.info(f"Parceiro {_me(email)} excluído por {request.user.username}")
 
     return Response({'message': f'Parceiro {email} excluído.'})
 

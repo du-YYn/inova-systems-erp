@@ -28,6 +28,7 @@ from .serializers import (
 from .permissions import IsAdmin
 from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle
 from .tasks import send_password_reset_email
+from core.logging_utils import mask_email
 
 logger = logging.getLogger('accounts')
 User = get_user_model()
@@ -118,9 +119,9 @@ class LoginView(APIView):
             try:
                 found_user = User.objects.get(email=login_input)
                 username = found_user.username
-                logger.info(f"Login: email '{login_input}' resolvido para username '{username}' (active={found_user.is_active})")
+                logger.info(f"Login: email {mask_email(login_input)} resolvido para username '{username}' (active={found_user.is_active})")
             except User.DoesNotExist:
-                logger.warning(f"Login: email '{login_input}' não encontrado no banco")
+                logger.warning(f"Login: email {mask_email(login_input)} não encontrado no banco")
 
         user = authenticate(username=username, password=password)
 
@@ -326,7 +327,7 @@ class PasswordResetRequestView(APIView):
         user.save(update_fields=['password_reset_token', 'password_reset_expires'])
 
         send_password_reset_email.delay(user.id, token)
-        logger.info(f"Task de reset de senha enfileirada para: {email}")
+        logger.info(f"Task de reset de senha enfileirada para: {mask_email(email)}")
 
         return safe_response
 

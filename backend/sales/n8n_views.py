@@ -350,10 +350,12 @@ class SendEmailView(N8NBaseView):
                 html_message=body,
                 fail_silently=False,
             )
-            logger.info(f"n8n email sent to {to_email}: {subject}")
+            from core.logging_utils import mask_email
+            logger.info(f"n8n email sent to {mask_email(to_email)}: {subject}")
             return Response({'success': True})
         except Exception as e:
-            logger.error(f"n8n email failed to {to_email}: {e}")
+            from core.logging_utils import mask_email
+            logger.error(f"n8n email failed to {mask_email(to_email)}: {e}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

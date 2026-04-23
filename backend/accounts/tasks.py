@@ -35,15 +35,18 @@ def send_password_reset_email(self, user_id: int, token: str):
                 recipient_list=[user.email],
                 fail_silently=False,
             )
-        logger.info(f"Email de reset enviado para: {user.email}")
+        from core.logging_utils import mask_email
+        logger.info(f"Email de reset enviado para: {mask_email(user.email)}")
     except Exception as exc:
-        logger.error(f"Falha ao enviar email para {user.email}: {exc}")
+        from core.logging_utils import mask_email
+        logger.error(f"Falha ao enviar email para {mask_email(user.email)}: {exc}")
         raise self.retry(exc=exc)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def send_generic_email(self, recipient: str, subject: str, message: str):
     """Envia email genérico de forma assíncrona."""
+    from core.logging_utils import mask_email
     try:
         send_mail(
             subject=subject,
@@ -52,7 +55,7 @@ def send_generic_email(self, recipient: str, subject: str, message: str):
             recipient_list=[recipient],
             fail_silently=False,
         )
-        logger.info(f"Email enviado para: {recipient} | Assunto: {subject}")
+        logger.info(f"Email enviado para: {mask_email(recipient)} | Assunto: {subject}")
     except Exception as exc:
-        logger.error(f"Falha ao enviar email para {recipient}: {exc}")
+        logger.error(f"Falha ao enviar email para {mask_email(recipient)}: {exc}")
         raise self.retry(exc=exc)

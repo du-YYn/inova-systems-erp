@@ -96,6 +96,29 @@ class ProspectSerializer(serializers.ModelSerializer):
         delta = timezone.now() - obj.created_at
         return delta.days
 
+    # Campos considerados sensíveis sob ótica LGPD — ocultados para role=viewer:
+    # - quiz_data / meeting_transcript: conteúdo livre digitado pelo lead, pode
+    #   conter dados pessoais (endereço, histórico médico, etc.)
+    # - payment_*: método e valores de pagamento do lead
+    # - pre_meeting_scenario: estratégia comercial privada
+    _SENSITIVE_FIELDS = (
+        'quiz_data', 'meeting_transcript', 'pre_meeting_scenario',
+        'payment_method', 'payment_type', 'payment_split_pct',
+        'payment_installments', 'payment_monthly_value', 'payment_due_day',
+        'payment_duration_months', 'payment_first_due',
+    )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        # Apenas role=viewer recebe versão reduzida; admin/manager/operator
+        # continuam com acesso completo (operador precisa pra tocar o funil).
+        if user and getattr(user, 'role', None) == 'viewer':
+            for field in self._SENSITIVE_FIELDS:
+                data.pop(field, None)
+        return data
+
     class Meta:
         model = Prospect
         fields = [
