@@ -81,7 +81,7 @@ def _make_contract(customer, admin_user, monthly=Decimal('0'),
         customer=customer,
         billing_type='fixed',
         start_date=timezone.now().date(),
-        monthly_value=monthly or None,
+        monthly_value=monthly,
         status='pending_signature',
         created_by=admin_user,
     )
