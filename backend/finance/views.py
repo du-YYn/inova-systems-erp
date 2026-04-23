@@ -862,6 +862,95 @@ class FinanceDashboardView(viewsets.ViewSet):
             'churned_customers': churned.count(),
         })
 
+    @action(detail=False, methods=['get'], url_path='fees-summary')
+    def fees_summary(self, request):
+        """Taxas pagas no mês/ano informado, agregadas e por provider.
+
+        Query params:
+        - `year`, `month`: período (default = mês atual)
+        - `provider`: id do PaymentProvider (opcional) — filtra invoices cujo
+          payment_details.provider_id bate com o id.
+
+        Retorna:
+        ```
+        {
+          "period": "MM/YYYY",
+          "total_fees": 0.00,
+          "total_gross": 0.00,
+          "total_net": 0.00,
+          "invoice_count": N,
+          "by_provider": [
+            {"provider_id": 1, "provider_code": "asaas", "provider_name": "Asaas",
+             "fees": 0.00, "invoice_count": N}
+          ]
+        }
+        ```
+
+        Taxas são calculadas por invoice via `payment_details.fee_retained`.
+        Somente invoices com `status='paid'` são consideradas.
+        """
+        from datetime import date
+        from finance.models import Invoice, PaymentProvider
+        today = date.today()
+        year = int(request.query_params.get('year', today.year))
+        month = int(request.query_params.get('month', today.month))
+        provider_filter = request.query_params.get('provider')
+
+        invoices = Invoice.objects.filter(
+            invoice_type='receivable',
+            status='paid',
+            paid_date__year=year,
+            paid_date__month=month,
+        )
+
+        total_gross = Decimal('0')
+        total_net = Decimal('0')
+        total_fees = Decimal('0')
+        per_provider = {}
+
+        for inv in invoices:
+            details = inv.payment_details or {}
+            pid = details.get('provider_id')
+            if provider_filter and str(pid) != str(provider_filter):
+                continue
+
+            gross = Decimal(str(details.get('gross_charged_to_client', inv.value or 0)))
+            net = Decimal(str(details.get('net_company_receives', inv.total or 0)))
+            fee = Decimal(str(details.get('fee_retained', gross - net)))
+
+            total_gross += gross
+            total_net += net
+            total_fees += fee
+
+            if pid:
+                entry = per_provider.setdefault(pid, {
+                    'provider_id': pid,
+                    'provider_code': details.get('provider_code', ''),
+                    'provider_name': '',
+                    'fees': Decimal('0'),
+                    'invoice_count': 0,
+                })
+                entry['fees'] += fee
+                entry['invoice_count'] += 1
+
+        # Preenche nomes dos providers
+        if per_provider:
+            provider_ids = list(per_provider.keys())
+            providers = {p.id: p for p in PaymentProvider.objects.filter(id__in=provider_ids)}
+            for pid, entry in per_provider.items():
+                p = providers.get(int(pid)) if isinstance(pid, (int, str)) else None
+                entry['provider_name'] = p.name if p else entry['provider_code']
+                entry['fees'] = float(entry['fees'])
+
+        return Response({
+            'period': f"{month:02d}/{year}",
+            'total_fees': float(total_fees),
+            'total_gross': float(total_gross),
+            'total_net': float(total_net),
+            'invoice_count': sum(e['invoice_count'] for e in per_provider.values()) if per_provider else invoices.count(),
+            'by_provider': sorted(per_provider.values(), key=lambda x: -x['fees']),
+        })
+
     @action(detail=False, methods=['get'], url_path='dre-pdf')
     def dre_pdf(self, request):
         """Exporta DRE 12 meses em PDF."""

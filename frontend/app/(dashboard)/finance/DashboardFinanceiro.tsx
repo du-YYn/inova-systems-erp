@@ -99,6 +99,29 @@ interface ProfitDistResponse {
   excess: number;
 }
 
+interface FeesSummaryByProvider {
+  provider_id: number;
+  provider_code: string;
+  provider_name: string;
+  fees: number;
+  invoice_count: number;
+}
+
+interface FeesSummaryResponse {
+  period: string;
+  total_fees: number;
+  total_gross: number;
+  total_net: number;
+  invoice_count: number;
+  by_provider: FeesSummaryByProvider[];
+}
+
+interface PaymentProviderRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
 interface DashboardFinanceiroProps {
   isDemoMode: boolean;
 }
@@ -135,6 +158,12 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
   interface InvoiceItem { id: number; number: string; description: string; total: string; due_date: string; status: string; invoice_type: string; }
   const [invoiceStats, setInvoiceStats] = useState({ pending_receivables: 0, pending_payables: 0, overdue_invoices: 0, received_this_month: 0, paid_this_month: 0 });
   const [recentInvoices, setRecentInvoices] = useState<InvoiceItem[]>([]);
+
+  // Taxas pagas (F5)
+  const [fees, setFees] = useState<FeesSummaryResponse | null>(null);
+  const [feesLoading, setFeesLoading] = useState(false);
+  const [providers, setProviders] = useState<PaymentProviderRef[]>([]);
+  const [feeProviderFilter, setFeeProviderFilter] = useState<string>('');
 
   // ── Fetch dashboard data ────────────────────────────────────────────────────
 
@@ -196,10 +225,39 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
     } catch { /* silent */ }
   }, []);
 
+  const fetchFees = useCallback(async () => {
+    setFeesLoading(true);
+    try {
+      const params: Record<string, string> = { year: String(year), month: String(month) };
+      if (feeProviderFilter) params.provider = feeProviderFilter;
+      const res = await api.get<FeesSummaryResponse>('/finance/fin-dashboard/fees-summary/', params);
+      setFees(res);
+    } catch {
+      setFees(null);
+    } finally {
+      setFeesLoading(false);
+    }
+  }, [year, month, feeProviderFilter]);
+
+  const fetchProviders = useCallback(async () => {
+    try {
+      const res = await api.get<PaymentProviderRef[] | { results: PaymentProviderRef[] }>('/finance/payment-providers/');
+      const list = Array.isArray(res) ? res : res.results || [];
+      setProviders(list);
+    } catch {
+      setProviders([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboard();
     fetchInvoices();
-  }, [fetchDashboard, fetchInvoices]);
+    fetchFees();
+  }, [fetchDashboard, fetchInvoices, fetchFees]);
+
+  useEffect(() => {
+    fetchProviders();
+  }, [fetchProviders]);
 
   useEffect(() => {
     if (data) {
@@ -327,6 +385,88 @@ export default function DashboardFinanceiro({ isDemoMode }: DashboardFinanceiroP
                 </div>
               );
             })}
+          </div>
+        )}
+      </section>
+
+      {/* ─── Section 1.5: Taxas Pagas (F5) ───────────────────────────────── */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Taxas Pagas — {MONTH_NAMES[month - 1]} {year}
+          </h3>
+          <select
+            value={feeProviderFilter}
+            onChange={(e) => setFeeProviderFilter(e.target.value)}
+            className="input-field text-xs py-1.5 w-auto"
+          >
+            <option value="">Todos os providers</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800/30">
+            <div className="flex items-center gap-2 mb-2">
+              <Landmark className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-300 uppercase tracking-wide">Taxas Retidas</span>
+            </div>
+            <Sensitive>
+              <span className="text-2xl font-bold text-amber-800 dark:text-amber-200">
+                {feesLoading ? '…' : fmtCurrency(fees?.total_fees || 0)}
+              </span>
+            </Sensitive>
+            <p className="text-[11px] text-amber-700/70 dark:text-amber-300/70 mt-1">
+              {fees?.invoice_count || 0} invoice(s) paga(s)
+            </p>
+          </div>
+          <div className="p-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Cobrado ao Cliente</span>
+            </div>
+            <Sensitive>
+              <span className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                {feesLoading ? '…' : fmtCurrency(fees?.total_gross || 0)}
+              </span>
+            </Sensitive>
+          </div>
+          <div className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl border border-green-200 dark:border-green-800/30">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-xs font-medium text-green-700 dark:text-green-300 uppercase tracking-wide">Recebido Líquido</span>
+            </div>
+            <Sensitive>
+              <span className="text-2xl font-bold text-green-700 dark:text-green-300">
+                {feesLoading ? '…' : fmtCurrency(fees?.total_net || 0)}
+              </span>
+            </Sensitive>
+          </div>
+        </div>
+
+        {fees && fees.by_provider.length > 0 && (
+          <div className="mt-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 dark:bg-gray-900/40 border-b border-gray-100 dark:border-gray-700">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Provider</th>
+                  <th className="text-right px-4 py-2 font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Invoices</th>
+                  <th className="text-right px-4 py-2 font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Taxas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fees.by_provider.map((p) => (
+                  <tr key={p.provider_id} className="border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50/60 dark:hover:bg-gray-700/20">
+                    <td className="px-4 py-2 text-gray-800 dark:text-gray-200 font-medium">{p.provider_name}</td>
+                    <td className="px-4 py-2 text-right text-gray-600 dark:text-gray-400">{p.invoice_count}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-amber-700 dark:text-amber-300">
+                      <Sensitive>{fmtCurrency(p.fees)}</Sensitive>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>
