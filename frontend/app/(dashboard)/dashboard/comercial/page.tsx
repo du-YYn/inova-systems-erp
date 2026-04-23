@@ -12,7 +12,6 @@ import {
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { CardSkeleton } from '@/components/ui/Skeleton';
-import ResetDataButton from '@/components/ui/ResetDataButton';
 
 const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 const fmtShort = (v: number) => { if (v >= 1_000_000) return `R$${(v / 1_000_000).toFixed(1)}M`; if (v >= 1000) return `R$${(v / 1000).toFixed(0)}k`; return `R$${v.toFixed(0)}`; };
@@ -109,17 +108,9 @@ export default function DashboardComercial() {
 
   return (
     <div>
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard Comercial</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Visão executiva de vendas — pipeline, propostas e contratos</p>
-        </div>
-        {typeof window !== 'undefined' && (() => {
-          try {
-            const u = JSON.parse(localStorage.getItem('user') || '{}');
-            return u.role === 'admin' ? <ResetDataButton /> : null;
-          } catch { return null; }
-        })()}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard Comercial</h1>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Visão executiva de vendas — pipeline, propostas e contratos</p>
       </div>
 
       {/* Cards */}
