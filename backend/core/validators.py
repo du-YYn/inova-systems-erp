@@ -3,13 +3,16 @@ from django.core.exceptions import ValidationError
 
 
 # ── Extensões permitidas para upload ─────────────────────────────────────────
+# SVG removido intencionalmente: vetor conhecido de XSS — pode conter
+# <script>/<foreignObject>/onload=. Para permitir SVG no futuro, sanitizar
+# com `defusedxml` + whitelist de tags antes de salvar.
 ALLOWED_FILE_EXTENSIONS = {
     '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv',
-    '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',
     '.txt', '.zip', '.rar', '.7z',
 }
 
-ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+ALLOWED_IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 
 MAX_FILE_SIZE_MB = 10
 MAX_IMAGE_SIZE_MB = 5

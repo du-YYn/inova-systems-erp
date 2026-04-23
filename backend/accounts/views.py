@@ -61,21 +61,24 @@ def _set_auth_cookies(response: Response, refresh: RefreshToken, user=None) -> N
         httponly=True,
         **common,
     )
-    # Cookie não-httpOnly lido pelo middleware Next.js para proteção de rotas
+    # Cookie de sessão lido pelo middleware Next.js (server-side, logo
+    # httpOnly é transparente) para proteção de rotas.
+    # httponly=True evita que XSS possa ler/forjar o cookie via document.cookie.
     response.set_cookie(
         'inova_session',
         '1',
         max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
-        httponly=False,
+        httponly=True,
         **common,
     )
-    # Role hint para middleware redirecionar parceiros ao portal correto
+    # Role hint para middleware redirecionar parceiros ao portal correto.
+    # httpOnly para impedir leitura via XSS e spoofing client-side.
     if user and hasattr(user, 'role'):
         response.set_cookie(
             'inova_role',
             user.role,
             max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
-            httponly=False,
+            httponly=True,
             **common,
         )
 
