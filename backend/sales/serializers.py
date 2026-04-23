@@ -381,9 +381,29 @@ class ProposalSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    @staticmethod
+    def _enforce_commercial_total(validated_data, payment_plan_data):
+        """Regra de negócio: total_value da proposta = APENAS valor one-time
+        (setup/projeto único). A recorrência fica em payment_plan.recurring_*
+        e só vira receita quando o contrato for ativado (Contract.monthly_value).
+
+        Se o payload tem payment_plan, sobrescreve total_value com one_time_amount
+        (ou 0 quando plan_type=recurring_only). Evita que dashboards do
+        pipeline comercial fiquem inflados por projeções de 12 meses.
+        """
+        if not payment_plan_data:
+            return
+        plan_type = payment_plan_data.get('plan_type', 'one_time')
+        one_time = payment_plan_data.get('one_time_amount') or 0
+        if plan_type == 'recurring_only':
+            validated_data['total_value'] = 0
+        else:
+            validated_data['total_value'] = one_time
+
     def create(self, validated_data):
         service_ids = validated_data.pop('service_ids', None)
         payment_plan_data = validated_data.pop('payment_plan', None)
+        self._enforce_commercial_total(validated_data, payment_plan_data)
         proposal = super().create(validated_data)
         if service_ids is not None:
             _sync_proposal_services(proposal, service_ids)
@@ -396,6 +416,7 @@ class ProposalSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         service_ids = validated_data.pop('service_ids', None)
         payment_plan_data = validated_data.pop('payment_plan', None)
+        self._enforce_commercial_total(validated_data, payment_plan_data)
         proposal = super().update(instance, validated_data)
         if service_ids is not None:
             _sync_proposal_services(proposal, service_ids)

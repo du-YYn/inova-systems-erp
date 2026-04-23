@@ -776,6 +776,16 @@ class ProposalViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            # monthly_value do contrato vem da parte RECORRENTE do payment_plan
+            # da proposta — não do total_value (que é só o setup/one-time).
+            # Esse campo alimenta o MRR no Dashboard Financeiro e o cálculo
+            # de faturas recorrentes quando o contrato é ativado.
+            src_plan_for_mrr = getattr(proposal, 'payment_plan', None)
+            contract_monthly = (
+                src_plan_for_mrr.recurring_amount
+                if src_plan_for_mrr is not None else 0
+            )
+
             contract = Contract.objects.create(
                 proposal=proposal,
                 customer=customer,
@@ -784,7 +794,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 contract_type=proposal.proposal_type,
                 billing_type=proposal.billing_type,
                 start_date=timezone.now().date(),
-                monthly_value=proposal.total_value,
+                monthly_value=contract_monthly,
                 hourly_rate=proposal.hourly_rate,
                 status='pending_signature',
                 notes=proposal.notes,

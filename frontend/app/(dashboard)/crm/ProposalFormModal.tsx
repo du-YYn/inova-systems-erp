@@ -190,29 +190,26 @@ export default function ProposalFormModal({
     if (open) loadServices();
   }, [open, loadServices]);
 
-  // Valor Total é SEMPRE derivado do plano de pagamento.
-  // Usuário não edita diretamente — preenche o plano e o total é computado.
-  // Isso elimina o aviso "soma do plano difere do valor total" (impossível divergir).
+  // REGRA DE NEGÓCIO: total_value da proposta = APENAS valor comercial one-time
+  // (setup / projeto único). Esse é o número que entra no pipeline comercial,
+  // aprovado_value, comissões etc.
+  //
+  // A mensalidade é INFORMATIVA na proposta (projeção de receita recorrente).
+  // Só vira receita de verdade quando o contrato é fechado/ativado — aí o
+  // Contract.monthly_value alimenta o MRR no Dashboard Financeiro e as faturas
+  // mensais são geradas no módulo Finance.
+  //
+  // - plan_type = one_time              → total = one_time_amount
+  // - plan_type = setup_plus_recurring  → total = one_time_amount (só setup)
+  // - plan_type = recurring_only        → total = 0 (não há venda one-time)
   useEffect(() => {
     const oneTime = Number(paymentPlan.one_time_amount || 0);
-    const recurring = Number(paymentPlan.recurring_amount || 0);
-    const months = paymentPlan.recurring_duration_months || 0;
-    let computed = 0;
-    if (paymentPlan.plan_type === 'one_time') {
-      computed = oneTime;
-    } else if (paymentPlan.plan_type === 'recurring_only') {
-      computed = recurring * months;
-    } else {
-      computed = oneTime + recurring * months;
+    let commercialValue = 0;
+    if (paymentPlan.plan_type === 'one_time' || paymentPlan.plan_type === 'setup_plus_recurring') {
+      commercialValue = oneTime;
     }
-    // Armazena com 2 casas como string (DRF Decimal espera string)
-    setTotalValue(computed > 0 ? computed.toFixed(2) : '');
-  }, [
-    paymentPlan.plan_type,
-    paymentPlan.one_time_amount,
-    paymentPlan.recurring_amount,
-    paymentPlan.recurring_duration_months,
-  ]);
+    setTotalValue(commercialValue > 0 ? commercialValue.toFixed(2) : '');
+  }, [paymentPlan.plan_type, paymentPlan.one_time_amount]);
 
   // Pré-selecionar serviços quando catálogo e presetProspect/prospect-selecionado estão disponíveis
   useEffect(() => {
@@ -608,9 +605,9 @@ export default function ProposalFormModal({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label-input flex items-center gap-1.5">
-                  Valor Total (R$)
+                  Valor Comercial (R$)
                   <span className="text-[10px] font-normal text-gray-400 normal-case tracking-normal">
-                    calculado do plano
+                    setup — entra no pipeline
                   </span>
                 </label>
                 <input
@@ -618,7 +615,7 @@ export default function ProposalFormModal({
                   readOnly
                   value={totalValue ? formatBRL(totalValue) : 'R$ 0,00'}
                   className="input-field bg-gray-100 dark:bg-gray-900/60 cursor-not-allowed text-gray-700 dark:text-gray-300 font-semibold"
-                  title="Este valor é calculado automaticamente a partir da forma de pagamento abaixo"
+                  title="Valor comercial da proposta (setup/projeto único). A receita recorrente só vira MRR quando o contrato é ativado."
                 />
               </div>
               <div>
@@ -878,32 +875,58 @@ function PaymentSummary({ totalValue, paymentPlan }: {
   const oneTime = Number(paymentPlan.one_time_amount || 0);
   const recurring = Number(paymentPlan.recurring_amount || 0);
   const months = paymentPlan.recurring_duration_months || 0;
-  const total = Number(totalValue || 0);
+  const commercial = Number(totalValue || 0);
+  const recurringTotal = recurring * months;
+  const tcv = commercial + recurringTotal;
 
-  if (total === 0 && oneTime === 0 && recurring === 0) return null;
+  if (oneTime === 0 && recurring === 0) return null;
 
-  const showOne = paymentPlan.plan_type !== 'recurring_only' && oneTime > 0;
-  const showRec = paymentPlan.plan_type !== 'one_time' && recurring > 0 && months > 0;
+  const showCommercial = paymentPlan.plan_type !== 'recurring_only' && oneTime > 0;
+  const showRecurring = paymentPlan.plan_type !== 'one_time' && recurring > 0 && months > 0;
 
   return (
-    <div className="mt-3 text-xs rounded-md px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 space-y-1">
-      <p className="font-semibold text-gray-800 dark:text-gray-200">Total do contrato</p>
-      {showOne && (
-        <div className="flex justify-between">
-          <span>Setup (à vista ou parcelado)</span>
-          <span className="tabular-nums">{formatBRL(oneTime)}</span>
+    <div className="mt-3 text-xs rounded-md bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 divide-y divide-gray-200 dark:divide-gray-700">
+      {/* Valor comercial — o que vai pro pipeline/aprovado_value */}
+      {showCommercial && (
+        <div className="px-3 py-2 space-y-1">
+          <p className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+            Valor comercial
+            <span className="text-[10px] font-normal text-gray-400 normal-case">
+              vai pro pipeline
+            </span>
+          </p>
+          <div className="flex justify-between">
+            <span>Setup</span>
+            <span className="tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+              {formatBRL(oneTime)}
+            </span>
+          </div>
         </div>
       )}
-      {showRec && (
-        <div className="flex justify-between">
-          <span>{months}× {formatBRL(recurring)} (mensal)</span>
-          <span className="tabular-nums">{formatBRL(recurring * months)}</span>
+
+      {/* Receita recorrente — informativo (só vira MRR no contrato ativo) */}
+      {showRecurring && (
+        <div className="px-3 py-2 space-y-1 bg-blue-50/40 dark:bg-blue-900/10">
+          <p className="font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+            Receita recorrente
+            <span className="text-[10px] font-normal text-blue-400 normal-case">
+              informativo — só entra no MRR quando o contrato for ativado
+            </span>
+          </p>
+          <div className="flex justify-between">
+            <span>{months}× {formatBRL(recurring)}/mês</span>
+            <span className="tabular-nums">{formatBRL(recurringTotal)}</span>
+          </div>
         </div>
       )}
-      <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700 font-semibold text-gray-900 dark:text-gray-100">
-        <span>Total</span>
-        <span className="tabular-nums">{formatBRL(total)}</span>
-      </div>
+
+      {/* TCV estimado — só pra referência */}
+      {showCommercial && showRecurring && (
+        <div className="px-3 py-2 flex justify-between text-gray-500 dark:text-gray-400">
+          <span>TCV estimado ({months} meses)</span>
+          <span className="tabular-nums">{formatBRL(tcv)}</span>
+        </div>
+      )}
     </div>
   );
 }

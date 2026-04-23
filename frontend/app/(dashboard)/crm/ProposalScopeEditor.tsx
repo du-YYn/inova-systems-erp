@@ -416,41 +416,51 @@ function PaymentSummary({ totalValue, paymentPlan }: {
   const oneTime = Number(paymentPlan.one_time_amount || 0);
   const recurring = Number(paymentPlan.recurring_amount || 0);
   const months = paymentPlan.recurring_duration_months || 0;
+  const commercial = Number(totalValue || 0);
+  const recurringTotal = recurring * months;
+  const tcv = (paymentPlan.plan_type === 'recurring_only' ? 0 : oneTime) + recurringTotal;
 
-  // Total sempre derivado do plano — mostra o cálculo detalhado
-  let computedTotal = 0;
-  if (paymentPlan.plan_type === 'one_time') computedTotal = oneTime;
-  else if (paymentPlan.plan_type === 'recurring_only') computedTotal = recurring * months;
-  else computedTotal = oneTime + recurring * months;
+  if (oneTime === 0 && recurring === 0) return null;
 
-  // totalValue vem como prop mas pode estar dessincronizado em contratos legacy;
-  // priorizamos o calculado (fonte da verdade é o plano).
-  const total = computedTotal || Number(totalValue || 0);
-
-  if (total === 0 && oneTime === 0 && recurring === 0) return null;
-
-  const showOne = paymentPlan.plan_type !== 'recurring_only' && oneTime > 0;
-  const showRec = paymentPlan.plan_type !== 'one_time' && recurring > 0 && months > 0;
+  const showCommercial = paymentPlan.plan_type !== 'recurring_only' && oneTime > 0;
+  const showRecurring = paymentPlan.plan_type !== 'one_time' && recurring > 0 && months > 0;
 
   return (
-    <div className="mt-3 text-xs rounded-md px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 space-y-1">
-      <p className="font-semibold text-gray-800 dark:text-gray-200">Total do contrato</p>
-      {showOne && (
-        <div className="flex justify-between">
-          <span>Setup (à vista ou parcelado)</span>
-          <span className="tabular-nums">{formatBRL(oneTime)}</span>
+    <div className="mt-3 text-xs rounded-md bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 divide-y divide-gray-200 dark:divide-gray-700">
+      {showCommercial && (
+        <div className="px-3 py-2 space-y-1">
+          <p className="font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
+            Valor comercial
+            <span className="text-[10px] font-normal text-gray-400 normal-case">setup</span>
+          </p>
+          <div className="flex justify-between">
+            <span>Setup</span>
+            <span className="tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+              {commercial > 0 ? formatBRL(commercial) : formatBRL(oneTime)}
+            </span>
+          </div>
         </div>
       )}
-      {showRec && (
-        <div className="flex justify-between">
-          <span>{months}× {formatBRL(recurring)} (mensal)</span>
-          <span className="tabular-nums">{formatBRL(recurring * months)}</span>
+      {showRecurring && (
+        <div className="px-3 py-2 space-y-1 bg-blue-50/40 dark:bg-blue-900/10">
+          <p className="font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+            Receita recorrente
+            <span className="text-[10px] font-normal text-blue-400 normal-case">
+              MRR: {formatBRL(recurring)}/mês
+            </span>
+          </p>
+          <div className="flex justify-between">
+            <span>{months}× {formatBRL(recurring)}/mês</span>
+            <span className="tabular-nums">{formatBRL(recurringTotal)}</span>
+          </div>
         </div>
       )}
-      <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700 font-semibold text-gray-900 dark:text-gray-100">
-        <span>Total</span>
-        <span className="tabular-nums">{formatBRL(total)}</span>
-      </div>
+      {showCommercial && showRecurring && (
+        <div className="px-3 py-2 flex justify-between text-gray-500 dark:text-gray-400">
+          <span>TCV estimado ({months} meses)</span>
+          <span className="tabular-nums">{formatBRL(tcv)}</span>
+        </div>
+      )}
     </div>
   );
 }
