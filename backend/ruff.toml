@@ -4,3 +4,6 @@ line-length = 140
 "**/migrations/*.py" = ["E501", "W"]
 "**/tests/*.py" = ["S105", "S106"]
 "config/settings.py" = ["S105"]
+# Seed de templates de email contém HTML inline (strings muito longas).
+# Refatorar em múltiplas linhas reduz legibilidade sem ganho.
+"notifications/views.py" = ["E501"]
