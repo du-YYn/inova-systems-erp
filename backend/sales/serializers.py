@@ -341,7 +341,12 @@ class ProposalSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
 
     def validate(self, attrs):
-        if not attrs.get('customer') and not attrs.get('prospect'):
+        # Em PATCH/partial update, customer/prospect podem não vir no payload,
+        # mas já existem na instância — exigir apenas se o resultado combinado
+        # ficaria sem ambos.
+        customer = attrs.get('customer') or (self.instance.customer if self.instance else None)
+        prospect = attrs.get('prospect') or (self.instance.prospect if self.instance else None)
+        if not customer and not prospect:
             raise serializers.ValidationError(
                 "É necessário informar um cliente ou um lead do funil."
             )
