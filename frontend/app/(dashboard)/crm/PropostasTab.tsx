@@ -12,11 +12,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Pagination } from '@/components/ui/Pagination';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
-import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
-import { useDemoMode } from '@/components/ui/DemoContext';
-import { buildProposalDefaults } from '@/lib/proposalDefaults';
 import api from '@/lib/api';
+import ProposalFormModal from './ProposalFormModal';
 
 interface Proposal {
   id: number;
@@ -37,6 +35,19 @@ interface Proposal {
   public_token: string | null;
   view_count: number;
   created_at: string;
+  services?: { id?: number; service: number; service_name?: string; service_code?: string }[];
+  payment_plan?: {
+    plan_type?: string;
+    one_time_amount?: string | number;
+    one_time_method?: string;
+    one_time_installments?: number;
+    one_time_first_due?: string | null;
+    recurring_amount?: string | number;
+    recurring_method?: string;
+    recurring_day_of_month?: number | null;
+    recurring_duration_months?: number | null;
+    recurring_first_due?: string | null;
+  } | null;
 }
 
 interface ProspectOption {
@@ -74,15 +85,8 @@ const proposalTypeLabels: Record<string, string> = {
 const formatCurrency = (v: string | number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
 
-const EMPTY_FORM = {
-  title: '', proposal_type: 'software_dev', billing_type: 'fixed',
-  total_value: '', hours_estimated: '', hourly_rate: '',
-  prospect: '', notes: '', valid_until: '',
-};
-
 export default function PropostasTab() {
   const toast = useToast();
-  const { isDemoMode } = useDemoMode();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [prospects, setProspects] = useState<ProspectOption[]>([]);
   const [total, setTotal] = useState(0);
@@ -92,11 +96,8 @@ export default function PropostasTab() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProposal, setEditingProposal] = useState<Proposal | null>(null);
-  const [saving, setSaving] = useState(false);
   const [performingAction, setPerformingAction] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Proposal | null>(null);
-  const [formData, setFormData] = useState(EMPTY_FORM);
-  const [autoFilled, setAutoFilled] = useState(false);
   const [sortField, setSortField] = useState<'number' | 'title' | 'value' | 'status' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -167,48 +168,11 @@ export default function PropostasTab() {
     });
   }, [proposals, sortField, sortDir]);
 
-  const openNewModal = () => { setEditingProposal(null); setFormData(EMPTY_FORM); setAutoFilled(false); setShowModal(true); };
+  const openNewModal = () => { setEditingProposal(null); setShowModal(true); };
 
   const openEditModal = (p: Proposal) => {
     setEditingProposal(p);
-    setAutoFilled(false);
-    setFormData({
-      title: p.title, proposal_type: p.proposal_type, billing_type: p.billing_type,
-      total_value: p.total_value || '', hours_estimated: p.hours_estimated || '',
-      hourly_rate: p.hourly_rate || '', prospect: '',
-      notes: p.notes || '', valid_until: p.valid_until || '',
-    });
     setShowModal(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const body: Record<string, unknown> = {
-        title: formData.title, proposal_type: formData.proposal_type,
-        billing_type: formData.billing_type, notes: formData.notes,
-      };
-      if (!editingProposal && formData.prospect) {
-        body.prospect = Number(formData.prospect);
-      }
-      if (formData.total_value) body.total_value = formData.total_value;
-      if (formData.hours_estimated) body.hours_estimated = formData.hours_estimated;
-      if (formData.hourly_rate) body.hourly_rate = formData.hourly_rate;
-      if (formData.valid_until) body.valid_until = formData.valid_until;
-      if (editingProposal) {
-        await api.patch(`/sales/proposals/${editingProposal.id}/`, body);
-      } else {
-        await api.post('/sales/proposals/', body);
-      }
-      toast.success(editingProposal ? 'Proposta atualizada!' : 'Proposta criada!');
-      setShowModal(false);
-      fetchData();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erro ao salvar proposta.');
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleAction = async (proposal: Proposal, action: 'send' | 'approve' | 'reject' | 'convert_to_contract') => {
@@ -242,8 +206,6 @@ export default function PropostasTab() {
       toast.error(err instanceof Error ? err.message : 'Erro ao excluir proposta.');
     }
   };
-
-  const labelInput = 'block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5';
 
   return (
     <div>
@@ -336,7 +298,24 @@ export default function PropostasTab() {
                     <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400"><Sensitive>{p.number}</Sensitive></td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-100"><Sensitive>{p.title}</Sensitive></td>
                     <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400"><Sensitive>{p.customer_name || p.prospect_company || '—'}</Sensitive></td>
-                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{proposalTypeLabels[p.proposal_type] || p.proposal_type}</td>
+                    <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                      {p.services && p.services.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {p.services.slice(0, 3).map((s, i) => (
+                            <span key={s.id ?? i} className="inline-block px-2 py-0.5 text-[11px] rounded-md bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                              {s.service_name || '—'}
+                            </span>
+                          ))}
+                          {p.services.length > 3 && (
+                            <span className="inline-block px-2 py-0.5 text-[11px] rounded-md bg-gray-100 dark:bg-gray-700 text-gray-400">
+                              +{p.services.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        proposalTypeLabels[p.proposal_type] || p.proposal_type
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-sm font-semibold text-gray-900 dark:text-gray-100 tabular-nums">
                       <Sensitive>{p.total_value ? formatCurrency(p.total_value) : '—'}</Sensitive>
                     </td>
@@ -448,153 +427,14 @@ export default function PropostasTab() {
         <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-accent-gold" /> Converter em Contrato</div>
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
-          <FocusTrap onClose={() => setShowModal(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
-                {editingProposal ? 'Editar Proposta' : 'Nova Proposta'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors" aria-label="Fechar">
-                <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-              </button>
-            </div>
-            <form onSubmit={handleSave} className="space-y-4">
-
-              {/* Lead — seletor (apenas nova proposta) ou leitura (edição) */}
-              {!editingProposal ? (
-                <div>
-                  <label className={labelInput}>Lead *</label>
-                  <select
-                    required
-                    value={formData.prospect}
-                    onChange={(e) => {
-                      const selected = prospects.find(p => String(p.id) === e.target.value);
-                      if (selected) {
-                        const defaults = buildProposalDefaults(selected);
-                        setFormData(prev => ({
-                          ...prev,
-                          prospect: e.target.value,
-                          title: defaults.title,
-                          proposal_type: defaults.proposal_type,
-                          billing_type: defaults.billing_type,
-                          total_value: defaults.total_value,
-                          valid_until: defaults.valid_until,
-                          notes: defaults.notes,
-                        }));
-                        setAutoFilled(true);
-                      } else {
-                        setFormData(prev => ({ ...prev, prospect: '' }));
-                        setAutoFilled(false);
-                      }
-                    }}
-                    className="input-field bg-white dark:bg-gray-800"
-                  >
-                    <option value="">Selecione o lead...</option>
-                    {prospects.map((p) => (
-                      <option key={p.id} value={p.id}>{p.company_name} — {p.contact_name}</option>
-                    ))}
-                  </select>
-                  {autoFilled && (
-                    <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                      <span>✦</span> Campos preenchidos com os dados do lead — edite se necessário
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <label className={labelInput}>Lead / Cliente</label>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 px-1">
-                    {editingProposal.customer_name || editingProposal.prospect_company || '—'}
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className={labelInput}>Título *</label>
-                <input type="text" required value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
-                  placeholder={autoFilled ? '' : 'Título da proposta'} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelInput}>Tipo</label>
-                  <select value={formData.proposal_type} onChange={(e) => setFormData({ ...formData, proposal_type: e.target.value })}
-                    className="input-field bg-white dark:bg-gray-800">
-                    <option value="software_dev">Desenvolvimento</option>
-                    <option value="automation">Automação</option>
-                    <option value="ai">Inteligência Artificial</option>
-                    <option value="consulting">Consultoria</option>
-                    <option value="maintenance">Manutenção</option>
-                    <option value="support">Suporte</option>
-                    <option value="mixed">Múltiplos Serviços</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelInput}>Cobrança</label>
-                  <select value={formData.billing_type} onChange={(e) => setFormData({ ...formData, billing_type: e.target.value })}
-                    className="input-field bg-white dark:bg-gray-800">
-                    <option value="fixed">Valor Fixo</option>
-                    <option value="hourly">Por Hora</option>
-                    <option value="monthly">Mensal</option>
-                    <option value="milestone">Por Marco</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelInput}>Valor Total (R$)</label>
-                  <input type="number" step="0.01" min="0" value={formData.total_value}
-                    onChange={(e) => setFormData({ ...formData, total_value: e.target.value })}
-                    className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} />
-                </div>
-                <div>
-                  <label className={labelInput}>Validade *</label>
-                  <input type="date" required value={formData.valid_until}
-                    onChange={(e) => setFormData({ ...formData, valid_until: e.target.value })}
-                    className="input-field" />
-                </div>
-              </div>
-              {(formData.billing_type === 'hourly' || formData.billing_type === 'monthly') && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelInput}>Horas Estimadas</label>
-                    <input type="number" step="0.5" min="0" value={formData.hours_estimated}
-                      onChange={(e) => setFormData({ ...formData, hours_estimated: e.target.value })}
-                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
-                      placeholder="Ex: 120" />
-                  </div>
-                  <div>
-                    <label className={labelInput}>Valor/Hora (R$)</label>
-                    <input type="number" step="0.01" min="0" value={formData.hourly_rate}
-                      onChange={(e) => setFormData({ ...formData, hourly_rate: e.target.value })}
-                      className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
-                      placeholder="Ex: 150.00" />
-                  </div>
-                </div>
-              )}
-              <div>
-                <label className={labelInput}>Observações</label>
-                <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={3} className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
-                  placeholder="Observações sobre a proposta..." />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowModal(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" loading={saving} className="flex-1">
-                  {editingProposal ? 'Atualizar' : 'Criar Proposta'}
-                </Button>
-              </div>
-            </form>
-          </div>
-          </FocusTrap>
-        </div>
-      )}
+      {/* Modal compartilhado */}
+      <ProposalFormModal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        onSuccess={fetchData}
+        editingProposal={editingProposal}
+        prospects={prospects}
+      />
 
       <ConfirmDialog
         open={!!confirmDelete}
