@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Prospect, Proposal, Customer, ProspectMessage
+from .models import Prospect, Proposal, Customer
 from .serializers import ProspectSerializer, ProposalSerializer, ProspectMessageSerializer
 from .n8n_auth import N8NApiKeyAuthentication
 

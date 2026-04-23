@@ -46,8 +46,8 @@ def unseed_services(apps, schema_editor):
     codes = [row[0] for row in SERVICE_SEED]
     try:
         Service.objects.filter(code__in=codes).delete()
-    except Exception:
-        pass  # Reverse migration — não é crítico
+    except Exception as e:  # noqa: BLE001 — reverse migration, não é crítico
+        logging.getLogger(__name__).warning(f'unseed_services: {e!r}')
 
 
 class Migration(migrations.Migration):

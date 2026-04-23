@@ -28,7 +28,7 @@ from accounts.permissions import (
 from .models import (
     Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason,
     ProspectMessage, ClientOnboarding, PartnerCommission,
-    Service, ProposalService, ProposalPaymentPlan,
+    Service, ProposalService,
     ContractService, ContractPaymentPlan,
 )
 from .serializers import (

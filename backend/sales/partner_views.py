@@ -4,7 +4,6 @@ import os
 import secrets
 import string
 
-from django.conf import settings
 from django.db.models import Sum, Count, Q
 from rest_framework import serializers, status
 from rest_framework.decorators import api_view, permission_classes
@@ -91,7 +90,6 @@ def register_partner(request):
     """Admin cria parceiro: gera senha, cria profile, envia email boas-vindas."""
     from django.contrib.auth import get_user_model
     from accounts.models import PartnerProfile
-    from notifications.email_renderer import send_template_email
 
     User = get_user_model()
 
@@ -276,8 +274,8 @@ def partner_leads(request):
     partner_id = ''
     try:
         partner_id = request.user.partner_profile.partner_id
-    except Exception:
-        pass
+    except Exception as e:  # noqa: BLE001 — partner_id é opcional no email
+        logger.warning(f'partner_id indisponível: {e!r}')
     team_emails = User.objects.filter(
         role__in=['admin', 'manager'], is_active=True,
     ).values_list('email', flat=True)
