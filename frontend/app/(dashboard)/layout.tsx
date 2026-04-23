@@ -21,6 +21,7 @@ import {
   Users2,
   Mail,
   Package,
+  Landmark,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -82,6 +83,7 @@ const navSections: NavSection[] = [
     items: [
       { href: '/usuarios',    label: 'Usuários',      icon: ShieldCheck },
       { href: '/catalogo',    label: 'Catálogo',      icon: Package     },
+      { href: '/configuracoes/bancos', label: 'Bancos e Taxas', icon: Landmark },
       { href: '/notificacoes', label: 'Notificações', icon: BellRing    },
       { href: '/emails',       label: 'E-mails',      icon: Mail        },
       { href: '/perfil',      label: 'Meu Perfil',    icon: UserCircle  },

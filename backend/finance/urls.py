@@ -6,6 +6,7 @@ from .views import (
     TaxConfigViewSet, TaxEntryViewSet, ClientCostViewSet,
     RecurringExpenseViewSet, LoanViewSet, AssetViewSet,
     ProfitDistConfigViewSet, FinanceDashboardView,
+    PaymentProviderViewSet, PaymentProviderRateViewSet,
 )
 
 router = DefaultRouter()
@@ -23,6 +24,8 @@ router.register(r'loans', LoanViewSet)
 router.register(r'assets', AssetViewSet)
 router.register(r'profit-dist', ProfitDistConfigViewSet)
 router.register(r'fin-dashboard', FinanceDashboardView, basename='fin-dashboard')
+router.register(r'payment-providers', PaymentProviderViewSet)
+router.register(r'payment-provider-rates', PaymentProviderRateViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),

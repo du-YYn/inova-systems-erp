@@ -3,7 +3,34 @@ from .models import (
     BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
     TaxConfig, TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
     Asset, ProfitDistConfig, ProfitDistPartner,
+    PaymentProvider, PaymentProviderRate,
 )
+
+
+class PaymentProviderRateSerializer(serializers.ModelSerializer):
+    method_display = serializers.CharField(source='get_method_display', read_only=True)
+
+    class Meta:
+        model = PaymentProviderRate
+        fields = [
+            'id', 'method', 'method_display',
+            'installment_fee_pct', 'installment_fee_fixed',
+            'anticipation_monthly_pct', 'fixed_fee',
+            'notes', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'method_display', 'created_at', 'updated_at']
+
+
+class PaymentProviderSerializer(serializers.ModelSerializer):
+    rates = PaymentProviderRateSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PaymentProvider
+        fields = [
+            'id', 'code', 'name', 'is_active', 'display_order',
+            'notes', 'rates', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'rates', 'created_at', 'updated_at']
 
 
 class BankAccountSerializer(serializers.ModelSerializer):

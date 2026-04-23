@@ -489,3 +489,83 @@ class Budget(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.planned}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Payment Providers (bancos / gateways) + Taxas
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PaymentProvider(models.Model):
+    """Catálogo de bancos/gateways de pagamento (Asaas, PagSeguro, Stone, etc.).
+
+    Admin cadastra e mantém as taxas vigentes. Cada provider tem uma ou mais
+    `PaymentProviderRate` (uma por método: credit_card, boleto, pix).
+    """
+    code = models.SlugField(
+        max_length=50, unique=True,
+        help_text='Código único (ex: asaas, pagseguro, stone)',
+    )
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+    display_order = models.IntegerField(default=0)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payment_providers'
+        ordering = ['display_order', 'name']
+
+    def __str__(self):
+        return self.name
+
+
+class PaymentProviderRate(models.Model):
+    """Taxas de um provider por método de pagamento.
+
+    Valores decimais em percentual (ex: 3.99 = 3,99%).
+    """
+    METHOD_CHOICES = [
+        ('credit_card', 'Cartão de Crédito'),
+        ('boleto', 'Boleto'),
+        ('pix', 'PIX'),
+    ]
+
+    provider = models.ForeignKey(
+        PaymentProvider, on_delete=models.CASCADE, related_name='rates',
+    )
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+
+    installment_fee_pct = models.DecimalField(
+        max_digits=6, decimal_places=4, default=0,
+        help_text='Percentual da taxa por parcela (ex: 3.99 = 3,99%)',
+    )
+    installment_fee_fixed = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text='Taxa fixa em R$ por parcela (ex: 0.49)',
+    )
+    anticipation_monthly_pct = models.DecimalField(
+        max_digits=6, decimal_places=4, default=0,
+        help_text='Taxa mensal de antecipação (ex: 1.70 = 1,70% ao mês)',
+    )
+    fixed_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text='Taxa fixa por emissão (boleto/PIX). 0 quando não se aplica.',
+    )
+
+    notes = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payment_provider_rates'
+        ordering = ['provider__display_order', 'method']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['provider', 'method'],
+                name='unique_provider_method_rate',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.provider.name} — {self.get_method_display()}"

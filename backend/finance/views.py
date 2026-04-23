@@ -16,6 +16,7 @@ from .models import (
     BankAccount, Category, Invoice, Transaction, CostCenter, Budget,
     TaxConfig, TaxEntry, ClientCost, RecurringExpense, Loan, LoanInstallment,
     Asset, ProfitDistConfig, ProfitDistPartner,
+    PaymentProvider, PaymentProviderRate,
 )
 from .serializers import (
     BankAccountSerializer, CategorySerializer, InvoiceSerializer,
@@ -23,8 +24,11 @@ from .serializers import (
     TaxConfigSerializer, TaxEntrySerializer, ClientCostSerializer,
     RecurringExpenseSerializer, LoanSerializer, LoanInstallmentSerializer,
     AssetSerializer, ProfitDistConfigSerializer, ProfitDistPartnerSerializer,
+    PaymentProviderSerializer, PaymentProviderRateSerializer,
 )
-from accounts.permissions import IsAdminOrManager, IsAdminOrManagerOrOperator
+from accounts.permissions import (
+    IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrReadOnly,
+)
 
 logger = logging.getLogger('finance')
 
@@ -942,3 +946,38 @@ class FinanceDashboardView(viewsets.ViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="dre-{year}.pdf"'
         return response
+
+
+@extend_schema(tags=['finance'])
+class PaymentProviderViewSet(viewsets.ModelViewSet):
+    """Catálogo de bancos/gateways de pagamento.
+
+    Todos os usuários autenticados leem (precisam para o modal de ativação
+    de contrato). Apenas admin edita/cadastra — é config sensível.
+    """
+    queryset = PaymentProvider.objects.prefetch_related('rates')
+    serializer_class = PaymentProviderSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            include_inactive = self.request.query_params.get('include_inactive') == '1'
+            if not include_inactive:
+                qs = qs.filter(is_active=True)
+        return qs
+
+
+@extend_schema(tags=['finance'])
+class PaymentProviderRateViewSet(viewsets.ModelViewSet):
+    """Taxas por método de cada provider. Só admin edita."""
+    queryset = PaymentProviderRate.objects.select_related('provider')
+    serializer_class = PaymentProviderRateSerializer
+    permission_classes = [IsAdminOrReadOnly]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        provider_id = self.request.query_params.get('provider')
+        if provider_id:
+            qs = qs.filter(provider_id=provider_id)
+        return qs
