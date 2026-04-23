@@ -22,7 +22,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from .models import Invoice, PaymentProvider, PaymentProviderRate
+from .models import Invoice, PaymentProvider
 from .pricing import calculate_card, calculate_boleto, calculate_pix, calculate_recurring
 
 

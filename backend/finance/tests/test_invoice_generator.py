@@ -8,7 +8,7 @@ Valida:
 - Tolerância de ±R$ 15 nos totais (arredondamentos internos)
 """
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -68,7 +68,7 @@ def asaas(db):
 def customer(db):
     return Customer.objects.create(
         customer_type='PJ', company_name='Cliente F4 Ltda',
-        cnpj='12345678000100', email='cliente@f4.com',
+        document='12.345.678/0001-00', email='cliente@f4.com',
     )
 
 
