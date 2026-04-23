@@ -306,6 +306,97 @@ class TestConvertToContract:
         )
         assert response.status_code == status.HTTP_201_CREATED
 
+    def test_convert_auto_creates_customer_from_prospect(self, admin_client, admin_user):
+        """F0: proposta aprovada com prospect SEM customer vinculado.
+        convert_to_contract deve auto-criar o Customer em vez de falhar com 400.
+        """
+        prospect = Prospect.objects.create(
+            company_name='Bau Governanca Test', contact_name='João',
+            contact_email='bau_conv@test.com', contact_phone='41999887766',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        assert not Customer.objects.filter(email='bau_conv@test.com').exists()
+
+        prop = Proposal.objects.create(
+            prospect=prospect, customer=None,  # explicitamente sem customer
+            number='PROP-AUTO-001',
+            title='Proposta Auto-Customer', proposal_type='software_dev',
+            billing_type='fixed', total_value=5000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='approved', created_by=admin_user,
+        )
+
+        response = admin_client.post(
+            f'/api/v1/sales/proposals/{prop.id}/convert_to_contract/',
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+
+        # Customer foi criado com dados do prospect
+        customer = Customer.objects.get(email='bau_conv@test.com')
+        assert customer.company_name == 'Bau Governanca Test'
+        assert customer.customer_type == 'PJ'
+        assert customer.source == 'crm'
+
+        # Proposta e prospect foram linkados ao novo customer
+        prop.refresh_from_db()
+        prospect.refresh_from_db()
+        assert prop.customer_id == customer.id
+        assert prospect.customer_id == customer.id
+
+    def test_convert_reuses_existing_customer_by_email(self, admin_client, admin_user):
+        """Se já existe Customer com o mesmo email do prospect, reaproveita
+        em vez de criar duplicado."""
+        existing = Customer.objects.create(
+            company_name='Empresa Existente', customer_type='PJ',
+            email='reuse@test.com', source='manual', created_by=admin_user,
+        )
+        prospect = Prospect.objects.create(
+            company_name='Empresa Existente', contact_name='Maria',
+            contact_email='reuse@test.com', contact_phone='41888777666',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        prop = Proposal.objects.create(
+            prospect=prospect, customer=None,
+            number='PROP-REUSE-001',
+            title='Reaproveitar Cliente', proposal_type='software_dev',
+            billing_type='fixed', total_value=3000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='approved', created_by=admin_user,
+        )
+
+        response = admin_client.post(
+            f'/api/v1/sales/proposals/{prop.id}/convert_to_contract/',
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+        # Não criou duplicado
+        assert Customer.objects.filter(email='reuse@test.com').count() == 1
+        prop.refresh_from_db()
+        assert prop.customer_id == existing.id
+
+    def test_convert_fails_when_prospect_has_no_company_name(self, admin_client, admin_user):
+        """Company name vazio → não dá pra criar customer → 400 com mensagem
+        clara (não mais 'Cliente não encontrado')."""
+        prospect = Prospect.objects.create(
+            company_name='',  # vazio
+            contact_name='Anon', contact_email='anon@test.com',
+            contact_phone='1', source='website', status='proposal',
+            created_by=admin_user,
+        )
+        prop = Proposal.objects.create(
+            prospect=prospect, customer=None,
+            number='PROP-NOCO-001',
+            title='Sem empresa', proposal_type='software_dev',
+            billing_type='fixed', total_value=1000,
+            valid_until=timezone.now().date() + timedelta(days=30),
+            status='approved', created_by=admin_user,
+        )
+        response = admin_client.post(
+            f'/api/v1/sales/proposals/{prop.id}/convert_to_contract/',
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'Nome da Empresa' in response.data.get('error', '')
+
 
 # ─── CONTRACT WITH SERVICES + PAYMENT PLAN ───────────────────────────────────
 

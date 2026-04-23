@@ -755,18 +755,45 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 last_seq = 0
             next_number = f"CTR-{last_seq + 1:05d}"
 
-            # Resolve customer — auto-create from prospect data if no customer linked
+            # Resolve customer — busca por email, ou AUTO-CRIA a partir dos
+            # dados do prospect se não existir. Antes exigia que o lead
+            # estivesse em "won" no funil para ter Customer, obrigando o
+            # usuário a alternar entre funil e propostas. Agora a conversão
+            # em contrato é autônoma — a operação comercial flui direto.
             customer = proposal.customer
             if not customer and proposal.prospect:
-                # Busca cliente existente por email — NÃO recria se foi excluído
-                customer = Customer.objects.filter(
-                    email=proposal.prospect.contact_email
-                ).first()
+                prospect = proposal.prospect
+                prospect_email = (prospect.contact_email or '').strip()
+                prospect_company = (prospect.company_name or '').strip()
+
+                # 1. Tenta reaproveitar Customer existente por email
+                if prospect_email:
+                    customer = Customer.objects.filter(email=prospect_email).first()
+
+                # 2. Se não achou, cria Customer a partir do prospect.
+                #    Precisa no mínimo de company_name — sem ele, abortamos
+                #    com erro descritivo (não dá pra criar cliente anônimo).
                 if not customer:
-                    return Response(
-                        {'error': 'Cliente não encontrado. Feche o lead no funil primeiro para cadastrar o cliente.'},
-                        status=status.HTTP_400_BAD_REQUEST
+                    if not prospect_company:
+                        return Response(
+                            {'error': 'O lead precisa ter "Nome da Empresa" preenchido para gerar o contrato.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    customer = Customer.objects.create(
+                        customer_type='PJ',
+                        company_name=prospect_company,
+                        name=(prospect.contact_name or '').strip(),
+                        email=prospect_email,
+                        phone=(prospect.contact_phone or '').strip(),
+                        source='crm',
+                        created_by=request.user,
                     )
+                    logger.info(
+                        f"Customer {customer.id} ({customer.company_name}) "
+                        f"auto-criado em convert_to_contract da proposta #{proposal.number}"
+                    )
+
+                # 3. Linka proposta e prospect ao customer (existente ou novo)
                 Prospect.objects.filter(pk=proposal.prospect_id).update(customer=customer)
                 Proposal.objects.filter(pk=proposal.pk).update(customer=customer)
 
