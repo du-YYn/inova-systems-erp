@@ -34,8 +34,10 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend)
-            docker compose up -d --build --remove-orphans
+            # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend).
+            # || true evita que set -e aborte o script quando dependências falham a
+            # ficar healthy — o diagnóstico abaixo precisa rodar para capturar o log.
+            docker compose up -d --build --remove-orphans || echo "⚠ docker compose up retornou erro — prosseguindo para diagnóstico"
 
             # Smoke test com retry — 18 tentativas × 5s = 90s total (comporta migrations mais pesadas)
             echo "Executando smoke test (até 90s)..."
