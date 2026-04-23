@@ -413,33 +413,44 @@ export default function ProposalScopeEditor({
 function PaymentSummary({ totalValue, paymentPlan }: {
   totalValue: string; paymentPlan: PaymentPlanData;
 }) {
-  const total = Number(totalValue || 0);
-  if (!total) return null;
-
   const oneTime = Number(paymentPlan.one_time_amount || 0);
   const recurring = Number(paymentPlan.recurring_amount || 0);
   const months = paymentPlan.recurring_duration_months || 0;
 
-  let sum = 0;
-  if (paymentPlan.plan_type === 'one_time') sum = oneTime;
-  else if (paymentPlan.plan_type === 'recurring_only') sum = recurring * months;
-  else sum = oneTime + recurring * months;
+  // Total sempre derivado do plano — mostra o cálculo detalhado
+  let computedTotal = 0;
+  if (paymentPlan.plan_type === 'one_time') computedTotal = oneTime;
+  else if (paymentPlan.plan_type === 'recurring_only') computedTotal = recurring * months;
+  else computedTotal = oneTime + recurring * months;
 
-  if (sum === 0) return null;
+  // totalValue vem como prop mas pode estar dessincronizado em contratos legacy;
+  // priorizamos o calculado (fonte da verdade é o plano).
+  const total = computedTotal || Number(totalValue || 0);
 
-  const diff = Math.abs(sum - total);
-  const tolerance = Math.max(0.02, total * 0.001);
-  const matches = diff <= tolerance;
+  if (total === 0 && oneTime === 0 && recurring === 0) return null;
+
+  const showOne = paymentPlan.plan_type !== 'recurring_only' && oneTime > 0;
+  const showRec = paymentPlan.plan_type !== 'one_time' && recurring > 0 && months > 0;
 
   return (
-    <div className={`mt-3 text-xs rounded-md px-3 py-2 ${
-      matches
-        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300'
-        : 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300'
-    }`}>
-      {matches
-        ? `✓ Soma do plano (${formatBRL(sum)}) bate com o valor total.`
-        : `⚠ Soma do plano (${formatBRL(sum)}) difere do valor total (${formatBRL(total)}). Diferença: ${formatBRL(diff)}.`}
+    <div className="mt-3 text-xs rounded-md px-3 py-2 bg-gray-50 dark:bg-gray-900/40 text-gray-700 dark:text-gray-300 space-y-1">
+      <p className="font-semibold text-gray-800 dark:text-gray-200">Total do contrato</p>
+      {showOne && (
+        <div className="flex justify-between">
+          <span>Setup (à vista ou parcelado)</span>
+          <span className="tabular-nums">{formatBRL(oneTime)}</span>
+        </div>
+      )}
+      {showRec && (
+        <div className="flex justify-between">
+          <span>{months}× {formatBRL(recurring)} (mensal)</span>
+          <span className="tabular-nums">{formatBRL(recurring * months)}</span>
+        </div>
+      )}
+      <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700 font-semibold text-gray-900 dark:text-gray-100">
+        <span>Total</span>
+        <span className="tabular-nums">{formatBRL(total)}</span>
+      </div>
     </div>
   );
 }
