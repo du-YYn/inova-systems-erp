@@ -1,5 +1,5 @@
 import logging
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -966,6 +966,88 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
             if not include_inactive:
                 qs = qs.filter(is_active=True)
         return qs
+
+    @action(
+        detail=True, methods=['post'], url_path='simulate',
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def simulate(self, request, pk=None):
+        """Simula cobrança com as taxas deste provider.
+
+        Body:
+        - `method`: 'pix' | 'credit_card' | 'boleto'
+        - `gross`: valor bruto desejado (R$, string decimal)
+        - `installments`: número de parcelas (int, default 1)
+        - `anticipate`: bool (cartão apenas) — True = empresa recebe à vista
+        - `repass_fee`: bool (cartão apenas) — True = taxa embutida no preço ao cliente
+
+        Retorna o dict calculado por `finance.pricing`, com schedule e details.
+        """
+        from .pricing import calculate_card, calculate_boleto, calculate_pix
+
+        from django.http import Http404
+
+        provider = self.get_object()
+        if not provider.is_active:
+            raise Http404('Provider inativo.')
+
+        data = request.data or {}
+
+        method = data.get('method')
+        if method not in ('pix', 'credit_card', 'boleto'):
+            raise ValidationError({'method': 'Deve ser pix, credit_card ou boleto.'})
+
+        try:
+            gross = Decimal(str(data.get('gross', '0')))
+        except Exception:
+            raise ValidationError({'gross': 'Valor decimal inválido.'})
+        if gross <= 0:
+            raise ValidationError({'gross': 'Deve ser maior que zero.'})
+
+        raw_installments = data.get('installments')
+        if raw_installments is None or raw_installments == '':
+            installments = 1
+        else:
+            try:
+                installments = int(raw_installments)
+            except (TypeError, ValueError):
+                raise ValidationError({'installments': 'Número inteiro inválido.'})
+        if installments < 1:
+            raise ValidationError({'installments': 'Deve ser >= 1.'})
+
+        rate = provider.rates.filter(method=method).first()
+        if not rate:
+            raise ValidationError({
+                'method': f'Provider {provider.code} não tem taxas cadastradas para {method}.',
+            })
+
+        try:
+            if method == 'pix':
+                result = calculate_pix(gross=gross, fee_fixed=rate.fixed_fee)
+            elif method == 'boleto':
+                result = calculate_boleto(
+                    gross=gross, installments=installments,
+                    fee_fixed=rate.fixed_fee,
+                )
+            else:  # credit_card
+                anticipate = bool(data.get('anticipate', False))
+                repass_fee = bool(data.get('repass_fee', False))
+                result = calculate_card(
+                    gross=gross, installments=installments,
+                    fee_pct=rate.installment_fee_pct,
+                    fee_fixed=rate.installment_fee_fixed,
+                    anticipation_monthly_pct=rate.anticipation_monthly_pct,
+                    anticipate=anticipate, repass_fee=repass_fee,
+                )
+        except ValueError as exc:
+            raise ValidationError({'detail': str(exc)})
+
+        result['provider'] = {
+            'id': provider.id,
+            'code': provider.code,
+            'name': provider.name,
+        }
+        return Response(result)
 
 
 @extend_schema(tags=['finance'])
