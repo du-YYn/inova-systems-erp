@@ -298,3 +298,27 @@ class TestActivateEndpointIntegration:
         contract.save()
         r = admin_client.post(f'/api/v1/sales/contracts/{contract.id}/activate/')
         assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_activate_generator_value_error_rolls_back(
+        self, admin_client, customer, admin_user, asaas,
+    ):
+        """Se o generator falhar (ex: provider sem taxa para o metodo), o
+        contrato volta para pending_signature e nenhuma invoice fica no DB."""
+        # Apaga a taxa de credit_card — generator vai falhar ao procurar
+        asaas.rates.filter(method='credit_card').delete()
+
+        contract = _make_contract(customer, admin_user, setup=Decimal('5000'))
+        r = admin_client.post(
+            f'/api/v1/sales/contracts/{contract.id}/activate/',
+            {
+                'payment_provider': asaas.id,
+                'activation_mode': 'card_installments',
+                'installments': 12,
+            }, format='json',
+        )
+        assert r.status_code == status.HTTP_400_BAD_REQUEST
+
+        # Rollback: contrato volta para pending_signature e sem invoices
+        contract.refresh_from_db()
+        assert contract.status == 'pending_signature'
+        assert Invoice.objects.filter(contract=contract).count() == 0

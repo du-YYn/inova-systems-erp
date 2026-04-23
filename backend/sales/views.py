@@ -1072,12 +1072,12 @@ class ContractViewSet(viewsets.ModelViewSet):
                 )
 
         invoices_summary = None
-        with transaction.atomic():
-            contract.status = 'active'
-            contract.save()
+        try:
+            with transaction.atomic():
+                contract.status = 'active'
+                contract.save()
 
-            if generate_invoices:
-                try:
+                if generate_invoices:
                     result = generate_activation_invoices(
                         contract=contract,
                         user=request.user,
@@ -1087,17 +1087,17 @@ class ContractViewSet(viewsets.ModelViewSet):
                         anticipate=anticipate,
                         repass_fee=repass_fee,
                     )
-                except ValueError as exc:
-                    return Response(
-                        {'error': str(exc)},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                invoices_summary = {
-                    'setup_count': len(result['setup_invoices']),
-                    'recurring_count': len(result['recurring_invoices']),
-                    'total_fees_setup': str(result['total_fees_setup']),
-                    'total_fees_recurring': str(result['total_fees_recurring']),
-                }
+                    invoices_summary = {
+                        'setup_count': len(result['setup_invoices']),
+                        'recurring_count': len(result['recurring_invoices']),
+                        'total_fees_setup': str(result['total_fees_setup']),
+                        'total_fees_recurring': str(result['total_fees_recurring']),
+                    }
+        except ValueError as exc:
+            return Response(
+                {'error': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         logger.info(
             "Contrato %s ativado por %s (mode=%s, provider=%s, invoices=%s)",
