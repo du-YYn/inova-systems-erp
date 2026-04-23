@@ -985,7 +985,12 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
         """
         from .pricing import calculate_card, calculate_boleto, calculate_pix
 
+        from django.http import Http404
+
         provider = self.get_object()
+        if not provider.is_active:
+            raise Http404('Provider inativo.')
+
         data = request.data or {}
 
         method = data.get('method')
@@ -999,10 +1004,14 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
         if gross <= 0:
             raise ValidationError({'gross': 'Deve ser maior que zero.'})
 
-        try:
-            installments = int(data.get('installments', 1) or 1)
-        except (TypeError, ValueError):
-            raise ValidationError({'installments': 'Número inteiro inválido.'})
+        raw_installments = data.get('installments')
+        if raw_installments is None or raw_installments == '':
+            installments = 1
+        else:
+            try:
+                installments = int(raw_installments)
+            except (TypeError, ValueError):
+                raise ValidationError({'installments': 'Número inteiro inválido.'})
         if installments < 1:
             raise ValidationError({'installments': 'Deve ser >= 1.'})
 
