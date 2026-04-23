@@ -1,5 +1,5 @@
 import logging
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -967,7 +967,10 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(is_active=True)
         return qs
 
-    @action(detail=True, methods=['post'], url_path='simulate')
+    @action(
+        detail=True, methods=['post'], url_path='simulate',
+        permission_classes=[permissions.IsAuthenticated],
+    )
     def simulate(self, request, pk=None):
         """Simula cobrança com as taxas deste provider.
 
