@@ -11,7 +11,6 @@ Fórmulas seguem o modelo do Asaas (abr/2026), com tolerância para variações
 de arredondamento inerentes aos simuladores reais.
 """
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
 
 # Constantes
 _CENT = Decimal('0.01')
