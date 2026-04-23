@@ -21,6 +21,17 @@ if not DEBUG and not _is_ci:
         raise ValueError('DB_PASSWORD must be set in production')
     if not os.environ.get('WEBSITE_API_KEY'):
         raise ValueError('WEBSITE_API_KEY must be set in production')
+    # Redis sem password = acesso anônimo ao broker Celery + cache JWT.
+    # Em produção, REDIS_URL deve embutir a senha (redis://:pwd@host:6379/0)
+    # OU a variável REDIS_PASSWORD deve estar definida.
+    _redis_url = os.environ.get('REDIS_URL', '')
+    _redis_password = os.environ.get('REDIS_PASSWORD', '')
+    _redis_has_auth = '@' in _redis_url or bool(_redis_password)
+    if not _redis_has_auth:
+        raise ValueError(
+            'REDIS_PASSWORD must be set in production '
+            '(or embed credentials in REDIS_URL)'
+        )
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 # Hosts internos do Docker (necessários para proxy Next.js → Django)

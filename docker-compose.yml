@@ -171,7 +171,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    stop_grace_period: 30s
+    # Aumentado de 30s → 60s. Se uma task agendada estiver rodando quando
+    # o container recebe SIGTERM, ela tem tempo suficiente pra terminar ou
+    # ser reagendada pelo Celery Beat.
+    stop_grace_period: 60s
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
   frontend:

@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+# Princípio do menor privilégio — deploy via SSH não precisa escrever no repo.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy

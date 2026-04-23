@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Princípio do menor privilégio — jobs só leem o repo.
+# Se precisarmos publicar artefatos/releases/comments no futuro,
+# override explicitamente nos jobs que precisarem.
+permissions:
+  contents: read
+
 jobs:
   # ─── BACKEND ────────────────────────────────────────────────────────────────
   backend:
