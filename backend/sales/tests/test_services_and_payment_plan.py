@@ -654,3 +654,41 @@ class TestProspectActions:
             f'/api/v1/sales/prospects/{prospect.id}/mark_ebook_sent/'
         )
         assert response.status_code == status.HTTP_200_OK
+
+    def test_proposal_pdf_endpoint(self, admin_client, proposal):
+        response = admin_client.get(f'/api/v1/sales/proposals/{proposal.id}/pdf/')
+        assert response.status_code == status.HTTP_200_OK
+        assert response['Content-Type'] == 'application/pdf'
+
+    def test_proposal_upload_pdf_missing_file(self, admin_client, proposal):
+        response = admin_client.post(
+            f'/api/v1/sales/proposals/{proposal.id}/upload-pdf/'
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_proposal_download_pdf_missing(self, admin_client, proposal):
+        response = admin_client.get(f'/api/v1/sales/proposals/{proposal.id}/download-pdf/')
+        # Proposta não tem arquivo → 404
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_proposal_views_history_empty(self, admin_client, proposal):
+        response = admin_client.get(f'/api/v1/sales/proposals/{proposal.id}/views-history/')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_contract_download_missing(self, admin_client, admin_user, customer):
+        c = Contract.objects.create(
+            customer=customer, number='CTR-DL-001', title='X',
+            contract_type='software_dev', billing_type='fixed',
+            start_date=timezone.now().date(), created_by=admin_user,
+        )
+        response = admin_client.get(f'/api/v1/sales/contracts/{c.id}/download/')
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_contract_onboarding_data_missing(self, admin_client, admin_user, customer):
+        c = Contract.objects.create(
+            customer=customer, number='CTR-OB-001', title='X',
+            contract_type='software_dev', billing_type='fixed',
+            start_date=timezone.now().date(), created_by=admin_user,
+        )
+        response = admin_client.get(f'/api/v1/sales/contracts/{c.id}/onboarding-data/')
+        assert response.status_code == status.HTTP_404_NOT_FOUND
