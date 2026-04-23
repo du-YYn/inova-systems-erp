@@ -12,6 +12,7 @@ import { MultiSelect } from '@/components/ui/MultiSelect';
 import api, { ApiError } from '@/lib/api';
 import ProposalScopeEditor from './ProposalScopeEditor';
 import type { Service, PaymentPlanData } from './ProposalFormModal';
+import ContractActivationModal from './ContractActivationModal';
 
 interface Contract {
   id: number;
@@ -336,6 +337,8 @@ export default function ContratosTab() {
   const [cancelTarget, setCancelTarget] = useState<Contract | null>(null);
   const [cancelling, setCancelling] = useState(false);
 
+  const [activationTarget, setActivationTarget] = useState<Contract | null>(null);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -584,9 +587,9 @@ export default function ContratosTab() {
   };
 
   // ── Status actions ───────────────────────────────────────────────────────
-  const handleStatusAction = async (contract: Contract, action: 'submit' | 'activate' | 'renew') => {
+  const handleStatusAction = async (contract: Contract, action: 'submit' | 'renew') => {
     const labels: Record<string, string> = {
-      submit: 'enviado para assinatura', activate: 'ativado', renew: 'renovado',
+      submit: 'enviado para assinatura', renew: 'renovado',
     };
     try {
       await api.post(`/sales/contracts/${contract.id}/${action}/`);
@@ -775,9 +778,9 @@ export default function ContratosTab() {
                           <FileSignature className="w-3 h-3" /> Assinar
                         </button>
                       )}
-                      {/* Pending → Ativar */}
+                      {/* Pending → Ativar (abre modal com simulação de cobrança) */}
                       {c.status === 'pending_signature' && (
-                        <button onClick={() => handleStatusAction(c, 'activate')}
+                        <button onClick={() => setActivationTarget(c)}
                           className="flex items-center gap-1 px-2 py-1 text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800/30 rounded hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
                           <CheckCircle className="w-3 h-3" /> Ativar
                         </button>
@@ -997,6 +1000,15 @@ export default function ContratosTab() {
         onConfirm={handleCancelConfirmed}
         onCancel={() => setCancelTarget(null)}
       />
+
+      {activationTarget && (
+        <ContractActivationModal
+          contract={activationTarget}
+          open={!!activationTarget}
+          onClose={() => setActivationTarget(null)}
+          onSuccess={fetchData}
+        />
+      )}
     </div>
   );
 }

@@ -1018,15 +1018,54 @@ class ContractViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
+        """Ativa um contrato em pending_signature.
+
+        Payload opcional (usado pelo ContractActivationModal):
+        - `payment_provider`: id do PaymentProvider (Asaas, etc.)
+        - `activation_mode`: 'pix' | 'card_anticipated' | 'card_installments' | 'boleto'
+        - `installments`: int (default 1; ignorado para pix)
+        - `anticipate`: bool (cartão apenas)
+        - `repass_fee`: bool (cartão apenas)
+
+        Se o payload vier, os parâmetros são validados. A geração de invoices
+        com base neles é feita na fase F4.
+        """
+        from finance.models import PaymentProvider
+
         contract = self.get_object()
         if contract.status != 'pending_signature':
             return Response(
                 {'error': f'Contrato não pode ser ativado (status atual: {contract.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        data = request.data or {}
+        valid_modes = ('pix', 'card_anticipated', 'card_installments', 'boleto')
+        provider_id = data.get('payment_provider')
+        mode = data.get('activation_mode')
+        if provider_id or mode:
+            if mode not in valid_modes:
+                return Response(
+                    {'activation_mode': f'Deve ser um de: {", ".join(valid_modes)}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not provider_id:
+                return Response(
+                    {'payment_provider': 'Obrigatório quando activation_mode é informado.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not PaymentProvider.objects.filter(id=provider_id, is_active=True).exists():
+                return Response(
+                    {'payment_provider': 'Provider não encontrado ou inativo.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         contract.status = 'active'
         contract.save()
-        logger.info(f"Contrato {contract.id} ativado por {request.user.username}")
+        logger.info(
+            "Contrato %s ativado por %s (mode=%s, provider=%s)",
+            contract.id, request.user.username, mode, provider_id,
+        )
         return Response(ContractSerializer(contract).data)
 
     @action(detail=True, methods=['post'])
