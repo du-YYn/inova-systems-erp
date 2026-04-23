@@ -65,10 +65,11 @@ def asaas(db):
 
 
 @pytest.fixture
-def customer(db):
+def customer(db, admin_user):
     return Customer.objects.create(
         customer_type='PJ', company_name='Cliente F4 Ltda',
         document='12.345.678/0001-00', email='cliente@f4.com',
+        created_by=admin_user,
     )
 
 
