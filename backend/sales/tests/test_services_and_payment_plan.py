@@ -608,3 +608,49 @@ class TestProspectActions:
     def test_prospect_messages_endpoint(self, admin_client, prospect):
         response = admin_client.get(f'/api/v1/sales/prospects/{prospect.id}/messages/')
         assert response.status_code == status.HTTP_200_OK
+
+    def test_prospect_list_filter_by_status(self, admin_client, prospect):
+        response = admin_client.get('/api/v1/sales/prospects/?status=proposal')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_customer_list_search(self, admin_client, customer):
+        response = admin_client.get(f'/api/v1/sales/customers/?search={customer.company_name}')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_customer_list_filter_type(self, admin_client, customer):
+        response = admin_client.get('/api/v1/sales/customers/?customer_type=PJ')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_prospect_activity_create(self, admin_client, prospect):
+        response = admin_client.post('/api/v1/sales/prospect-activities/', {
+            'prospect': prospect.id,
+            'activity_type': 'call',
+            'subject': 'Test call',
+            'description': 'Called prospect',
+            'date': timezone.now().isoformat(),
+        }, format='json')
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_prospect_activity_list(self, admin_client):
+        response = admin_client.get('/api/v1/sales/prospect-activities/')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_win_loss_list(self, admin_client):
+        response = admin_client.get('/api/v1/sales/win-loss/')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_onboardings_list(self, admin_client):
+        response = admin_client.get('/api/v1/sales/onboardings/')
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_prospect_pending_invoices(self, admin_client, prospect):
+        response = admin_client.get(
+            f'/api/v1/sales/prospects/{prospect.id}/pending-invoices/'
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_prospect_mark_ebook_sent(self, admin_client, prospect):
+        response = admin_client.post(
+            f'/api/v1/sales/prospects/{prospect.id}/mark_ebook_sent/'
+        )
+        assert response.status_code == status.HTTP_200_OK
