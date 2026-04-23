@@ -80,6 +80,7 @@ def _make_contract(customer, admin_user, monthly=Decimal('0'),
         title='Contrato F4 Teste',
         customer=customer,
         billing_type='fixed',
+        start_date=timezone.now().date(),
         monthly_value=monthly or None,
         status='pending_signature',
         created_by=admin_user,
@@ -183,8 +184,8 @@ class TestInvoiceGenerator:
     def test_no_plan_no_invoices(self, customer, admin_user, asaas):
         contract = Contract.objects.create(
             number='C-NOPLAN', title='Sem plano', customer=customer,
-            billing_type='fixed', status='pending_signature',
-            created_by=admin_user,
+            billing_type='fixed', start_date=timezone.now().date(),
+            status='pending_signature', created_by=admin_user,
         )
         result = generate_activation_invoices(
             contract=contract, user=admin_user, provider_id=asaas.id,
