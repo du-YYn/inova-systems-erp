@@ -6,6 +6,20 @@ const PUBLIC_PATHS = ['/login', '/reset-password', '/forgot-password', '/p/', '/
 const ONBOARDING_HOST = process.env.ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com';
 const PARTNER_HOST = process.env.PARTNER_HOST || 'parceiro.inovasystemssolutions.com';
 
+/** Valida se um pathname pode ser usado como ?redirect=... de forma segura
+ * (evita open redirect via `//evil.com`, `\\evil.com`, `/\\evil`, `javascript:`
+ * e URLs absolutas). Aceita apenas paths relativos simples. */
+function isSafeRedirectPath(path: string): boolean {
+  if (!path || typeof path !== 'string') return false;
+  if (!path.startsWith('/')) return false;
+  // Rejeita protocolo-relativo, backslash-tricks, null bytes, esquemas perigosos
+  if (path.startsWith('//') || path.startsWith('/\\') || path.includes('\\')) return false;
+  if (path.includes('\0') || path.includes('\r') || path.includes('\n')) return false;
+  if (/^\/+(javascript|data|vbscript|file):/i.test(path)) return false;
+  // Aceita path razoável: letras, dígitos, /, -, _, ., ?, &, =, %
+  return /^\/[a-zA-Z0-9/_\-.?&=%+]*$/.test(path);
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   // Detecta hostname real (Traefik/Easypanel pode usar x-forwarded-host)
@@ -40,7 +54,7 @@ export function middleware(request: NextRequest) {
     const session = request.cookies.get('inova_session');
     if (!session?.value) {
       const loginUrl = new URL('/login', request.url);
-      if (pathname.startsWith('/') && !pathname.startsWith('//')) {
+      if (isSafeRedirectPath(pathname)) {
         loginUrl.searchParams.set('redirect', pathname);
       }
       return NextResponse.redirect(loginUrl);

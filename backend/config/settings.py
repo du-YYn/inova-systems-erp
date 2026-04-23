@@ -154,7 +154,10 @@ REST_FRAMEWORK = {
         'user': '1000/hour',
         'login': '5/minute',
         'password_reset': '3/hour',
-        'two_factor': '10/hour',
+        # 2FA: rate reduzido de 10/hora → 5/minuto.
+        # Com 6 dígitos (1M combinações) + janela TOTP 30s + TTL temp_token
+        # 3min (ver accounts/views.py), brute-force fica inviável.
+        'two_factor': '5/minute',
         'n8n': '300/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

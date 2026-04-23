@@ -147,7 +147,11 @@ class LoginView(APIView):
             import hashlib
             temp_token = secrets.token_urlsafe(32)
             user.temp_2fa_token = hashlib.sha256(temp_token.encode()).hexdigest()
-            user.temp_2fa_expires = timezone.now() + timedelta(minutes=10)
+            # TTL reduzido de 10min → 3min: se temp_token vazar (logs, erros,
+            # MitM em HTTP) o atacante tem apenas 3 min para brute-force do
+            # código TOTP. Combinado com o rate limit de 5/min do endpoint,
+            # o espaço de busca efetivo fica << 1M combinações.
+            user.temp_2fa_expires = timezone.now() + timedelta(minutes=3)
             user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
             return Response({
                 'requires_2fa': True,
