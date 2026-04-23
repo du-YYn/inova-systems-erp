@@ -683,11 +683,18 @@ export default function ProposalFormModal({
                       <label className="label-input">Forma</label>
                       <select
                         value={paymentPlan.one_time_method}
-                        onChange={e => setPaymentPlan(p => ({
-                          ...p,
-                          one_time_method: e.target.value as PaymentPlanData['one_time_method'],
-                          one_time_installments: e.target.value === 'pix' ? 1 : p.one_time_installments,
-                        }))}
+                        onChange={e => {
+                          const method = e.target.value as PaymentPlanData['one_time_method'];
+                          setPaymentPlan(p => ({
+                            ...p,
+                            one_time_method: method,
+                            // PIX à vista = pagamento único; parcelas e data
+                            // da 1ª parcela perdem sentido. Resetamos para
+                            // não enviar lixo pro backend.
+                            one_time_installments: method === 'pix' ? 1 : p.one_time_installments,
+                            one_time_first_due: method === 'pix' ? '' : p.one_time_first_due,
+                          }));
+                        }}
                         className="input-field bg-white dark:bg-gray-800"
                       >
                         <option value="pix">PIX (à vista)</option>
@@ -696,31 +703,24 @@ export default function ProposalFormModal({
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    {showInstallments && (
-                      <div>
-                        <label className="label-input">Parcelas</label>
-                        <select
-                          value={paymentPlan.one_time_installments}
-                          onChange={e => setPaymentPlan(p => ({ ...p, one_time_installments: Number(e.target.value) }))}
-                          className="input-field bg-white dark:bg-gray-800"
-                        >
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <option key={i + 1} value={i + 1}>{i + 1}x</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div className={showInstallments ? '' : 'col-span-2'}>
-                      <label className="label-input">Data 1ª parcela</label>
-                      <input
-                        type="date"
-                        value={paymentPlan.one_time_first_due}
-                        onChange={e => setPaymentPlan(p => ({ ...p, one_time_first_due: e.target.value }))}
-                        className="input-field"
-                      />
+                  {/* Na proposta declaramos apenas a INTENÇÃO de pagamento
+                      (método + parcelamento). A data efetiva é definida
+                      quando o contrato é fechado e o pagamento é confirmado
+                      no módulo Financeiro. */}
+                  {showInstallments && (
+                    <div>
+                      <label className="label-input">Parcelas</label>
+                      <select
+                        value={paymentPlan.one_time_installments}
+                        onChange={e => setPaymentPlan(p => ({ ...p, one_time_installments: Number(e.target.value) }))}
+                        className="input-field bg-white dark:bg-gray-800"
+                      >
+                        {Array.from({ length: 12 }).map((_, i) => (
+                          <option key={i + 1} value={i + 1}>{i + 1}x</option>
+                        ))}
+                      </select>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -759,30 +759,22 @@ export default function ProposalFormModal({
                       </select>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="label-input">Dia do vencimento</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="31"
-                        value={paymentPlan.recurring_day_of_month ?? ''}
-                        onChange={e => setPaymentPlan(p => ({
-                          ...p, recurring_day_of_month: e.target.value ? Number(e.target.value) : null,
-                        }))}
-                        className="input-field"
-                        placeholder="Ex: 10"
-                      />
-                    </div>
-                    <div>
-                      <label className="label-input">Data 1ª mensalidade</label>
-                      <input
-                        type="date"
-                        value={paymentPlan.recurring_first_due}
-                        onChange={e => setPaymentPlan(p => ({ ...p, recurring_first_due: e.target.value }))}
-                        className="input-field"
-                      />
-                    </div>
+                  {/* Dia do vencimento é uma INTENÇÃO (ex: todo dia 10).
+                      A data efetiva da 1ª mensalidade é definida quando o
+                      contrato é ativado e o financeiro gera as faturas. */}
+                  <div>
+                    <label className="label-input">Dia do vencimento</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={paymentPlan.recurring_day_of_month ?? ''}
+                      onChange={e => setPaymentPlan(p => ({
+                        ...p, recurring_day_of_month: e.target.value ? Number(e.target.value) : null,
+                      }))}
+                      className="input-field"
+                      placeholder="Ex: 10"
+                    />
                   </div>
                   <div>
                     <label className="label-input">Duração</label>
