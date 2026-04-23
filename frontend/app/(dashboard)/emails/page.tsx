@@ -235,13 +235,19 @@ export default function EmailsPage() {
                   />
                 </div>
 
-                {/* Preview inline */}
+                {/* Preview inline — renderizado em iframe sandbox sem allow-scripts
+                    para impedir execução de JS embutido em templates de e-mail
+                    (defesa contra XSS se o template HTML contiver <script> ou
+                    handlers inline). O iframe fica em origin nulo, sem acesso
+                    a cookies/localStorage da aplicação. */}
                 {showPreview && (
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Preview</label>
-                    <div
-                      className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden"
-                      dangerouslySetInnerHTML={{ __html: previewHtml }}
+                    <iframe
+                      title="Preview do e-mail"
+                      srcDoc={previewHtml}
+                      sandbox=""
+                      className="w-full h-96 border border-gray-200 dark:border-gray-700 rounded-xl bg-white"
                     />
                   </div>
                 )}

@@ -31,12 +31,22 @@ export default function ProposalPublicPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  // Renderiza HTML assim que chega — sem esperar tracking
-  if (html && typeof document !== 'undefined') {
-    document.open();
-    document.write(html);
-    document.close();
-    return null;
+  // Render em iframe com sandbox em vez de document.write:
+  // - sandbox sem allow-scripts impede qualquer JS embutido (defesa contra XSS
+  //   via HTML user-controlled que passou pelo bleach do backend)
+  // - allow-popups + allow-popups-to-escape-sandbox permite cliques em links CTA
+  //   do template (WhatsApp, onboarding, etc.) abrirem em nova aba
+  // - allow-same-origin NÃO incluído: iframe fica em origin nulo, sem acesso
+  //   a cookies/localStorage/DOM da aplicação principal
+  if (html) {
+    return (
+      <iframe
+        title="Proposta"
+        srcDoc={html}
+        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        style={{ width: '100vw', height: '100vh', border: 'none', display: 'block' }}
+      />
+    );
   }
 
   if (loading) {
