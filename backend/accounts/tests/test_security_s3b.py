@@ -111,7 +111,11 @@ class TestLogsMasked:
         with caplog.at_level(logging.INFO, logger='notifications'):
             send_template_email_sync('mask_test', 'cliente@empresa.com', {'nome': 'X'})
         log_output = '\n'.join(r.message for r in caplog.records)
-        # Email completo nao deve aparecer no log
+        # Email completo NAO deve aparecer no log
         assert 'cliente@empresa.com' not in log_output
-        # Forma mascarada (ex: "cli***@empresa.com") deve aparecer
-        assert '@empresa.com' in log_output or 'cli' in log_output
+        assert 'empresa.com' not in log_output  # dominio tambem mascarado
+        # Mas deve haver algum log do envio
+        assert len(caplog.records) > 0
+        assert 'mask_test' in log_output  # slug aparece mas recipient mascarado
+        # Formato tipico: "cl***te@***.com"
+        assert '***' in log_output

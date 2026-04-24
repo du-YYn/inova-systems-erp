@@ -27,7 +27,7 @@ pyotp==2.9.0
 qrcode==7.4.2
 # cryptography eh dep transitiva (pyjwt[crypto]) mas pinamos explicitamente
 # para F3b — Fernet encrypt do totp_secret em repouso
-cryptography==46.0.6
+cryptography==46.0.7
 
 # ─── Cache / Queue ───────────────────────────────────────────────────────────
 redis==5.2.1
