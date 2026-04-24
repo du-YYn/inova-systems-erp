@@ -1,6 +1,4 @@
 """Testes do model AuditLog + log_audit() (F3a)."""
-from decimal import Decimal
-
 import pytest
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIRequestFactory

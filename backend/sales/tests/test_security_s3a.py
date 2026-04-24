@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from core.models import AuditLog
-from sales.models import Customer, Contract, ContractPaymentPlan
+from sales.models import Customer, Contract
 from finance.models import (
     Invoice, PaymentProvider, PaymentProviderRate, BankAccount,
 )

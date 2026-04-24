@@ -33,17 +33,17 @@ class AuditLog(models.Model):
     )
     user_role_snapshot = models.CharField(max_length=20, blank=True)
 
-    # O que foi feito
+    # O que foi feito (indices compostos em Meta cobrem as buscas)
     action = models.CharField(
-        max_length=100, db_index=True,
+        max_length=100,
         help_text='Ex: contract_activate, invoice_mark_paid, customer_anonymize',
     )
     resource_type = models.CharField(
-        max_length=50, db_index=True,
+        max_length=50,
         help_text='Ex: contract, invoice, customer, payment_provider',
     )
     resource_id = models.CharField(
-        max_length=100, blank=True, db_index=True,
+        max_length=100, blank=True,
         help_text='PK do recurso afetado (string para suportar UUID/int)',
     )
 

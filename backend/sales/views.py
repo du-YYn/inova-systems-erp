@@ -204,7 +204,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
         Requer confirmacao explicita via body: {"confirm": "ANONIMIZAR"}
         """
         import hashlib
-        from rest_framework.permissions import IsAdminUser
 
         # Hardening: so admin pode invocar
         if not request.user.is_authenticated or request.user.role != 'admin':
