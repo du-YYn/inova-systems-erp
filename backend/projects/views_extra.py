@@ -9,7 +9,8 @@ from rest_framework.permissions import AllowAny
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 
-from accounts.permissions import IsAdminOrManagerOrOperator
+from rest_framework.exceptions import PermissionDenied
+from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
 from .models import Sprint, ChangeRequest, ProjectEnvironment, DeliveryApproval
 from .serializers_extra import (
     SprintSerializer, ChangeRequestSerializer,
@@ -55,7 +56,12 @@ class SprintViewSet(viewsets.ModelViewSet):
 class ChangeRequestViewSet(viewsets.ModelViewSet):
     queryset = ChangeRequest.objects.select_related('project', 'created_by', 'approved_by')
     serializer_class = ChangeRequestSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        # F2.5: approve/reject so para admin/manager (hierarquia)
+        if self.action in ('approve', 'reject'):
+            return [IsAdminOrManager()]
+        return [IsAdminOrManagerOrOperator()]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -73,6 +79,9 @@ class ChangeRequestViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         change_request = self.get_object()
+        # F2.5: impede aprovacao do proprio change request
+        if change_request.created_by_id == request.user.id:
+            raise PermissionDenied('Você não pode aprovar um change request criado por você mesmo.')
         change_request.status = 'approved'
         change_request.approved_by = request.user
         change_request.approved_at = timezone.now()
@@ -83,6 +92,8 @@ class ChangeRequestViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         change_request = self.get_object()
+        if change_request.created_by_id == request.user.id:
+            raise PermissionDenied('Você não pode rejeitar um change request criado por você mesmo.')
         change_request.status = 'rejected'
         change_request.approved_by = request.user
         change_request.approved_at = timezone.now()

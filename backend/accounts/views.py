@@ -95,9 +95,19 @@ def _clear_auth_cookies(response: Response) -> None:
 
 @extend_schema(tags=['auth'])
 class RegisterView(generics.CreateAPIView):
+    """Cadastro de usuario — restrito a admin (F2.1).
+
+    Antes era AllowAny, o que permitia qualquer internauta criar conta
+    com role operator (CWE-306/862, OWASP A01:2021 — Broken Access Control).
+    Como o frontend nao usa este endpoint (verificado no audit), restringir
+    para IsAdmin nao quebra nenhum fluxo de usuario.
+
+    Para criar primeiro admin quando DB esta vazio, usar:
+        python manage.py createsuperuser
+    """
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [IsAdmin]
 
 
 @extend_schema(tags=['auth'], summary='Login com username/senha')
@@ -215,24 +225,36 @@ class TwoFactorSetupView(APIView):
     def post(self, request):
         user = request.user
 
+        # F2.7: tanto enable quanto disable exigem re-autenticacao por senha.
+        # Previne "hostage attack" — atacante com cookie roubado ativando 2FA
+        # com segredo que ele controla, deixando a vitima sem acesso.
+        password = request.data.get('password', '')
+        if not password or not user.check_password(password):
+            return Response(
+                {'error': 'Senha incorreta. Confirme sua senha para alterar o 2FA.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         if user.is_2fa_enabled:
-            password = request.data.get('password', '')
-            if not password or not user.check_password(password):
-                return Response(
-                    {'error': 'Senha incorreta. Confirme sua senha para desativar o 2FA.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
             user.is_2fa_enabled = False
             user.totp_secret = None
             user.save(update_fields=['is_2fa_enabled', 'totp_secret'])
             logger.info(f"2FA desativado: {user.username}")
-            log_audit(user, '2fa_toggle', 'user', user.id, 'enabled' if user.is_2fa_enabled else 'disabled')
+            log_audit(user, '2fa_toggle', 'user', user.id, 'disabled')
             return Response({'message': '2FA desativado', 'enabled': False})
 
         secret = pyotp.random_base32()
         user.totp_secret = secret
         user.is_2fa_enabled = True
         user.save(update_fields=['totp_secret', 'is_2fa_enabled'])
+
+        # F2.7: invalida outras sessoes ativas — se alguem tinha cookies
+        # roubados, perde acesso obrigando novo login (agora com 2FA).
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+            OutstandingToken.objects.filter(user=user).update(expires_at=timezone.now())
+        except Exception as exc:
+            logger.warning(f"2FA enable: falha ao invalidar tokens para {user.username}: {exc}")
 
         totp = pyotp.TOTP(secret)
         provisioning_uri = totp.provisioning_uri(
@@ -246,7 +268,7 @@ class TwoFactorSetupView(APIView):
         qr_code_b64 = base64.b64encode(buffered.getvalue()).decode()
 
         logger.info(f"2FA ativado: {user.username}")
-        log_audit(user, '2fa_toggle', 'user', user.id, 'enabled' if user.is_2fa_enabled else 'disabled')
+        log_audit(user, '2fa_toggle', 'user', user.id, 'enabled')
         return Response({
             'secret': secret,
             'qr_code': f'data:image/png;base64,{qr_code_b64}',

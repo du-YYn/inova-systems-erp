@@ -14,16 +14,24 @@ from .serializers import (
     ProjectTemplateSerializer, ProjectSerializer, ProjectPhaseSerializer,
     MilestoneSerializer, ProjectTaskSerializer, TimeEntrySerializer, ProjectCommentSerializer
 )
-from accounts.permissions import IsAdminOrManagerOrOperator
+from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
 
 logger = logging.getLogger('projects')
 
 
 @extend_schema(tags=['projects'])
 class ProjectTemplateViewSet(viewsets.ModelViewSet):
+    """F2.6: Templates sao config compartilhada — leitura para todos
+    autenticados, escrita so para admin/manager (antes: IsAuthenticated
+    permitia viewer/partner editar)."""
     queryset = ProjectTemplate.objects.all()
     serializer_class = ProjectTemplateSerializer
-    permission_classes = [IsAuthenticated]
+
+    def get_permissions(self):
+        from rest_framework.permissions import SAFE_METHODS
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAdminOrManager()]
 
 
 @extend_schema(tags=['projects'])
