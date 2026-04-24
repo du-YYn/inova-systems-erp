@@ -57,6 +57,13 @@ def calculate_card(
     fee_fixed = Decimal(fee_fixed)
     antic_pct_dec = Decimal(anticipation_monthly_pct) / Decimal('100')
 
+    # fee_pct >= 100% causa divisao por zero no gross-up (repass_fee=True) ou
+    # valores negativos/absurdos (fee_pct > 100). Validacao defensiva.
+    if fee_pct_dec >= Decimal('1'):
+        raise ValueError(
+            f'fee_pct deve ser < 100% (recebido {fee_pct}%)'
+        )
+
     if repass_fee:
         # Gross-up por parcela: cliente paga a mais para a empresa receber o bruto
         net_target_per_installment = gross / installments

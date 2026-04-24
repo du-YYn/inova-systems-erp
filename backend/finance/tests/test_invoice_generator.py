@@ -132,6 +132,8 @@ class TestInvoiceGenerator:
             assert inv.due_date == expected_due
             assert inv.payment_method == 'boleto'
 
+        # F1.1: total = valor BRUTO cobrado do cliente (para DRE/NF-e).
+        # Boleto sem taxa: gross == net, somam 10000.
         totals_sum = sum(i.total for i in result['setup_invoices'])
         assert abs(totals_sum - Decimal('10000.00')) <= Decimal('0.10')
 
@@ -142,9 +144,15 @@ class TestInvoiceGenerator:
             mode='card_installments', installments=12,
         )
         assert len(result['setup_invoices']) == 12
+        # F1.1: inv.total = gross (receita bruta para DRE). Soma = client_pays.
         totals_sum = sum(i.total for i in result['setup_invoices'])
-        # Empresa recebe ~R$ 9.600 (±15)
-        assert abs(totals_sum - Decimal('9600')) < Decimal('20')
+        assert abs(totals_sum - Decimal('10000.00')) <= Decimal('0.10')
+        # Liquido (pos-taxa) fica em payment_details.net_company_receives.
+        net_sum = sum(
+            Decimal(str(i.payment_details.get('net_company_receives', '0')))
+            for i in result['setup_invoices']
+        )
+        assert abs(net_sum - Decimal('9600')) < Decimal('20')
         # Taxa retida ~R$ 400
         assert result['total_fees_setup'] > Decimal('300')
         # Primeira parcela em ~32 dias
@@ -160,8 +168,11 @@ class TestInvoiceGenerator:
         inv = result['setup_invoices'][0]
         # D+2
         assert (inv.due_date - timezone.now().date()).days <= 3
-        # Empresa recebe ~R$ 8466 (±100)
-        assert abs(inv.total - Decimal('8466')) < Decimal('200')
+        # F1.1: inv.total = gross (R$ 10.000 cobrados do cliente).
+        assert abs(inv.total - Decimal('10000.00')) <= Decimal('0.10')
+        # Liquido (com desconto antecipacao) fica em payment_details.net_company_receives.
+        net = Decimal(str(inv.payment_details['net_company_receives']))
+        assert abs(net - Decimal('8466')) < Decimal('200')
 
     def test_recurring_generates_monthly_invoices(self, customer, admin_user, asaas):
         contract = _make_contract(

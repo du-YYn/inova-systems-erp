@@ -34,21 +34,20 @@ MODE_TO_METHOD = {
 }
 
 
-def _next_invoice_number():
-    """Gera próximo número REC-NNNNN para receivable, com lock."""
-    last = (
-        Invoice.objects.select_for_update()
-        .filter(invoice_type='receivable')
-        .order_by('-id')
-        .first()
-    )
-    last_seq = 0
-    if last and last.number:
-        try:
-            last_seq = int(last.number.split('-')[1])
-        except (IndexError, ValueError):
-            last_seq = 0
-    return f"REC-{last_seq + 1:05d}"
+def _next_invoice_number(invoice_type: str = 'receivable') -> str:
+    """Gera próximo número atomicamente via PostgreSQL sequence.
+
+    Sequence `invoice_seq_receivable`/`invoice_seq_payable` foi criada na
+    migration 0012. Cada chamada a nextval() é atômica em nível DB — imune
+    a race conditions entre transações paralelas.
+    """
+    from django.db import connection
+    prefix = 'REC' if invoice_type == 'receivable' else 'PAG'
+    seq_name = f'invoice_seq_{invoice_type}'
+    with connection.cursor() as cursor:
+        cursor.execute(f"SELECT nextval('{seq_name}')")
+        seq_value = cursor.fetchone()[0]
+    return f"{prefix}-{seq_value:05d}"
 
 
 def _make_invoice(contract, user, due_date, value, total, description,
@@ -127,11 +126,14 @@ def _build_setup_invoices(contract, user, provider, mode, installments,
             gross_parcel = Decimal(sim['client_installment_value'])
 
         description = f"Setup — {contract.title} ({entry['label']})"
+        # Invoice.value e Invoice.total sao a RECEITA BRUTA cobrada do cliente
+        # (usada por DRE, NF-e, ROB, mark_paid). O liquido pos-taxa vai para
+        # payment_details.net_company_receives para conciliacao bancaria.
         items = [{
             'description': description,
             'quantity': 1,
-            'unit_price': float(net_amount),
-            'total': float(net_amount),
+            'unit_price': float(gross_parcel),
+            'total': float(gross_parcel),
         }]
         payment_details = {
             'provider_id': provider.id,
@@ -148,7 +150,7 @@ def _build_setup_invoices(contract, user, provider, mode, installments,
             user=user,
             due_date=due_date,
             value=gross_parcel,
-            total=net_amount,
+            total=gross_parcel,
             description=description,
             payment_method=method,
             items=items,
@@ -194,11 +196,12 @@ def _build_recurring_invoices(contract, user, provider):
         due_date = today + timedelta(days=entry['days_ahead'])
         net_amount = Decimal(entry['amount'])
         description = f"Mensalidade — {contract.title} ({entry['label']})"
+        # total = valor bruto cobrado (receita fiscal); net vai para payment_details
         items = [{
             'description': description,
             'quantity': 1,
-            'unit_price': float(net_amount),
-            'total': float(net_amount),
+            'unit_price': float(monthly),
+            'total': float(monthly),
         }]
         payment_details = {
             'provider_id': provider.id,
@@ -214,7 +217,7 @@ def _build_recurring_invoices(contract, user, provider):
             user=user,
             due_date=due_date,
             value=monthly,
-            total=net_amount,
+            total=monthly,
             description=description,
             payment_method=recurring_method,
             items=items,

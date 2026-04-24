@@ -479,7 +479,12 @@ class ContractSerializer(serializers.ModelSerializer):
             "payment_plan",
             "service_ids",
         ]
-        read_only_fields = ["id", "number", "created_by", "created_by_name", "created_at", "updated_at"]
+        # status read_only: forca transicao via actions activate/cancel/renew
+        # (que chamam generate_activation_invoices e log_audit).
+        read_only_fields = [
+            "id", "number", "status",
+            "created_by", "created_by_name", "created_at", "updated_at",
+        ]
 
     def validate_contract_file(self, value):
         if value:

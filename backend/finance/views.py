@@ -69,24 +69,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        from finance.invoice_generator import _next_invoice_number
         invoice_type = serializer.validated_data.get('invoice_type')
-        prefix = 'REC' if invoice_type == 'receivable' else 'PAG'
-        with transaction.atomic():
-            last_invoice = (
-                Invoice.objects.select_for_update()
-                .filter(invoice_type=invoice_type)
-                .order_by('-id')
-                .first()
-            )
-            if last_invoice:
-                try:
-                    last_seq = int(last_invoice.number.split('-')[1])
-                except (IndexError, ValueError):
-                    last_seq = 0
-            else:
-                last_seq = 0
-            next_number = f"{prefix}-{last_seq + 1:05d}"
-            serializer.save(number=next_number, created_by=self.request.user)
+        next_number = _next_invoice_number(invoice_type)
+        serializer.save(number=next_number, created_by=self.request.user)
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
@@ -130,8 +116,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def mark_paid(self, request, pk=None):
+        # get_object respeita permissoes e get_queryset (preparado para
+        # futuros filtros por tenant/ownership). Lock atomico via
+        # select_for_update abaixo.
+        invoice = self.get_object()
         with transaction.atomic():
-            invoice = Invoice.objects.select_for_update().get(pk=pk)
+            invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
             if invoice.status == 'paid':
                 return Response(
                     {'error': 'Fatura já está marcada como paga'},
