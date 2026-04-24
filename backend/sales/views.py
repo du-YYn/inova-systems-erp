@@ -311,20 +311,39 @@ class ProspectViewSet(viewsets.ModelViewSet):
             )
         # Resolver faturas pendentes conforme request
         # body: { invoices: [{ id: 1, action: 'pay' }, { id: 2, action: 'cancel' }] }
+        # IDOR guard (F1.8): so permite invoice cujo customer bate com o Customer
+        # vinculado ao prospect. Previne operator marcar invoice alheia como paga.
+        customer_for_prospect = Customer.objects.filter(
+            company_name__iexact=prospect.company_name,
+        ).first()
         invoice_actions = request.data.get('invoices', [])
         for ia in invoice_actions:
-            try:
-                inv = Invoice.objects.get(id=ia.get('id'))
-                if ia.get('action') == 'pay':
-                    inv.status = 'paid'
-                    inv.paid_date = timezone.now().date()
-                    inv.paid_amount = inv.total
-                    inv.save(update_fields=['status', 'paid_date', 'paid_amount'])
-                elif ia.get('action') == 'cancel':
-                    inv.status = 'cancelled'
-                    inv.save(update_fields=['status'])
-            except Invoice.DoesNotExist:
+            inv_id = ia.get('id')
+            if not inv_id:
                 continue
+            # Filtra pelo customer vinculado ao prospect. Se nao ha customer
+            # correspondente, nao aceita nenhuma action em invoice.
+            inv_qs = Invoice.objects.filter(id=inv_id)
+            if customer_for_prospect:
+                inv_qs = inv_qs.filter(customer=customer_for_prospect)
+            else:
+                continue
+            inv = inv_qs.first()
+            if not inv:
+                logger.warning(
+                    "conclude: tentativa de agir em invoice id=%s fora do escopo "
+                    "do prospect id=%s por user=%s",
+                    inv_id, prospect.id, request.user.username,
+                )
+                continue
+            if ia.get('action') == 'pay':
+                inv.status = 'paid'
+                inv.paid_date = timezone.now().date()
+                inv.paid_amount = inv.total
+                inv.save(update_fields=['status', 'paid_date', 'paid_amount'])
+            elif ia.get('action') == 'cancel':
+                inv.status = 'cancelled'
+                inv.save(update_fields=['status'])
 
         # Desativar cliente se solicitado
         if request.data.get('deactivate_customer', True):

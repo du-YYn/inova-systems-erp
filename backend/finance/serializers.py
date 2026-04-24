@@ -80,7 +80,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
                   'nfse_number', 'nfse_status', 'nfse_xml_url', 'nfse_pdf_url',
                   'created_by', 'created_by_name',
                   'created_at', 'updated_at']
-        read_only_fields = ['id', 'number', 'created_by', 'created_at', 'updated_at']
+        # Campos financeiros sensiveis: forca transicao via endpoints dedicados
+        # (mark_paid, invoice_generator) em vez de PATCH direto. Evita bypass
+        # do fluxo oficial que cria Transaction de contrapartida.
+        read_only_fields = [
+            'id', 'number', 'created_by', 'created_at', 'updated_at',
+            'status', 'paid_date', 'paid_amount', 'payment_details',
+            'nfse_number', 'nfse_status', 'nfse_xml_url', 'nfse_pdf_url',
+        ]
 
     def get_project_name(self, obj):
         if obj.project_id:

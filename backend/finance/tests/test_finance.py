@@ -169,12 +169,16 @@ class TestInvoice:
         assert response.status_code == status.HTTP_201_CREATED
         assert Invoice.objects.count() == before_count + 1
 
-    def test_update_invoice_status(self, admin_client, invoice):
+    def test_update_invoice_status_blocked(self, admin_client, invoice):
+        """F1.5: status e read_only em InvoiceSerializer; PATCH direto ignorado.
+        Para marcar como paga, usar POST /invoices/{id}/mark_paid/ que cria
+        Transaction de contrapartida."""
         url = f'{self.url}{invoice.id}/'
         response = admin_client.patch(url, {'status': 'paid'})
         assert response.status_code == status.HTTP_200_OK
         invoice.refresh_from_db()
-        assert invoice.status == 'paid'
+        # status nao deve ter mudado (read_only)
+        assert invoice.status != 'paid'
 
     def test_viewer_cannot_create_invoice(self, viewer_client, bank_account, category):
         payload = {

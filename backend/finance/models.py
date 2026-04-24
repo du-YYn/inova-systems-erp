@@ -1,5 +1,8 @@
+from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
 from core.validators import validate_invoice_items, validate_tags_list
 
 
@@ -138,6 +141,12 @@ class Invoice(models.Model):
     class Meta:
         db_table = 'invoices'
         ordering = ['-issue_date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['invoice_type', 'number'],
+                name='unique_invoice_type_number',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.invoice_type} #{self.number}"
@@ -538,18 +547,28 @@ class PaymentProviderRate(models.Model):
 
     installment_fee_pct = models.DecimalField(
         max_digits=6, decimal_places=4, default=0,
-        help_text='Percentual da taxa por parcela (ex: 3.99 = 3,99%)',
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('99.99')),
+        ],
+        help_text='Percentual da taxa por parcela (0-99.99%, ex: 3.99 = 3,99%)',
     )
     installment_fee_fixed = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
+        validators=[MinValueValidator(Decimal('0'))],
         help_text='Taxa fixa em R$ por parcela (ex: 0.49)',
     )
     anticipation_monthly_pct = models.DecimalField(
         max_digits=6, decimal_places=4, default=0,
-        help_text='Taxa mensal de antecipação (ex: 1.70 = 1,70% ao mês)',
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('99.99')),
+        ],
+        help_text='Taxa mensal de antecipação (0-99.99%, ex: 1.70 = 1,70% ao mês)',
     )
     fixed_fee = models.DecimalField(
         max_digits=10, decimal_places=2, default=0,
+        validators=[MinValueValidator(Decimal('0'))],
         help_text='Taxa fixa por emissão (boleto/PIX). 0 quando não se aplica.',
     )
 
