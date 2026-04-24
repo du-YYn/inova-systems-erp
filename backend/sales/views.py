@@ -19,6 +19,8 @@ from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+
+from core.audit import log_audit
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
@@ -107,8 +109,166 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 {'error': f'Não é possível excluir: {pending} fatura(s) pendente(s).'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        logger.info(f"Cliente {customer.id} ({customer.company_name or customer.name}) excluído por {request.user.username}")
+        # F3a: audit antes do delete (preserva snapshot)
+        snapshot = {
+            'id': customer.id,
+            'company_name': customer.company_name,
+            'name': customer.name,
+            'document': customer.document,
+        }
+        logger.info(
+            'Cliente %s excluido por %s', customer.id, request.user.username,
+        )
+        log_audit(
+            request.user, 'customer_delete', 'customer', customer.id,
+            old_value=snapshot, request=request,
+        )
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['get'], url_path='data-export')
+    def data_export(self, request, pk=None):
+        """LGPD Art. 18 II — direito de acesso aos dados.
+
+        Retorna JSON com todos os dados pessoais do titular (cadastro,
+        contratos, invoices, propostas, prospects). Gera audit log.
+        """
+        customer = self.get_object()
+        from finance.models import Invoice
+
+        data = {
+            'exported_at': timezone.now().isoformat(),
+            'exported_by': request.user.username,
+            'customer': {
+                'id': customer.id,
+                'customer_type': customer.customer_type,
+                'name': customer.name,
+                'company_name': customer.company_name,
+                'document': customer.document,
+                'email': customer.email,
+                'phone': customer.phone,
+                'whatsapp': getattr(customer, 'whatsapp', ''),
+                'address': getattr(customer, 'address', ''),
+                'city': getattr(customer, 'city', ''),
+                'state': getattr(customer, 'state', ''),
+                'zip_code': getattr(customer, 'zip_code', ''),
+                'created_at': customer.created_at.isoformat() if customer.created_at else None,
+                'is_active': customer.is_active,
+            },
+            'contracts': [
+                {
+                    'id': c.id, 'number': c.number, 'title': c.title,
+                    'status': c.status, 'start_date': str(c.start_date) if c.start_date else None,
+                    'end_date': str(c.end_date) if c.end_date else None,
+                    'monthly_value': str(c.monthly_value or 0),
+                }
+                for c in customer.contracts.all()
+            ],
+            'invoices': [
+                {
+                    'id': i.id, 'number': i.number, 'invoice_type': i.invoice_type,
+                    'status': i.status,
+                    'issue_date': str(i.issue_date), 'due_date': str(i.due_date),
+                    'value': str(i.value), 'total': str(i.total),
+                    'paid_date': str(i.paid_date) if i.paid_date else None,
+                }
+                for i in Invoice.objects.filter(customer=customer)
+            ],
+            'proposals': [
+                {
+                    'id': p.id, 'title': p.title, 'status': p.status,
+                    'total_value': str(p.total_value or 0),
+                    'created_at': p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in customer.proposals.all()
+            ] if hasattr(customer, 'proposals') else [],
+        }
+
+        log_audit(
+            request.user, 'customer_data_export', 'customer', customer.id,
+            details=(
+                f'contracts={len(data["contracts"])} '
+                f'invoices={len(data["invoices"])}'
+            ),
+            request=request,
+        )
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='anonymize')
+    def anonymize(self, request, pk=None):
+        """LGPD Art. 18 VI — direito ao esquecimento.
+
+        Substitui dados pessoais por hash determinístico mantendo FKs
+        (fatura antiga precisa ficar por obrigacao fiscal). Append-only
+        no audit log — operacao registrada forever.
+
+        Requer confirmacao explicita via body: {"confirm": "ANONIMIZAR"}
+        """
+        import hashlib
+
+        # Hardening: so admin pode invocar
+        if not request.user.is_authenticated or request.user.role != 'admin':
+            return Response(
+                {'error': 'Apenas administradores podem anonimizar clientes.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        confirm = (request.data or {}).get('confirm', '')
+        if confirm != 'ANONIMIZAR':
+            return Response(
+                {'error': 'Envie {"confirm": "ANONIMIZAR"} para confirmar a operacao.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        customer = self.get_object()
+
+        # Snapshot para audit (dados reais preservados APENAS no audit log)
+        snapshot = {
+            'id': customer.id,
+            'company_name': customer.company_name,
+            'name': customer.name,
+            'document': customer.document,
+            'email': customer.email,
+            'phone': customer.phone,
+        }
+
+        # Hash determinístico curto (6 hex chars) para identificar registro anonimizado
+        h = hashlib.sha256(f'{customer.id}:{customer.created_at}'.encode()).hexdigest()[:6].upper()
+
+        customer.name = f'CLIENTE-ANON-{h}'
+        customer.company_name = f'ANON-{h}'
+        customer.document = ''
+        customer.email = f'anon-{h.lower()}@anonymized.local'
+        customer.phone = ''
+        if hasattr(customer, 'whatsapp'):
+            customer.whatsapp = ''
+        if hasattr(customer, 'address'):
+            customer.address = ''
+        if hasattr(customer, 'city'):
+            customer.city = ''
+        if hasattr(customer, 'state'):
+            customer.state = ''
+        if hasattr(customer, 'zip_code'):
+            customer.zip_code = ''
+        customer.is_active = False  # anonymized != active
+        customer.save()
+
+        log_audit(
+            request.user, 'customer_anonymize', 'customer', customer.id,
+            old_value=snapshot,
+            new_value={
+                'company_name': customer.company_name,
+                'email': customer.email,
+                'is_active': False,
+            },
+            details=f'LGPD Art. 18 VI — anonimizacao solicitada por {request.user.username}',
+            request=request,
+        )
+        return Response({
+            'status': 'anonymized',
+            'customer_id': customer.id,
+            'anonymized_identifier': f'ANON-{h}',
+            'note': 'Dados pessoais substituidos. FKs preservadas por obrigacao fiscal.',
+        })
 
 
 @extend_schema(tags=['sales'])
@@ -1123,6 +1283,12 @@ class ContractViewSet(viewsets.ModelViewSet):
             contract.id, request.user.username, mode, provider_id,
             invoices_summary,
         )
+        log_audit(
+            request.user, 'contract_activate', 'contract', contract.id,
+            details=f'mode={mode} provider={provider_id} installments={installments}',
+            new_value={'status': 'active', **(invoices_summary or {})},
+            request=request,
+        )
         response = ContractSerializer(contract).data
         if invoices_summary is not None:
             response['invoices_generated'] = invoices_summary
@@ -1136,9 +1302,15 @@ class ContractViewSet(viewsets.ModelViewSet):
                 {'error': f'Contrato não pode ser cancelado (status atual: {contract.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        old_status = contract.status
         contract.status = 'cancelled'
         contract.save()
         logger.info(f"Contrato {contract.id} cancelado por {request.user.username}")
+        log_audit(
+            request.user, 'contract_cancel', 'contract', contract.id,
+            old_value={'status': old_status}, new_value={'status': 'cancelled'},
+            request=request,
+        )
         return Response(ContractSerializer(contract).data)
 
     @action(detail=True, methods=['post'])
@@ -1149,6 +1321,7 @@ class ContractViewSet(viewsets.ModelViewSet):
                 {'error': f'Contrato não pode ser renovado (status atual: {contract.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        old_status = contract.status
         with transaction.atomic():
             contract.status = 'renewed'
             contract.save()
@@ -1187,6 +1360,12 @@ class ContractViewSet(viewsets.ModelViewSet):
                 created_by=request.user,
             )
         logger.info(f"Contrato {contract.id} renovado → novo contrato {new_contract.id} por {request.user.username}")
+        log_audit(
+            request.user, 'contract_renew', 'contract', contract.id,
+            old_value={'status': old_status},
+            new_value={'status': 'renewed', 'new_contract_id': new_contract.id},
+            request=request,
+        )
         return Response(ContractSerializer(new_contract).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['get'], url_path='download')
