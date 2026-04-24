@@ -17,7 +17,7 @@ from rest_framework import status
 
 from sales.models import Customer, Contract, ContractPaymentPlan
 from finance.models import (
-    Invoice, PaymentProvider, PaymentProviderRate, BankAccount,
+    Invoice, PaymentProvider, PaymentProviderRate,
 )
 from finance.invoice_generator import generate_activation_invoices
 

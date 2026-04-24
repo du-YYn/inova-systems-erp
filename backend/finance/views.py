@@ -1,14 +1,9 @@
 import logging
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
-
-
-class _SimulatePaymentThrottle(ScopedRateThrottle):
-    """F4.2: rate limit 60/min no endpoint simulate (scope simulate_payment)."""
-    scope = 'simulate_payment'
 from drf_spectacular.utils import extend_schema
 from django.db import models, transaction
 from django.db.models import Sum
@@ -38,6 +33,11 @@ from accounts.permissions import (
 from core.audit import log_audit
 
 logger = logging.getLogger('finance')
+
+
+class _SimulatePaymentThrottle(ScopedRateThrottle):
+    """F4.2: rate limit 60/min no endpoint simulate (scope simulate_payment)."""
+    scope = 'simulate_payment'
 
 
 @extend_schema(tags=['finance'])
