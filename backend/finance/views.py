@@ -29,6 +29,7 @@ from .serializers import (
 from accounts.permissions import (
     IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrReadOnly,
 )
+from core.audit import log_audit
 
 logger = logging.getLogger('finance')
 
@@ -145,6 +146,16 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             )
 
         logger.info(f"Fatura {invoice.number} marcada como paga por {request.user.username}")
+        log_audit(
+            request.user, 'invoice_mark_paid', 'invoice', invoice.id,
+            details=f'number={invoice.number} total={invoice.total}',
+            new_value={
+                'status': 'paid',
+                'paid_date': str(invoice.paid_date),
+                'paid_amount': str(invoice.total),
+            },
+            request=request,
+        )
         return Response(InvoiceSerializer(invoice).data)
 
     @extend_schema(tags=['finance'])
@@ -1024,6 +1035,11 @@ class FinanceDashboardView(viewsets.ViewSet):
         buffer.seek(0)
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="dre-{year}.pdf"'
+        log_audit(
+            request.user, 'dre_pdf_export', 'report', f'dre-{year}',
+            details=f'year={year}',
+            request=request,
+        )
         return response
 
 
@@ -1045,6 +1061,43 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
             if not include_inactive:
                 qs = qs.filter(is_active=True)
         return qs
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        log_audit(
+            self.request.user, 'payment_provider_create',
+            'payment_provider', instance.id,
+            details=f'code={instance.code} name={instance.name}',
+            new_value={'code': instance.code, 'name': instance.name,
+                       'is_active': instance.is_active},
+            request=self.request,
+        )
+
+    def perform_update(self, serializer):
+        old = {
+            'code': serializer.instance.code, 'name': serializer.instance.name,
+            'is_active': serializer.instance.is_active,
+        }
+        instance = serializer.save()
+        log_audit(
+            self.request.user, 'payment_provider_update',
+            'payment_provider', instance.id,
+            old_value=old,
+            new_value={'code': instance.code, 'name': instance.name,
+                       'is_active': instance.is_active},
+            request=self.request,
+        )
+
+    def perform_destroy(self, instance):
+        pid = instance.id
+        snapshot = {'code': instance.code, 'name': instance.name}
+        instance.delete()
+        log_audit(
+            self.request.user, 'payment_provider_delete',
+            'payment_provider', pid,
+            old_value=snapshot,
+            request=self.request,
+        )
 
     @action(
         detail=True, methods=['post'], url_path='simulate',
@@ -1142,3 +1195,44 @@ class PaymentProviderRateViewSet(viewsets.ModelViewSet):
         if provider_id:
             qs = qs.filter(provider_id=provider_id)
         return qs
+
+    def _rate_snapshot(self, rate):
+        return {
+            'provider_id': rate.provider_id,
+            'method': rate.method,
+            'installment_fee_pct': str(rate.installment_fee_pct),
+            'installment_fee_fixed': str(rate.installment_fee_fixed),
+            'anticipation_monthly_pct': str(rate.anticipation_monthly_pct),
+            'fixed_fee': str(rate.fixed_fee),
+        }
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        log_audit(
+            self.request.user, 'payment_provider_rate_create',
+            'payment_provider_rate', instance.id,
+            new_value=self._rate_snapshot(instance),
+            request=self.request,
+        )
+
+    def perform_update(self, serializer):
+        old = self._rate_snapshot(serializer.instance)
+        instance = serializer.save()
+        log_audit(
+            self.request.user, 'payment_provider_rate_update',
+            'payment_provider_rate', instance.id,
+            old_value=old,
+            new_value=self._rate_snapshot(instance),
+            request=self.request,
+        )
+
+    def perform_destroy(self, instance):
+        rid = instance.id
+        snapshot = self._rate_snapshot(instance)
+        instance.delete()
+        log_audit(
+            self.request.user, 'payment_provider_rate_delete',
+            'payment_provider_rate', rid,
+            old_value=snapshot,
+            request=self.request,
+        )
