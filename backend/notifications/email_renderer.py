@@ -6,6 +6,7 @@ from celery import shared_task
 from django.core.mail import send_mail
 from django.conf import settings
 
+from core.logging_utils import mask_email
 from .models import EmailTemplate
 
 logger = logging.getLogger('notifications')
@@ -59,9 +60,9 @@ def send_template_email(self, slug: str, recipient: str, variables: dict):
             html_message=result['html'],
             fail_silently=False,
         )
-        logger.info(f"Email '{slug}' enviado para: {recipient}")
+        logger.info(f"Email '{slug}' enviado para: {mask_email(recipient)}")
     except Exception as exc:
-        logger.error(f"Falha ao enviar email '{slug}' para {recipient}: {exc}")
+        logger.error(f"Falha ao enviar email '{slug}' para {mask_email(recipient)}: {exc}")
         raise self.retry(exc=exc)
 
 
@@ -83,7 +84,8 @@ def send_template_email_sync(slug: str, recipient: str, variables: dict) -> bool
             html_message=result['html'],
             fail_silently=False,
         )
+        logger.info(f"Email '{slug}' enviado (sync) para: {mask_email(recipient)}")
         return True
     except Exception as exc:
-        logger.error(f"Falha ao enviar email '{slug}' para {recipient}: {exc}")
+        logger.error(f"Falha ao enviar email '{slug}' para {mask_email(recipient)}: {exc}")
         return False

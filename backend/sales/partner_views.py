@@ -159,16 +159,23 @@ def register_partner(request):
             email_error = 'Template welcome_partner não encontrado ou inativo'
     except Exception as e:
         email_status = 'error'
-        email_error = str(e)
-        logger.error(f"Erro ao enviar email de boas-vindas para {mask_email(email)}: {e}")
+        # F3b: guardar exception detalhada apenas no log server-side.
+        # Expor 'str(e)' no response pode vazar senha gerada (se aparecer
+        # no traceback do backend SMTP) + detalhes da infra de email.
+        email_error = 'send_failed'
+        logger.error(
+            f"Erro ao enviar email de boas-vindas para {mask_email(email)}: {e}",
+        )
 
     logger.info(f"Parceiro {profile.partner_id} ({mask_email(email)}) criado por {request.user.username} | email: {email_status}")
 
     msg = f'Parceiro {profile.partner_id} criado.'
     if email_status == 'sent':
         msg += f' Email de boas-vindas enviado para {email}.'
-    elif email_error:
-        msg += f' ATENÇÃO: Email não enviado — {email_error}'
+    elif email_status == 'template_inactive':
+        msg += ' ATENÇÃO: Template de email inativo.'
+    elif email_status == 'error':
+        msg += ' ATENÇÃO: Email não enviado — erro ao contactar provedor.'
     else:
         msg += ' Email não enviado.'
 
@@ -181,6 +188,7 @@ def register_partner(request):
         'username': user.username,
         'auth_test': 'OK' if test_auth else 'FALHOU',
         'email_status': email_status,
+        # email_error genérico — detalhes ficam no log
         'email_error': email_error,
         'message': msg,
     }, status=status.HTTP_201_CREATED)

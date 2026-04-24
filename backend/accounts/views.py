@@ -202,7 +202,8 @@ class TwoFactorVerifyView(APIView):
             user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
             return Response({'error': 'Token expirado, faça login novamente'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        totp = pyotp.TOTP(user.totp_secret)
+        # F3b: get_totp_secret() decifra (com fail-safe para legado plain-text)
+        totp = pyotp.TOTP(user.get_totp_secret())
         if not totp.verify(code):
             logger.warning("Código 2FA inválido")
             return Response({'error': 'Código 2FA inválido'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -237,14 +238,15 @@ class TwoFactorSetupView(APIView):
 
         if user.is_2fa_enabled:
             user.is_2fa_enabled = False
-            user.totp_secret = None
+            user.totp_secret = ''
             user.save(update_fields=['is_2fa_enabled', 'totp_secret'])
             logger.info(f"2FA desativado: {user.username}")
             log_audit(user, '2fa_toggle', 'user', user.id, 'disabled')
             return Response({'message': '2FA desativado', 'enabled': False})
 
+        # F3b: segredo armazenado cifrado via set_totp_secret()
         secret = pyotp.random_base32()
-        user.totp_secret = secret
+        user.set_totp_secret(secret)
         user.is_2fa_enabled = True
         user.save(update_fields=['totp_secret', 'is_2fa_enabled'])
 
