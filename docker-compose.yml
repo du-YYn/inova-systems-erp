@@ -195,6 +195,75 @@ services:
         aliases:
           - grupo_ry_inova-erp_frontend
 
+  # ─── Inova Apresentação (subdomínio apresentacao.*) ──────────────────────────
+  apresentacao_postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${APRESENTACAO_DB_NAME:-inova_apresentacao}
+      POSTGRES_USER: ${APRESENTACAO_DB_USER:-inova_apresentacao}
+      POSTGRES_PASSWORD: ${APRESENTACAO_DB_PASSWORD}
+    volumes:
+      - apresentacao_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${APRESENTACAO_DB_USER:-inova_apresentacao} -d ${APRESENTACAO_DB_NAME:-inova_apresentacao}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  apresentacao_backend:
+    build:
+      context: ./apresentacao/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${APRESENTACAO_DB_NAME:-inova_apresentacao}
+      - POSTGRES_USER=${APRESENTACAO_DB_USER:-inova_apresentacao}
+      - POSTGRES_PASSWORD=${APRESENTACAO_DB_PASSWORD}
+      - POSTGRES_HOST=apresentacao_postgres
+      - POSTGRES_PORT=5432
+      - DJANGO_SECRET_KEY=${APRESENTACAO_DJANGO_SECRET_KEY}
+      - DJANGO_DEBUG=${APRESENTACAO_DJANGO_DEBUG:-False}
+      - DJANGO_ALLOWED_HOSTS=${APRESENTACAO_ALLOWED_HOSTS:-apresentacao-api.inovasystemssolutions.com}
+      - DJANGO_CORS_ORIGINS=${APRESENTACAO_CORS_ORIGINS:-https://apresentacao.inovasystemssolutions.com}
+      - DJANGO_SECURE_SSL_REDIRECT=${APRESENTACAO_SECURE_SSL_REDIRECT:-False}
+      - DJANGO_LOG_LEVEL=${APRESENTACAO_LOG_LEVEL:-INFO}
+      - JWT_ACCESS_MINUTES=${APRESENTACAO_JWT_ACCESS_MINUTES:-15}
+      - JWT_REFRESH_DAYS=${APRESENTACAO_JWT_REFRESH_DAYS:-7}
+      - PRESENTATION_SHARED_SECRET=${PRESENTATION_SHARED_SECRET}
+    depends_on:
+      apresentacao_postgres:
+        condition: service_healthy
+    volumes:
+      - apresentacao_media:/app/media
+    networks:
+      default:
+      easypanel:
+        aliases:
+          - grupo_ry_inova-erp_apresentacao_backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/admin/login/ -o /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  apresentacao_frontend:
+    build:
+      context: ./apresentacao/frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${APRESENTACAO_VITE_API_URL:-https://apresentacao-api.inovasystemssolutions.com/api}
+    restart: unless-stopped
+    depends_on:
+      apresentacao_backend:
+        condition: service_healthy
+    networks:
+      default:
+      easypanel:
+        aliases:
+          - grupo_ry_inova-erp_apresentacao_frontend
+
   db-backup:
     image: postgres:15
     restart: unless-stopped
@@ -235,3 +304,5 @@ volumes:
   static_files:
   media_files:
   db_backups:
+  apresentacao_postgres_data:
+  apresentacao_media:
