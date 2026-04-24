@@ -102,7 +102,7 @@ def customer_b(db, admin_user):
 
 def _make_contract(customer, admin_user, setup=Decimal('0'), monthly=Decimal('0'), duration=0):
     contract = Contract.objects.create(
-        number=f'C-S1-{timezone.now().timestamp()}',
+        number=f'C-{int(timezone.now().timestamp() * 1000) % 100000000}',
         title='Contrato S1',
         customer=customer,
         billing_type='fixed',
@@ -272,7 +272,7 @@ class TestMassAssignmentBlocked:
             payment_details={'provider_id': 1, 'fee_retained': '5'},
             created_by=admin_user,
         )
-        r = manager_client.patch(
+        manager_client.patch(
             f'/api/v1/finance/invoices/{inv.id}/',
             {'payment_details': {'fee_retained': '-99999'}},
             format='json',
@@ -305,12 +305,16 @@ class TestMarkPaidGetObject:
     def test_mark_paid_existing_invoice(
         self, manager_client, customer_a, admin_user,
     ):
-        from finance.models import Transaction
+        from finance.models import Transaction, BankAccount
+        bank = BankAccount.objects.create(
+            name='Banco Teste S1', bank='Teste', account_type='checking',
+        )
         inv = Invoice.objects.create(
             invoice_type='receivable', customer=customer_a,
             number='REC-S1-MP001', issue_date=timezone.now().date(),
             due_date=timezone.now().date(),
             value=Decimal('500'), total=Decimal('500'),
+            bank_account=bank,
             status='pending', created_by=admin_user,
         )
         r = manager_client.post(
