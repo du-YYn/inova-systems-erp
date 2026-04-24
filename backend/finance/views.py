@@ -946,7 +946,14 @@ class FinanceDashboardView(viewsets.ViewSet):
                 net = Decimal(str(net_raw))
                 if not gross.is_finite() or not net.is_finite():
                     continue
-            except Exception:
+            except Exception as exc:
+                # payment_details com valores nao-decimais — pula a invoice
+                # e loga para investigacao (nao deve acontecer em dados
+                # gerados pelo invoice_generator).
+                logger.warning(
+                    'fees_summary: payment_details com valor invalido '
+                    'em invoice id=%s: %s', inv.id, exc,
+                )
                 continue
             fee_raw = details.get('fee_retained')
             try:
