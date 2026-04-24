@@ -1223,11 +1223,25 @@ class ContractViewSet(viewsets.ModelViewSet):
         valid_modes = ('pix', 'card_anticipated', 'card_installments', 'boleto')
         provider_id = data.get('payment_provider')
         mode = data.get('activation_mode')
-        installments = int(data.get('installments') or 1)
+
+        # F4.1: parsing defensivo de installments (400 ao inves de 500)
+        raw_installments = data.get('installments')
+        if raw_installments is None or raw_installments == '':
+            installments = 1
+        else:
+            try:
+                installments = int(raw_installments)
+            except (TypeError, ValueError):
+                return Response(
+                    {'installments': 'Valor inteiro invalido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         anticipate = bool(data.get('anticipate', False))
         repass_fee = bool(data.get('repass_fee', False))
 
         generate_invoices = bool(provider_id or mode)
+        provider = None
         if generate_invoices:
             if mode not in valid_modes:
                 return Response(
@@ -1239,14 +1253,35 @@ class ContractViewSet(viewsets.ModelViewSet):
                     {'payment_provider': 'Obrigatório quando activation_mode é informado.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if not PaymentProvider.objects.filter(id=provider_id, is_active=True).exists():
+            # F4.3: busca o objeto ja validado e passa para o generator (remove TOCTOU)
+            provider = PaymentProvider.objects.filter(
+                id=provider_id, is_active=True,
+            ).first()
+            if provider is None:
                 return Response(
                     {'payment_provider': 'Provider não encontrado ou inativo.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if installments < 1:
+            # F4.1: bounds de installments
+            if installments < 1 or installments > 12:
                 return Response(
-                    {'installments': 'Deve ser >= 1.'},
+                    {'installments': 'Deve estar entre 1 e 12.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            # F4.1: validar combinacoes invalidas (previne confusao + DoS)
+            if mode == 'pix' and installments > 1:
+                return Response(
+                    {'installments': 'PIX aceita apenas 1 parcela.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if anticipate and mode != 'card_anticipated':
+                return Response(
+                    {'anticipate': 'anticipate=True so e valido com mode=card_anticipated.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if repass_fee and mode not in ('card_anticipated', 'card_installments'):
+                return Response(
+                    {'repass_fee': 'repass_fee=True so e valido para modos de cartao.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -1260,7 +1295,7 @@ class ContractViewSet(viewsets.ModelViewSet):
                     result = generate_activation_invoices(
                         contract=contract,
                         user=request.user,
-                        provider_id=provider_id,
+                        provider=provider,  # F4.3: passa objeto validado
                         mode=mode,
                         installments=installments,
                         anticipate=anticipate,
