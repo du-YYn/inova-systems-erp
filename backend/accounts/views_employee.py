@@ -35,9 +35,10 @@ class EmployeeProfileViewSet(ModelViewSet):
     serializer_class = EmployeeProfileSerializer
 
     def get_permissions(self):
-        # Action 'me' e acessivel a qualquer autenticado (proprio perfil).
-        # Demais actions (list/create/update/destroy) exigem admin/manager.
-        if self.action == 'me':
+        # F2.2: Leitura (list/retrieve) e /me/ para qualquer operador+ autenticado,
+        # mas queryset filtra para nao-admin/manager verem so proprio perfil.
+        # Escrita (create/update/destroy) so admin/manager.
+        if self.action in ('list', 'retrieve', 'me', 'capacity'):
             return [IsAdminOrManagerOrOperator()]
         return [IsAdminOrManager()]
 
