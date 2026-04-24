@@ -21,6 +21,13 @@ if not DEBUG and not _is_ci:
         raise ValueError('DB_PASSWORD must be set in production')
     if not os.environ.get('WEBSITE_API_KEY'):
         raise ValueError('WEBSITE_API_KEY must be set in production')
+    # F3b: TOTP_ENCRYPTION_KEY obrigatoria em prod. Fernet key base64 32 bytes.
+    # Gerar com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    if not os.environ.get('TOTP_ENCRYPTION_KEY'):
+        raise ValueError(
+            'TOTP_ENCRYPTION_KEY must be set in production. '
+            'Fernet key base64 32 bytes — deve ficar em env separada do DB.'
+        )
     # Redis sem password = acesso anônimo ao broker Celery + cache JWT.
     # Em produção, REDIS_URL deve embutir a senha (redis://:pwd@host:6379/0)
     # OU a variável REDIS_PASSWORD deve estar definida.
@@ -197,6 +204,18 @@ JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemsso
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+
+# ─── TOTP ENCRYPTION (F3b) ────────────────────────────────────────────────────
+# Chave Fernet para cifrar User.totp_secret em repouso. Em dev/CI usa default
+# deterministico (gerado uma vez e reutilizado para nao invalidar secrets
+# entre restarts em fixtures de teste). Em prod, validacao acima obriga.
+TOTP_ENCRYPTION_KEY = os.environ.get(
+    'TOTP_ENCRYPTION_KEY',
+    # Fallback SO PARA DEV/CI (DEBUG=True ou GITHUB_ACTIONS=true).
+    # Fernet key base64 urlsafe 32 bytes — chave publica conhecida.
+    # Nao e seguro mas funciona em testes.
+    'aW5vdmEtZXJwLXRvdHAtZGV2LWtleS0yMDI2LSEhISE=',
+)
 
 # ─── N8N INTEGRATION ─────────────────────────────────────────────────────────
 N8N_API_KEY = os.environ.get('N8N_API_KEY', '')

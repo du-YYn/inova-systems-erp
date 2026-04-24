@@ -15,7 +15,10 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
     is_2fa_enabled = models.BooleanField(default=False)
-    totp_secret = models.CharField(max_length=32, blank=True, null=True)
+    # F3b: totp_secret agora cifrado com Fernet (ciphertext ~100 chars).
+    # Use set_totp_secret()/get_totp_secret() ao inves de acessar direto.
+    # Plain-text legado continua lendo (fail-safe em totp_crypto.decrypt_totp).
+    totp_secret = models.CharField(max_length=256, blank=True, null=True)
     temp_2fa_token = models.CharField(max_length=64, blank=True, null=True)
     temp_2fa_expires = models.DateTimeField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True)
@@ -35,6 +38,19 @@ class User(AbstractUser):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.username
+
+    # ─── F3b: TOTP secret encryption helpers ──────────────────────────────
+    def set_totp_secret(self, raw_secret: str) -> None:
+        """Cifra e armazena o segredo TOTP em self.totp_secret.
+        Chame save() apos."""
+        from .totp_crypto import encrypt_totp
+        self.totp_secret = encrypt_totp(raw_secret) if raw_secret else ''
+
+    def get_totp_secret(self) -> str:
+        """Retorna o segredo TOTP em plain-text.
+        Fail-safe para valores legados nao-cifrados."""
+        from .totp_crypto import decrypt_totp
+        return decrypt_totp(self.totp_secret or '')
 
 
 class EmployeeProfile(models.Model):

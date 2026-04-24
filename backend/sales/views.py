@@ -1598,7 +1598,12 @@ class WebsiteLeadCreateView(APIView):
 
         serializer = WebsiteLeadSerializer(data=request.data)
         if not serializer.is_valid():
-            logger.warning(f"Invalid lead data from {client_ip}: {serializer.errors}")
+            # F3b: nao vazar valores do payload (email, whatsapp, nome).
+            # Apenas os NOMES dos campos invalidos.
+            invalid_fields = list(serializer.errors.keys())
+            logger.warning(
+                f"Invalid lead data from {client_ip} (fields: {invalid_fields})"
+            )
             return Response(
                 {'error': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST
             )
