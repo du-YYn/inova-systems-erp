@@ -43,9 +43,36 @@ def auth_client(api_client, regular_user):
 
 @pytest.mark.django_db
 class TestRegister:
+    """F2.1: RegisterView agora e admin-only (antes AllowAny)."""
     url = '/api/v1/accounts/register/'
 
-    def test_register_success(self, api_client):
+    def test_anonymous_register_blocked(self, api_client):
+        """Antes: 201. Agora: 401/403 (closed public registration)."""
+        payload = {
+            'username': 'newuser',
+            'email': 'new@test.com',
+            'password': 'secure_pass_123',
+            'password_confirm': 'secure_pass_123',
+        }
+        response = api_client.post(self.url, payload)
+        assert response.status_code in (
+            status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN,
+        )
+        assert not User.objects.filter(username='newuser').exists()
+
+    def test_operator_register_blocked(self, api_client, regular_user):
+        api_client.force_authenticate(user=regular_user)
+        payload = {
+            'username': 'newuser',
+            'email': 'new@test.com',
+            'password': 'secure_pass_123',
+            'password_confirm': 'secure_pass_123',
+        }
+        response = api_client.post(self.url, payload)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_register_success(self, api_client, admin_user):
+        api_client.force_authenticate(user=admin_user)
         payload = {
             'username': 'newuser',
             'email': 'new@test.com',
@@ -56,7 +83,8 @@ class TestRegister:
         assert response.status_code == status.HTTP_201_CREATED
         assert User.objects.filter(username='newuser').exists()
 
-    def test_register_duplicate_username(self, api_client, regular_user):
+    def test_register_duplicate_username(self, api_client, admin_user, regular_user):
+        api_client.force_authenticate(user=admin_user)
         payload = {
             'username': regular_user.username,
             'email': 'other@test.com',
@@ -65,7 +93,8 @@ class TestRegister:
         response = api_client.post(self.url, payload)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_register_missing_fields(self, api_client):
+    def test_register_missing_fields(self, api_client, admin_user):
+        api_client.force_authenticate(user=admin_user)
         response = api_client.post(self.url, {'username': 'onlyname'})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -166,11 +195,19 @@ class TestTwoFactor:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_2fa_setup_enable(self, auth_client):
-        response = auth_client.post(self.setup_url)
+        # F2.7: enable agora exige senha (simetrico ao disable)
+        response = auth_client.post(
+            self.setup_url, {'password': 'operator_pass_123'}, format='json',
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data.get('enabled') is True
         assert 'secret' in response.data
         assert 'qr_code' in response.data
+
+    def test_2fa_setup_enable_requires_password(self, auth_client):
+        """F2.7: sem senha, retorna 400 (previne hostage attack)."""
+        response = auth_client.post(self.setup_url, {}, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_2fa_setup_disable(self, auth_client, regular_user):
         regular_user.is_2fa_enabled = True

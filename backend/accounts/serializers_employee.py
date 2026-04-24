@@ -22,6 +22,27 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
     def get_user_name(self, obj) -> str:
         return obj.user.full_name
 
+    def to_representation(self, instance):
+        """F2.2: Oculta salario/custo/hora para roles que nao deveriam ver.
+
+        Apenas admin e manager leem dados financeiros de todos os empregados.
+        Operator pode ler o proprio perfil (endpoint /me/) com todos os dados.
+        """
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return data
+
+        user = request.user
+        is_admin_mgr = user.role in ('admin', 'manager')
+        is_self = instance.user_id == user.id
+
+        if not is_admin_mgr and not is_self:
+            # Esconde dados sensiveis de RH em listagens para operator/viewer
+            for sensitive in ('hourly_cost', 'monthly_salary'):
+                data.pop(sensitive, None)
+        return data
+
 
 class UserSkillSerializer(serializers.ModelSerializer):
     class Meta:
@@ -44,7 +65,13 @@ class AbsenceSerializer(serializers.ModelSerializer):
             'status', 'reason', 'approved_by', 'approved_by_name',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at']
+        # F2.4: user derivado de request.user em perform_create (nao pode
+        # criar ausencia no nome de outro). status/approved_by mudam apenas
+        # via actions approve/reject (F2.3).
+        read_only_fields = [
+            'id', 'user', 'status', 'approved_by',
+            'created_at', 'updated_at',
+        ]
 
     @extend_schema_field(serializers.CharField)
     def get_user_name(self, obj) -> str:

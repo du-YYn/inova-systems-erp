@@ -24,7 +24,9 @@ class ProjectCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectComment
         fields = ['id', 'project', 'task', 'user', 'user_name', 'content', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        # F2.8: user e derivado de request.user em perform_create. Antes era
+        # escrivel em update, permitindo reatribuir autoria para terceiro.
+        read_only_fields = ['id', 'user', 'created_at']
 
 
 class ProjectPhaseSerializer(serializers.ModelSerializer):

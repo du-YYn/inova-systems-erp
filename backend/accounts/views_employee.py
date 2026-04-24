@@ -6,8 +6,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from rest_framework.exceptions import PermissionDenied
+
 from .models import Absence, EmployeeProfile, UserSkill
-from .permissions import IsAdminOrManagerOrOperator
+from .permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
 from .serializers_employee import (
     AbsenceSerializer,
     EmployeeProfileSerializer,
@@ -24,9 +26,29 @@ from .serializers_employee import (
     destroy=extend_schema(tags=['employee-profiles']),
 )
 class EmployeeProfileViewSet(ModelViewSet):
+    """F2.2: CRUD restrito a admin/manager. Operator so le via /me/.
+
+    Para operator/viewer: listagens/retrieve excluem salario (to_representation
+    filtra); escrita e permitida apenas via /me/ para editar o proprio perfil.
+    """
     queryset = EmployeeProfile.objects.select_related('user')
     serializer_class = EmployeeProfileSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        # F2.2: Leitura (list/retrieve) e /me/ para qualquer operador+ autenticado,
+        # mas queryset filtra para nao-admin/manager verem so proprio perfil.
+        # Escrita (create/update/destroy) so admin/manager.
+        if self.action in ('list', 'retrieve', 'me', 'capacity'):
+            return [IsAdminOrManagerOrOperator()]
+        return [IsAdminOrManager()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Non-admin/manager so veem o proprio perfil em listagens
+        user = self.request.user
+        if user.is_authenticated and user.role not in ('admin', 'manager'):
+            qs = qs.filter(user=user)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -160,10 +182,20 @@ class UserSkillViewSet(ModelViewSet):
 class AbsenceViewSet(ModelViewSet):
     queryset = Absence.objects.select_related('user', 'approved_by')
     serializer_class = AbsenceSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        # F2.3: approve/reject so para admin/manager (hierarquia)
+        if self.action in ('approve', 'reject'):
+            return [IsAdminOrManager()]
+        return [IsAdminOrManagerOrOperator()]
 
     def get_queryset(self):
         qs = super().get_queryset()
+        # F2.3: non-admin/manager so veem as proprias ausencias
+        user = self.request.user
+        if user.is_authenticated and user.role not in ('admin', 'manager'):
+            qs = qs.filter(user=user)
+
         user_id = self.request.query_params.get('user')
         status_filter = self.request.query_params.get('status')
         month = self.request.query_params.get('month')  # formato YYYY-MM
@@ -180,10 +212,18 @@ class AbsenceViewSet(ModelViewSet):
                 pass
         return qs
 
+    def perform_create(self, serializer):
+        # F2.4: user derivado de request.user (AbsenceSerializer.user e
+        # read_only) — previne criar ausencia no nome de outro.
+        serializer.save(user=self.request.user, status='pending')
+
     @extend_schema(tags=['absences'], summary='Aprova uma ausência')
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         absence = self.get_object()
+        # F2.3: self-approval bloqueado — usuario nao aprova a propria ausencia
+        if absence.user_id == request.user.id:
+            raise PermissionDenied('Você não pode aprovar a própria ausência.')
         absence.status = 'approved'
         absence.approved_by = request.user
         absence.save(update_fields=['status', 'approved_by', 'updated_at'])
@@ -194,6 +234,9 @@ class AbsenceViewSet(ModelViewSet):
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
         absence = self.get_object()
+        # F2.3: self-rejection tambem bloqueado (simetria)
+        if absence.user_id == request.user.id:
+            raise PermissionDenied('Você não pode rejeitar a própria ausência.')
         absence.status = 'rejected'
         absence.approved_by = request.user
         absence.save(update_fields=['status', 'approved_by', 'updated_at'])
