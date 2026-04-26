@@ -1,8 +1,9 @@
 import logging
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from drf_spectacular.utils import extend_schema
 from django.db import models, transaction
 from django.db.models import Sum
@@ -32,6 +33,11 @@ from accounts.permissions import (
 from core.audit import log_audit
 
 logger = logging.getLogger('finance')
+
+
+class _SimulatePaymentThrottle(ScopedRateThrottle):
+    """F4.2: rate limit 60/min no endpoint simulate (scope simulate_payment)."""
+    scope = 'simulate_payment'
 
 
 @extend_schema(tags=['finance'])
@@ -895,7 +901,17 @@ class FinanceDashboardView(viewsets.ViewSet):
         today = date.today()
         year = int(request.query_params.get('year', today.year))
         month = int(request.query_params.get('month', today.month))
-        provider_filter = request.query_params.get('provider')
+        provider_filter_raw = request.query_params.get('provider')
+        # F4.4: normaliza provider_filter para int (evita matching inconsistente)
+        provider_filter: int | None = None
+        if provider_filter_raw:
+            try:
+                provider_filter = int(provider_filter_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {'provider': 'Valor inteiro invalido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         invoices = Invoice.objects.filter(
             invoice_type='receivable',
@@ -907,23 +923,52 @@ class FinanceDashboardView(viewsets.ViewSet):
         total_gross = Decimal('0')
         total_net = Decimal('0')
         total_fees = Decimal('0')
-        per_provider = {}
+        per_provider: dict[int, dict] = {}
+        total_matched_count = 0
 
         for inv in invoices:
             details = inv.payment_details or {}
-            pid = details.get('provider_id')
-            if provider_filter and str(pid) != str(provider_filter):
+            raw_pid = details.get('provider_id')
+            # F4.4: normaliza pid para int (chave consistente no dict)
+            pid: int | None = None
+            if raw_pid is not None:
+                try:
+                    pid = int(raw_pid)
+                except (TypeError, ValueError):
+                    pid = None
+            if provider_filter is not None and pid != provider_filter:
                 continue
 
-            gross = Decimal(str(details.get('gross_charged_to_client', inv.value or 0)))
-            net = Decimal(str(details.get('net_company_receives', inv.total or 0)))
-            fee = Decimal(str(details.get('fee_retained', gross - net)))
+            gross_raw = details.get('gross_charged_to_client', inv.value or 0)
+            net_raw = details.get('net_company_receives', inv.total or 0)
+            try:
+                gross = Decimal(str(gross_raw))
+                net = Decimal(str(net_raw))
+                if not gross.is_finite() or not net.is_finite():
+                    continue
+            except Exception as exc:
+                # payment_details com valores nao-decimais — pula a invoice
+                # e loga para investigacao (nao deve acontecer em dados
+                # gerados pelo invoice_generator).
+                logger.warning(
+                    'fees_summary: payment_details com valor invalido '
+                    'em invoice id=%s: %s', inv.id, exc,
+                )
+                continue
+            fee_raw = details.get('fee_retained')
+            try:
+                fee = Decimal(str(fee_raw)) if fee_raw is not None else (gross - net)
+                if not fee.is_finite():
+                    fee = gross - net
+            except Exception:
+                fee = gross - net
 
             total_gross += gross
             total_net += net
             total_fees += fee
+            total_matched_count += 1
 
-            if pid:
+            if pid is not None:
                 entry = per_provider.setdefault(pid, {
                     'provider_id': pid,
                     'provider_code': details.get('provider_code', ''),
@@ -936,10 +981,12 @@ class FinanceDashboardView(viewsets.ViewSet):
 
         # Preenche nomes dos providers
         if per_provider:
-            provider_ids = list(per_provider.keys())
-            providers = {p.id: p for p in PaymentProvider.objects.filter(id__in=provider_ids)}
+            providers = {
+                p.id: p
+                for p in PaymentProvider.objects.filter(id__in=list(per_provider.keys()))
+            }
             for pid, entry in per_provider.items():
-                p = providers.get(int(pid)) if isinstance(pid, (int, str)) else None
+                p = providers.get(pid)
                 entry['provider_name'] = p.name if p else entry['provider_code']
                 entry['fees'] = float(entry['fees'])
 
@@ -948,7 +995,8 @@ class FinanceDashboardView(viewsets.ViewSet):
             'total_fees': float(total_fees),
             'total_gross': float(total_gross),
             'total_net': float(total_net),
-            'invoice_count': sum(e['invoice_count'] for e in per_provider.values()) if per_provider else invoices.count(),
+            # F4.4: invoice_count respeita provider_filter (antes inconsistente)
+            'invoice_count': total_matched_count,
             'by_provider': sorted(per_provider.values(), key=lambda x: -x['fees']),
         })
 
@@ -1101,7 +1149,8 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
 
     @action(
         detail=True, methods=['post'], url_path='simulate',
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[IsAdminOrManagerOrOperator],
+        throttle_classes=[_SimulatePaymentThrottle],
     )
     def simulate(self, request, pk=None):
         """Simula cobrança com as taxas deste provider.
@@ -1112,6 +1161,9 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
         - `installments`: número de parcelas (int, default 1)
         - `anticipate`: bool (cartão apenas) — True = empresa recebe à vista
         - `repass_fee`: bool (cartão apenas) — True = taxa embutida no preço ao cliente
+
+        F4.2: restrito a admin/manager/operator (viewer nao ve estrutura de
+        custo). Throttle 60/min por usuario.
 
         Retorna o dict calculado por `finance.pricing`, com schedule e details.
         """
@@ -1144,8 +1196,9 @@ class PaymentProviderViewSet(viewsets.ModelViewSet):
                 installments = int(raw_installments)
             except (TypeError, ValueError):
                 raise ValidationError({'installments': 'Número inteiro inválido.'})
-        if installments < 1:
-            raise ValidationError({'installments': 'Deve ser >= 1.'})
+        # F4.2: bounds identicos ao activate (1-12)
+        if installments < 1 or installments > 12:
+            raise ValidationError({'installments': 'Deve estar entre 1 e 12.'})
 
         rate = provider.rates.filter(method=method).first()
         if not rate:

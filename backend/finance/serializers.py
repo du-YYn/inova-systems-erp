@@ -68,6 +68,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     project_name = serializers.SerializerMethodField()
 
+    # F4.5: allow-list de chaves de payment_details expostas via API.
+    # Campos fora desta lista (ex: CPF/card_last4 se algum dia forem gravados)
+    # ficam invisiveis em listagens/retrieve — defense-in-depth LGPD.
+    _PAYMENT_DETAILS_SAFE_KEYS = frozenset({
+        'provider_id', 'provider_code', 'activation_mode',
+        'sequence', 'total_installments', 'total_months',
+        'gross_charged_to_client', 'net_company_receives', 'fee_retained',
+    })
+
     class Meta:
         model = Invoice
         fields = ['id', 'invoice_type', 'document_type', 'contract', 'customer', 'customer_name',
@@ -88,6 +97,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'status', 'paid_date', 'paid_amount', 'payment_details',
             'nfse_number', 'nfse_status', 'nfse_xml_url', 'nfse_pdf_url',
         ]
+
+    def to_representation(self, instance):
+        """F4.5: filtra payment_details por allow-list antes de expor.
+
+        Previne vazamento acidental se alguem adicionar campo sensivel
+        (CPF, card_last4, pix_key_cliente) ao payment_details em uma
+        integracao futura.
+        """
+        data = super().to_representation(instance)
+        pd = data.get('payment_details')
+        if isinstance(pd, dict):
+            data['payment_details'] = {
+                k: v for k, v in pd.items()
+                if k in self._PAYMENT_DETAILS_SAFE_KEYS
+            }
+        return data
 
     def get_project_name(self, obj):
         if obj.project_id:

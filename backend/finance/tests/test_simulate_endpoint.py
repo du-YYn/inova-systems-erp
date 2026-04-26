@@ -21,6 +21,16 @@ def api_client():
 
 
 @pytest.fixture
+def operator_user(db):
+    """F4.2: simulate agora exige admin/manager/operator (antes era
+    IsAuthenticated, que permitia viewer). Troca fixture para operator."""
+    return User.objects.create_user(
+        username='sim_op', email='simop@test.com',
+        password='pass12345', role='operator',
+    )
+
+
+@pytest.fixture
 def viewer_user(db):
     return User.objects.create_user(
         username='sim_viewer', email='simviewer@test.com',
@@ -29,7 +39,13 @@ def viewer_user(db):
 
 
 @pytest.fixture
-def auth_client(api_client, viewer_user):
+def auth_client(api_client, operator_user):
+    api_client.force_authenticate(user=operator_user)
+    return api_client
+
+
+@pytest.fixture
+def viewer_client(api_client, viewer_user):
     api_client.force_authenticate(user=viewer_user)
     return api_client
 

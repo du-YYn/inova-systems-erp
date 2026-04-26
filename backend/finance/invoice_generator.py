@@ -234,12 +234,16 @@ def _build_recurring_invoices(contract, user, provider):
 
 @transaction.atomic
 def generate_activation_invoices(
-    contract, user, provider_id: int, mode: str,
+    contract, user, mode: str,
+    provider=None, provider_id: int | None = None,
     installments: int = 1,
     anticipate: bool = False,
     repass_fee: bool = False,
 ):
     """Gera invoices de setup + recorrência para um contrato ativado.
+
+    Aceita `provider` (objeto já validado pelo caller — preferivel, evita
+    TOCTOU) ou `provider_id` (compat). Se ambos, `provider` tem prioridade.
 
     Returns:
         dict: `{'setup_invoices': [...], 'recurring_invoices': [...],
@@ -251,10 +255,14 @@ def generate_activation_invoices(
     if mode not in MODE_TO_METHOD:
         raise ValueError(f'activation_mode inválido: {mode}')
 
-    try:
-        provider = PaymentProvider.objects.get(id=provider_id, is_active=True)
-    except PaymentProvider.DoesNotExist:
-        raise ValueError('Provider não encontrado ou inativo.')
+    # F4.3: aceitar objeto provider pre-validado (remove TOCTOU e query extra)
+    if provider is None:
+        if provider_id is None:
+            raise ValueError('Informe provider ou provider_id.')
+        try:
+            provider = PaymentProvider.objects.get(id=provider_id, is_active=True)
+        except PaymentProvider.DoesNotExist:
+            raise ValueError('Provider não encontrado ou inativo.')
 
     setup_invoices, setup_fees = _build_setup_invoices(
         contract, user, provider, mode, installments, anticipate, repass_fee,

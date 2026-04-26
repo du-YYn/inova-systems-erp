@@ -181,6 +181,10 @@ REST_FRAMEWORK = {
         # 3min (ver accounts/views.py), brute-force fica inviável.
         'two_factor': '5/minute',
         'n8n': '300/hour',
+        # F4.2: simulate do PaymentProvider e puro calculo, mas repetir
+        # 10k requests revela a tabela de taxas. Limite razoavel para
+        # uso humano via modal.
+        'simulate_payment': '60/minute',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
