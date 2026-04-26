@@ -2,7 +2,9 @@
 # Tráfego HTTPS gerenciado pelo Traefik do Easypanel via rede compartilhada
 services:
   postgres:
-    image: postgres:15
+    # Pinar por digest evita supply-chain risk de tag mutável.
+    # Para atualizar: `docker pull postgres:15 && docker inspect postgres:15 --format '{{index .RepoDigests 0}}'`
+    image: postgres:15@sha256:29342cb52157b098821961d2c14eec3c019071f56a5d559e990cf07cf541ea9b
     restart: unless-stopped
     env_file:
       - .env
@@ -19,7 +21,7 @@ services:
       retries: 5
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7aec734b2bb298a1d769fd8729f13b8514a41bf90fcdd1f38ec52267fbaa8ee6
     restart: unless-stopped
     command: >
       sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
@@ -29,13 +31,10 @@ services:
              fi"
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+    # Healthcheck lê a senha de REDISCLI_AUTH (env var) em vez de `-a $PASSWORD`
+    # no command line — evita expor a senha em `ps` dentro do container.
     healthcheck:
-      test: >
-        sh -c "if [ -n \"$$REDIS_PASSWORD\" ]; then
-                 redis-cli -a $$REDIS_PASSWORD ping;
-               else
-                 redis-cli ping;
-               fi"
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -197,7 +196,7 @@ services:
 
   # ─── Inova Apresentação (subdomínio apresentacao.*) ──────────────────────────
   apresentacao_postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${APRESENTACAO_DB_NAME:-inova_apresentacao}
@@ -265,7 +264,7 @@ services:
           - grupo_ry_inova-erp_apresentacao_frontend
 
   db-backup:
-    image: postgres:15
+    image: postgres:15@sha256:29342cb52157b098821961d2c14eec3c019071f56a5d559e990cf07cf541ea9b
     restart: unless-stopped
     depends_on:
       postgres:

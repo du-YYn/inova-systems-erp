@@ -35,12 +35,16 @@ fi
 
 DB_NAME="${DB_NAME:-inova_erp}"
 DB_USER="${DB_USER:-inova_user}"
-ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
-if [ -n "$ENCRYPTION_KEY" ]; then
-    BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz.enc"
-else
-    BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz"
+
+# ── Fail-closed: BACKUP_ENCRYPTION_KEY é obrigatório ──────────────────────────
+# Backups não criptografados expõem dados de clientes (LGPD). Se a key não
+# está configurada, abortamos antes de gerar qualquer arquivo. Em dev local,
+# defina BACKUP_ENCRYPTION_KEY=dev-only-not-secret no .env para destravar.
+if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "[backup_db] ERRO: BACKUP_ENCRYPTION_KEY não definida no .env. Abortando para evitar backup em texto-plano." >&2
+    exit 1
 fi
+BACKUP_FILE="$BACKUP_DIR/inova_erp_${DATE}.sql.gz.enc"
 
 # ── Criar diretório de backups ────────────────────────────────────────────────
 mkdir -p "$BACKUP_DIR"
@@ -48,19 +52,16 @@ mkdir -p "$BACKUP_DIR"
 echo "[backup_db] Iniciando backup: $BACKUP_FILE"
 
 # ── Executar pg_dump via docker compose ───────────────────────────────────────
+# `-pass env:VAR` faz o openssl ler a key da variável de ambiente em vez de
+# `-pass pass:`, que expõe a key em /proc/<pid>/cmdline e `ps auxf`.
 cd "$PROJECT_DIR"
-if [ -n "$ENCRYPTION_KEY" ]; then
-    docker compose exec -T postgres \
-        pg_dump -U "$DB_USER" "$DB_NAME" \
-        | gzip \
-        | openssl enc -aes-256-cbc -salt -pbkdf2 -pass pass:"$ENCRYPTION_KEY" \
-        > "$BACKUP_FILE"
-    echo "[backup_db] Backup criptografado com AES-256-CBC"
-else
-    docker compose exec -T postgres \
-        pg_dump -U "$DB_USER" "$DB_NAME" \
-        | gzip > "$BACKUP_FILE"
-fi
+export BACKUP_ENCRYPTION_KEY
+docker compose exec -T postgres \
+    pg_dump -U "$DB_USER" "$DB_NAME" \
+    | gzip \
+    | openssl enc -aes-256-cbc -salt -pbkdf2 -pass env:BACKUP_ENCRYPTION_KEY \
+    > "$BACKUP_FILE"
+echo "[backup_db] Backup criptografado com AES-256-CBC"
 
 BACKUP_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "[backup_db] Backup concluído: $BACKUP_FILE ($BACKUP_SIZE)"

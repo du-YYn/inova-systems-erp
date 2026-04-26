@@ -36,3 +36,9 @@ coverage/
 # Misc
 .DS_Store
 Thumbs.db
+
+# Documentação interna — não vai pra imagem (reduz superfície + size).
+*.md
+CLAUDE.md
+docs/
+README*
