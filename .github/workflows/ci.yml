@@ -170,7 +170,10 @@ jobs:
           fetch-depth: 0  # histórico completo para scanning de secrets
 
       - name: TruffleHog — varre histórico git por secrets
-        uses: trufflesecurity/trufflehog@main
+        # Pinned to v3.95.2 commit SHA — `@main` é mutable e ataca via supply
+        # chain (commit malicioso vira CI poisoning). Atualizar com:
+        # gh api repos/trufflesecurity/trufflehog/git/refs/tags/<tag>
+        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26  # v3.95.2
         with:
           path: ./
           base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
