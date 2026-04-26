@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
 import api from '@/lib/api';
+import { Money } from '@/lib/money';
 
 const fmt = (v: number | string) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
 const fmtDate = (d: string) => { try { return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR'); } catch { return d; } };
@@ -101,7 +102,7 @@ export default function EmprestimosSection({ isDemoMode }: { isDemoMode: boolean
         <div className="space-y-4">
           {loans.map(loan => {
             const progress = loan.num_installments > 0 ? Math.round((loan.paid_count / loan.num_installments) * 100) : 0;
-            const remaining = Number(loan.total_amount) - (loan.paid_count * Number(loan.installment_value));
+            const remaining = Money(loan.total_amount).minus(Money(loan.installment_value).times(loan.paid_count)).toNumber();
             const isOpen = !!expanded[loan.id];
 
             return (
