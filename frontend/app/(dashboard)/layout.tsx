@@ -104,6 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const userData = localStorage.getItem('user');
       if (userData) {
@@ -115,6 +116,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     } catch {
       localStorage.removeItem('user');
     }
+    // Email is no longer persisted in localStorage; fetch it from the
+    // authenticated profile endpoint so it never lives in the browser store.
+    api
+      .get<{ email?: string; username?: string; role?: string; is_staff?: boolean }>(
+        '/accounts/profile/',
+      )
+      .then((profile) => {
+        if (cancelled) return;
+        setUser((prev) => ({
+          username: profile.username ?? prev?.username ?? '',
+          email: profile.email ?? prev?.email ?? '',
+          is_staff: profile.is_staff ?? prev?.is_staff,
+          role: profile.role ?? prev?.role,
+        }));
+      })
+      .catch(() => {
+        // 401 redirect is handled by api.ts; other errors leave UI hint as-is.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const fetchUnreadCount = async () => {

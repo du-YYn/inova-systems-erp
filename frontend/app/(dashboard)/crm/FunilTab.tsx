@@ -23,6 +23,8 @@ import ProposalFormModal from './ProposalFormModal';
 import { ChatModal } from '@/components/crm/ChatModal';
 import OnboardingLinkSection from '@/components/crm/OnboardingLinkSection';
 import api from '@/lib/api';
+import { safeHref } from '@/lib/url';
+import { moneyDiv, moneySplit } from '@/lib/money';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2043,10 +2045,10 @@ export default function FunilTab() {
                         <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateShort(viewingProspect.meeting_scheduled_at)}</span>
                       </div>
                     )}
-                    {viewingProspect.meeting_link && (
+                    {safeHref(viewingProspect.meeting_link) && (
                       <div className="flex items-center gap-2 text-sm">
                         <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Link</span>
-                        <a href={viewingProspect.meeting_link} target="_blank" rel="noopener noreferrer" className="text-accent-gold hover:underline truncate">
+                        <a href={safeHref(viewingProspect.meeting_link)} target="_blank" rel="noopener noreferrer" className="text-accent-gold hover:underline truncate">
                           Abrir link
                         </a>
                       </div>
@@ -2568,8 +2570,14 @@ export default function FunilTab() {
                           <input type="number" min="1" max="99" value={wonForm.payment_split_pct} onChange={e => setWonForm({ ...wonForm, payment_split_pct: e.target.value })} className="input-field" />
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 pt-5">
-                          Entrada: <strong>{wonForm.contract_value ? `R$ ${(Number(wonForm.contract_value) * Number(wonForm.payment_split_pct) / 100).toFixed(2)}` : '—'}</strong><br />
-                          Entrega: <strong>{wonForm.contract_value ? `R$ ${(Number(wonForm.contract_value) * (100 - Number(wonForm.payment_split_pct)) / 100).toFixed(2)}` : '—'}</strong>
+                          {(() => {
+                            if (!wonForm.contract_value) return <>Entrada: <strong>—</strong><br />Entrega: <strong>—</strong></>;
+                            const { primary, remainder } = moneySplit(wonForm.contract_value, wonForm.payment_split_pct || 0);
+                            return <>
+                              Entrada: <strong>R$ {primary.toFixed(2)}</strong><br />
+                              Entrega: <strong>R$ {remainder.toFixed(2)}</strong>
+                            </>;
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -2579,7 +2587,7 @@ export default function FunilTab() {
                     <div className="mt-3">
                       <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Número de Parcelas</label>
                       <input type="number" min="2" value={wonForm.payment_installments} onChange={e => setWonForm({ ...wonForm, payment_installments: e.target.value })} className="input-field w-24" />
-                      {wonForm.contract_value && <p className="text-xs text-gray-400 mt-1">Parcela: R$ {(Number(wonForm.contract_value) / Number(wonForm.payment_installments || 1)).toFixed(2)}</p>}
+                      {wonForm.contract_value && <p className="text-xs text-gray-400 mt-1">Parcela: R$ {moneyDiv(wonForm.contract_value, wonForm.payment_installments || 1).toFixed(2)}</p>}
                     </div>
                   )}
 

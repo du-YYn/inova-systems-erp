@@ -27,8 +27,12 @@ export default function LoginPage() {
         try {
           const data = await api.post<{ user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/2fa/verify/', { temp_token: tempToken, code: twoFactorCode });
           if (data.user && typeof data.user.username === 'string') {
-            const { id, username, email, first_name, last_name, role } = data.user;
-            localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
+            // localStorage holds non-sensitive UI hints only; email is fetched
+            // from /accounts/profile/ at runtime so it never persists in the
+            // browser store. Do not gate authorization on these values — the
+            // backend re-checks role/permissions on every request.
+            const { id, username, first_name, last_name, role } = data.user;
+            localStorage.setItem('user', JSON.stringify({ id, username, first_name, last_name, role }));
           }
           window.location.replace('/dashboard');
           return;
@@ -51,10 +55,12 @@ export default function LoginPage() {
           return;
         }
 
-        // Tokens chegam via cookie httpOnly; salva apenas dados do usuário para exibição
+        // Tokens chegam via cookie httpOnly. localStorage guarda apenas hints
+        // de UI (id/username/role) — autorização é re-checada no backend a
+        // cada request. Nunca persistimos email/CPF/dados pessoais aqui.
         if (data.user && typeof data.user.username === 'string') {
-          const { id, username, email, first_name, last_name, role } = data.user;
-          localStorage.setItem('user', JSON.stringify({ id, username, email, first_name, last_name, role }));
+          const { id, username, first_name, last_name, role } = data.user;
+          localStorage.setItem('user', JSON.stringify({ id, username, first_name, last_name, role }));
         }
         // Redirecionar com base no role e subdomínio
         const isPartnerDomain = window.location.hostname === (process.env.NEXT_PUBLIC_PARTNER_HOST || 'parceiro.inovasystemssolutions.com');

@@ -12,6 +12,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api from '@/lib/api';
+import { safeHref } from '@/lib/url';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
 
@@ -358,9 +359,9 @@ export default function ProjectDetailPage() {
               <div><p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Descrição</p><p className="text-sm text-gray-700 dark:text-gray-200">{project.description}</p></div>
             )}
             <div className="flex gap-3 pt-2">
-              {project.github_repo && <a href={project.github_repo} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">GitHub</a>}
-              {project.figma_url && <a href={project.figma_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Figma</a>}
-              {project.docs_url && <a href={project.docs_url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Docs</a>}
+              {safeHref(project.github_repo) && <a href={safeHref(project.github_repo)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">GitHub</a>}
+              {safeHref(project.figma_url) && <a href={safeHref(project.figma_url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Figma</a>}
+              {safeHref(project.docs_url) && <a href={safeHref(project.docs_url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">Docs</a>}
             </div>
           </div>
 
@@ -651,7 +652,7 @@ export default function ProjectDetailPage() {
                 }`}>{env.status}</span>
               </div>
               {env.current_version && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Versão: <span className="font-mono font-medium">{env.current_version}</span></p>}
-              {env.url && <a href={env.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate block mb-1">{env.url}</a>}
+              {safeHref(env.url) && <a href={safeHref(env.url)} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline truncate block mb-1">{env.url}</a>}
               {env.last_deploy_at && <p className="text-xs text-gray-400 dark:text-gray-500">Último deploy: {new Date(env.last_deploy_at).toLocaleString('pt-BR')}</p>}
               {env.last_deploy_by_name && <p className="text-xs text-gray-400 dark:text-gray-500">por {env.last_deploy_by_name}</p>}
             </div>

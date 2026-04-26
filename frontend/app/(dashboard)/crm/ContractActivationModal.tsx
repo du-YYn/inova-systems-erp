@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api, { ApiError } from '@/lib/api';
+import { moneySub } from '@/lib/money';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -100,9 +101,14 @@ export default function ContractActivationModal({ contract, open, onClose, onSuc
   // Fetch providers + contract detail (setup value) when modal opens
   useEffect(() => {
     if (!open) return;
+    const controller = new AbortController();
+    const isAborted = (err: unknown) =>
+      controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError');
+
     setLoadingProviders(true);
-    api.get<Provider[] | { results: Provider[] }>('/finance/payment-providers/')
+    api.get<Provider[] | { results: Provider[] }>('/finance/payment-providers/', undefined, controller.signal)
       .then((data) => {
+        if (controller.signal.aborted) return;
         const list = Array.isArray(data) ? data : (data.results || []);
         setProviders(list);
         if (list.length > 0 && !providerId) {
@@ -110,20 +116,29 @@ export default function ContractActivationModal({ contract, open, onClose, onSuc
         }
       })
       .catch((err) => {
+        if (isAborted(err)) return;
         toast.error(err instanceof ApiError ? err.message : 'Erro ao carregar providers.');
       })
-      .finally(() => setLoadingProviders(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingProviders(false);
+      });
 
     setLoadingContract(true);
-    api.get<{ payment_plan?: { one_time_amount?: string | number } }>(`/sales/contracts/${contract.id}/`)
+    api.get<{ payment_plan?: { one_time_amount?: string | number } }>(`/sales/contracts/${contract.id}/`, undefined, controller.signal)
       .then((data) => {
+        if (controller.signal.aborted) return;
         const oneTime = Number(data.payment_plan?.one_time_amount || 0);
         setSetupValue(oneTime);
       })
-      .catch(() => {
+      .catch((err) => {
+        if (isAborted(err)) return;
         setSetupValue(0);
       })
-      .finally(() => setLoadingContract(false));
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingContract(false);
+      });
+
+    return () => controller.abort();
   }, [open, contract.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build payload for simulation
@@ -143,12 +158,13 @@ export default function ContractActivationModal({ contract, open, onClose, onSuc
     return { method: 'credit_card', gross, installments, anticipate: false, repass_fee: repassFee };
   }, [providerId, setupValue, mode, installments, repassFee]);
 
-  // Simulate when payload changes (debounced)
+  // Simulate when payload changes (debounced + cancellable)
   useEffect(() => {
     if (!payload || !providerId) {
       setSimulation(null);
       return;
     }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
       setSimulating(true);
       setSimError(null);
@@ -156,16 +172,23 @@ export default function ContractActivationModal({ contract, open, onClose, onSuc
         const data = await api.post<SimulationResult>(
           `/finance/payment-providers/${providerId}/simulate/`,
           payload,
+          controller.signal,
         );
-        setSimulation(data);
+        if (!controller.signal.aborted) setSimulation(data);
       } catch (err) {
+        if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+          return;
+        }
         setSimError(err instanceof ApiError ? err.message : 'Erro na simulação.');
         setSimulation(null);
       } finally {
-        setSimulating(false);
+        if (!controller.signal.aborted) setSimulating(false);
       }
     }, 300);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [payload, providerId]);
 
   const handleActivate = async () => {
@@ -356,7 +379,7 @@ export default function ContractActivationModal({ contract, open, onClose, onSuc
                     <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-800/30">
                       <div className="text-[10px] text-amber-700 dark:text-amber-300 uppercase tracking-wider">Taxa retida</div>
                       <div className="text-sm font-bold text-amber-700 dark:text-amber-300">
-                        {formatCurrency(Number(simulation.client_pays) - Number(simulation.company_receives_total))}
+                        {formatCurrency(moneySub(simulation.client_pays, simulation.company_receives_total))}
                       </div>
                     </div>
                   </div>

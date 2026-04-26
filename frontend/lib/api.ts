@@ -132,20 +132,20 @@ async function uploadFile<T = unknown>(endpoint: string, file: File, fieldName =
 }
 
 export const api = {
-  get: <T = unknown>(endpoint: string, params?: Record<string, string>) =>
-    request<T>(endpoint, { method: 'GET', params }),
+  get: <T = unknown>(endpoint: string, params?: Record<string, string>, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'GET', params, signal }),
 
-  post: <T = unknown>(endpoint: string, body?: unknown) =>
-    request<T>(endpoint, { method: 'POST', body }),
+  post: <T = unknown>(endpoint: string, body?: unknown, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'POST', body, signal }),
 
-  patch: <T = unknown>(endpoint: string, body?: unknown) =>
-    request<T>(endpoint, { method: 'PATCH', body }),
+  patch: <T = unknown>(endpoint: string, body?: unknown, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'PATCH', body, signal }),
 
-  put: <T = unknown>(endpoint: string, body?: unknown) =>
-    request<T>(endpoint, { method: 'PUT', body }),
+  put: <T = unknown>(endpoint: string, body?: unknown, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'PUT', body, signal }),
 
-  delete: <T = unknown>(endpoint: string) =>
-    request<T>(endpoint, { method: 'DELETE' }),
+  delete: <T = unknown>(endpoint: string, signal?: AbortSignal) =>
+    request<T>(endpoint, { method: 'DELETE', signal }),
 
   upload: <T = unknown>(endpoint: string, file: File, fieldName?: string) =>
     uploadFile<T>(endpoint, file, fieldName),
