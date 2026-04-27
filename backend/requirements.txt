@@ -22,6 +22,12 @@ Pillow==12.2.0
 openpyxl==3.1.5
 reportlab==4.2.5
 
+# ─── HTML Sanitization (F7B.3) ────────────────────────────────────────────────
+# Sanitiza propostas HTML enviadas pelo time comercial antes de servir
+# publicamente. Allow-list de tags + filtro de atributos `on*`/`srcdoc`.
+# `bleach.css_sanitizer` precisa de `tinycss2` para validar inline styles.
+bleach[css]==6.2.0
+
 # ─── Authentication / 2FA ────────────────────────────────────────────────────
 pyotp==2.9.0
 qrcode==7.4.2

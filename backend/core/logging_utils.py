@@ -56,3 +56,18 @@ def mask_phone(phone: str) -> str:
     if len(digits) >= 6:
         return f"({digits[:2]}) *****-{digits[-4:]}"
     return '***'
+
+
+def mask_company_name(name: str) -> str:
+    """Mascara razão social preservando primeiras 2 chars e final.
+
+    Ex: 'Inova Systems Solutions LTDA' → 'In***A'
+    Razão social não é tão sensível quanto CPF, mas é dado identificável
+    de pessoa jurídica e deve ser mascarado em logs por padrão LGPD.
+    """
+    if not name:
+        return '[no-company]'
+    name = name.strip()
+    if len(name) <= 3:
+        return name[0] + '*' * max(1, len(name) - 1)
+    return f"{name[:2]}***{name[-1]}"
