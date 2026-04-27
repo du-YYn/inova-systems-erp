@@ -85,12 +85,7 @@ ALLOWED_CSS_PROPERTIES = frozenset({
     'grid-template-rows', 'grid-gap', 'place-items', 'animation',
 })
 
-ALLOWED_CSS_KEYWORDS = frozenset()  # `inherit`, `initial` cobertos por bleach
-
-_CSS = CSSSanitizer(
-    allowed_css_properties=ALLOWED_CSS_PROPERTIES,
-    allowed_css_keywords=ALLOWED_CSS_KEYWORDS,
-)
+_CSS = CSSSanitizer(allowed_css_properties=ALLOWED_CSS_PROPERTIES)
 
 
 def sanitize_proposal_html(content: bytes | str) -> str:
