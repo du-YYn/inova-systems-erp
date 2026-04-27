@@ -1,4 +1,6 @@
+import logging
 import os
+import warnings
 from pathlib import Path
 from datetime import timedelta
 
@@ -16,21 +18,18 @@ if not SECRET_KEY:
 # Validate required secrets in production (skip in CI)
 _is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
 if not DEBUG and not _is_ci:
+    # ── Fail-fast (boot impossivel sem isso) ─────────────────────────────────
+    # DB_PASSWORD: sem isso, Django nao conecta no Postgres → app inutil.
+    # WEBSITE_API_KEY: usada na auth do form publico do site; sem isso o
+    #   endpoint /api/v1/sales/website-leads/ rejeita tudo. Mantemos hard-fail
+    #   pra forcar configuracao correta (acidentalmente vazio = backdoor aberto).
+    # REDIS_PASSWORD: cache + Celery broker compartilhados sem auth = vetor
+    #   trivial de injecao de tasks Celery + leitura de cache JWT.
     _db_password = os.environ.get('DB_PASSWORD', '')
     if not _db_password:
         raise ValueError('DB_PASSWORD must be set in production')
     if not os.environ.get('WEBSITE_API_KEY'):
         raise ValueError('WEBSITE_API_KEY must be set in production')
-    # F3b: TOTP_ENCRYPTION_KEY obrigatoria em prod. Fernet key base64 32 bytes.
-    # Gerar com: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    if not os.environ.get('TOTP_ENCRYPTION_KEY'):
-        raise ValueError(
-            'TOTP_ENCRYPTION_KEY must be set in production. '
-            'Fernet key base64 32 bytes — deve ficar em env separada do DB.'
-        )
-    # Redis sem password = acesso anônimo ao broker Celery + cache JWT.
-    # Em produção, REDIS_URL deve embutir a senha (redis://:pwd@host:6379/0)
-    # OU a variável REDIS_PASSWORD deve estar definida.
     _redis_url = os.environ.get('REDIS_URL', '')
     _redis_password = os.environ.get('REDIS_PASSWORD', '')
     _redis_has_auth = '@' in _redis_url or bool(_redis_password)
@@ -39,6 +38,26 @@ if not DEBUG and not _is_ci:
             'REDIS_PASSWORD must be set in production '
             '(or embed credentials in REDIS_URL)'
         )
+
+    # ── Soft-required (feature degrada, mas app sobe) ────────────────────────
+    # TOTP_ENCRYPTION_KEY: usada SOMENTE no fluxo 2FA (encrypt/decrypt do
+    # totp_secret). Sem ela:
+    #   - Login sem 2FA continua funcionando (cookie httpOnly, etc).
+    #   - Setup/verify de 2FA falha cedo em accounts/totp_crypto.py com
+    #     ImproperlyConfigured — mensagem clara no response, sem corrupcao.
+    #   - decrypt_totp tem fail-safe para legado plain-text (zero-downtime).
+    # Fail-fast no import bloqueava deploys inteiros so por essa feature —
+    # rollback automatico do CD voltava prod pra commit anterior, mascarando
+    # outras correcoes. Agora a aplicacao sobe e o operador ve o aviso em log.
+    if not os.environ.get('TOTP_ENCRYPTION_KEY'):
+        _msg = (
+            'TOTP_ENCRYPTION_KEY ausente — fluxo 2FA bloqueado ate a env var '
+            'ser definida. Gere com: python -c "from cryptography.fernet '
+            'import Fernet; print(Fernet.generate_key().decode())". App '
+            'continua subindo; demais features funcionam normalmente.'
+        )
+        warnings.warn(_msg, RuntimeWarning, stacklevel=2)
+        logging.getLogger('django').critical('CONFIG: %s', _msg)
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 # Hosts internos do Docker (necessários para proxy Next.js → Django)
