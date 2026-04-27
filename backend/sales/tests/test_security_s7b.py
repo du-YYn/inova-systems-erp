@@ -268,6 +268,63 @@ class TestHtmlSanitizer:
 
 
 @pytest.mark.django_db
+class TestPublicHtmlSanitizedOnTheFly:
+    """F7B.3 (extensao): garante que propostas ANTIGAS — uploadadas antes
+    do deploy do F7B, sem sanitizacao na origem — sao sanitizadas on-the-fly
+    no GET. Sem isso, HTML pre-existente continuaria com tags perigosas mesmo
+    apos o deploy."""
+
+    def test_old_html_with_script_is_sanitized_when_served(
+        self, api_client, proposal,
+    ):
+        # Simula proposta antiga: salva arquivo SEM passar por sanitize.
+        # `.save()` direto no FileField bypassa o upload_pdf — replica o
+        # estado do banco antes do deploy.
+        evil_html = (
+            b'<html><body><h1>Proposta Antiga</h1>'
+            b'<script>fetch("attacker.com")</script>'
+            b'<iframe src="evil.com"></iframe>'
+            b'<a href="javascript:alert(1)">click</a>'
+            b'</body></html>'
+        )
+        proposal.proposal_file = SimpleUploadedFile(
+            'old.html', evil_html, content_type='text/html',
+        )
+        proposal.save()
+
+        # Aponta GET publico
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        served = resp.content
+        # Tags perigosas devem ter sido removidas no serve
+        assert b'<script' not in served
+        assert b'</script>' not in served
+        assert b'<iframe' not in served
+        assert b'javascript:' not in served.lower()
+        # Conteudo legitimo preservado
+        assert b'<h1>Proposta Antiga</h1>' in served
+
+    def test_old_html_keeps_cta_injection_after_sanitize(
+        self, api_client, proposal, onboarding,
+    ):
+        # Mesmo apos sanitizar, os botoes CTA continuam sendo injetados.
+        proposal.proposal_file = SimpleUploadedFile(
+            'old.html', b'<html><body><p>velho</p></body></html>',
+            content_type='text/html',
+        )
+        proposal.save()
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        # Botao "Aceito proposta" injetado com target=_blank (F7B.1)
+        assert b'Aceito proposta de investimento' in resp.content
+        assert b'target="_blank"' in resp.content
+
+
+@pytest.mark.django_db
 class TestUploadMagicBytes:
     URL = '/api/v1/sales/proposals/{id}/upload-pdf/'
 
