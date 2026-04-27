@@ -5,10 +5,13 @@ import os
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
 from rest_framework import status
+from django.db import transaction as db_tx
 from django.http import HttpResponse
 from django.utils import timezone
+
+from core.logging_utils import mask_company_name, mask_email
 from .models import Proposal, ProposalView, ClientOnboarding, Customer
 from .serializers import ClientOnboardingPublicSerializer
 
@@ -19,11 +22,40 @@ class ProposalPublicThrottle(AnonRateThrottle):
     rate = '60/hour'
 
 
+# F7B.5: throttle adicional por token publico. AnonRateThrottle por IP nao
+# protege contra enumeration distribuida — atras de NAT corporativo, varias
+# maquinas compartilham IP. Throttling por token previne abuse focado num
+# unico link (ex.: scraping repetido apos vazamento).
+class _PublicTokenThrottle(SimpleRateThrottle):
+    """Base: cache_key = scope + token-da-URL. Subclasses definem scope+rate."""
+    def get_cache_key(self, request, view):
+        token = view.kwargs.get('token')
+        if not token:
+            return None
+        return f"throttle_{self.scope}_{token}"
+
+
+class ProposalTokenViewThrottle(_PublicTokenThrottle):
+    scope = 'proposal_view'
+    rate = '30/minute'
+
+
+class OnboardingTokenViewThrottle(_PublicTokenThrottle):
+    scope = 'onboarding_view'
+    rate = '30/minute'
+
+
+class OnboardingTokenSubmitThrottle(_PublicTokenThrottle):
+    scope = 'onboarding_submit'
+    rate = '3/hour'
+
+
 class ProposalPublicView(APIView):
     """Retorna metadados da proposta (para tracking)."""
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [ProposalPublicThrottle]
+    # F7B.5: dois layers — IP (anti-fan-out) + token (anti-enumeration focada)
+    throttle_classes = [ProposalPublicThrottle, ProposalTokenViewThrottle]
 
     def get(self, request, token):
         try:
@@ -64,11 +96,12 @@ class ProposalPublicView(APIView):
             proposal.view_count = (proposal.view_count or 0) + 1
             proposal.save(update_fields=['view_count'])
 
+        # F7B.2: nao exponha view_count publicamente — telemetria interna.
+        # Cliente/competidor nao precisa saber engajamento da empresa.
         return Response({
             'number': proposal.number,
             'title': proposal.title,
             'has_file': True,
-            'view_count': proposal.view_count,
         })
 
 
@@ -76,7 +109,7 @@ class ProposalPublicHTMLView(APIView):
     """Serve o arquivo HTML diretamente — renderiza no browser."""
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [ProposalPublicThrottle]
+    throttle_classes = [ProposalPublicThrottle, ProposalTokenViewThrottle]
 
     WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '5541998594938')
 
@@ -116,6 +149,24 @@ class ProposalPublicHTMLView(APIView):
             response['X-Robots-Tag'] = 'noindex, nofollow'
             return response
 
+        # F7B.3 (extensao): sanitizar on-the-fly antes de servir.
+        # - Uploads novos ja sao sanitizados em ProposalViewSet.upload_pdf,
+        #   mas re-sanitizar aqui custa ~1-5ms e e' idempotente (defesa dupla).
+        # - Uploads antigos (pre-deploy F7B) NAO foram sanitizados na origem.
+        #   Esta passagem garante que TODO HTML servido publicamente passe
+        #   pelo bleach, mesmo links emitidos antes da fase de hardening.
+        # - Falha de sanitizacao nao impede o serve — preserva fallback para
+        #   o conteudo cru, ja que o iframe sandbox + CSP restritivo continuam
+        #   bloqueando JS mesmo se o HTML tiver `<script>`.
+        from .html_sanitizer import sanitize_proposal_html
+        try:
+            content = sanitize_proposal_html(content).encode('utf-8')
+        except Exception as exc:
+            logger.warning(
+                'Falha ao sanitizar HTML on-the-fly da proposta %s: %s',
+                proposal.number, exc,
+            )
+
         # HTML — injetar botões CTA no final
         content = self._inject_cta_buttons(content, proposal)
 
@@ -141,7 +192,7 @@ class ProposalPublicHTMLView(APIView):
             except ClientOnboarding.DoesNotExist:
                 pass  # Prospect sem onboarding — botão não aparece
             except Exception as e:
-                logger.warning(f"Erro ao resolver onboarding para proposta {proposal.number}: {e}")
+                logger.warning('Erro ao resolver onboarding para proposta %s: %s', proposal.number, e)
 
         whatsapp_url = (
             f'https://wa.me/{self.WHATSAPP_NUMBER}'
@@ -171,7 +222,7 @@ class ProposalPublicHTMLView(APIView):
         margin: 0 0 28px;
     ">Aceite e preencha o cadastro para darmos início, ou tire suas dúvidas pelo WhatsApp.</p>
     <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-        {f"""<a href="{onboarding_url}" style="
+        {f"""<a href="{onboarding_url}" target="_blank" rel="noopener noreferrer" style="
             display: inline-flex; align-items: center; gap: 8px;
             padding: 14px 32px;
             background: linear-gradient(135deg, #A6864A, #c9a75e);
@@ -228,10 +279,20 @@ class OnboardingPublicThrottle(AnonRateThrottle):
 
 
 class ClientOnboardingPublicView(APIView):
-    """Formulário público de cadastro: GET carrega dados, POST submete."""
+    """Formulário público de cadastro: GET carrega dados, POST submete.
+
+    F7B.5: throttle por token (anti-enumeration) + por IP (anti-flood).
+    POST tem throttle mais agressivo que GET (3/h vs 30/min) — submit
+    e' acao destrutiva, scraping nao deveria conseguir spammar.
+    """
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [OnboardingPublicThrottle]
+
+    def get_throttles(self):
+        # GET: throttle por token de leitura. POST: throttle de submit.
+        if self.request.method == 'POST':
+            return [OnboardingPublicThrottle(), OnboardingTokenSubmitThrottle()]
+        return [OnboardingPublicThrottle(), OnboardingTokenViewThrottle()]
 
     def get(self, request, token):
         try:
@@ -243,6 +304,18 @@ class ClientOnboardingPublicView(APIView):
                 {'error': 'Formulário não encontrado.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # F7B.2: pos-submit, retornar payload minimo. CNPJ/CPF/endereco/telefone
+        # nao saem mais do servidor — so o status pra UI saber se mostra
+        # tela "ja preenchido". Frontend (`onboarding/[token]/page.tsx`)
+        # nao precisa dos campos quando status != 'pending'.
+        if onboarding.status != 'pending':
+            return Response({
+                'public_token': str(onboarding.public_token),
+                'status': onboarding.status,
+                'prospect_company_name': onboarding.prospect.company_name,
+            })
+
         serializer = ClientOnboardingPublicSerializer(onboarding)
         return Response(serializer.data)
 
@@ -263,6 +336,22 @@ class ClientOnboardingPublicView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # F7B.4: rejeitar antes de salvar se onboarding aponta pra customer
+        # diferente do customer do prospect (corrupcao por race ou edicao manual).
+        # Antes, _sync_customer abortava silenciosamente — submit ficava marcado
+        # como submitted sem dados propagados.
+        if (onboarding.customer_id
+                and onboarding.prospect.customer_id
+                and onboarding.customer_id != onboarding.prospect.customer_id):
+            logger.error(
+                'Onboarding %s tem customer_id divergente do prospect — submit recusado.',
+                onboarding.id,
+            )
+            return Response(
+                {'error': 'Inconsistência de dados detectada. Contate o suporte.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         serializer = ClientOnboardingPublicSerializer(
             onboarding, data=request.data, partial=False,
         )
@@ -275,21 +364,40 @@ class ClientOnboardingPublicView(APIView):
         if ip and ',' in ip:
             ip = ip.split(',')[0].strip()
 
-        serializer.save(
-            status='submitted',
-            submitted_at=timezone.now(),
-            ip_address=ip or None,
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
-        )
+        # F7B.4: submit + _sync_customer numa unica transacao. Antes, sync
+        # falhava silenciosamente em logger.warning enquanto o response retornava
+        # `{success: True}` — onboarding ficava submitted mas Customer fora de
+        # sincronia. Agora, falha em sync rola back tudo e retorna 500 explicito.
+        try:
+            with db_tx.atomic():
+                serializer.save(
+                    status='submitted',
+                    submitted_at=timezone.now(),
+                    ip_address=ip or None,
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
+                )
+                self._sync_customer(onboarding)
+        except Exception as exc:
+            logger.exception(
+                'Onboarding %s: falha durante submit/sync, rollback aplicado: %s',
+                onboarding.id, exc,
+            )
+            return Response(
+                {'error': 'Erro ao processar cadastro. Tente novamente em instantes.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        # Atualizar Customer com os dados do formulário
-        self._sync_customer(onboarding)
+        # Notificacoes/emails ficam fora da transacao — sao side effects que
+        # nao devem reverter o submit se o broker estiver indisponivel.
+        try:
+            self._notify_team(onboarding)
+        except Exception as exc:
+            logger.warning('Onboarding %s: notify_team falhou: %s', onboarding.id, exc)
 
-        # Notificar equipe (in-app)
-        self._notify_team(onboarding)
-
-        # Enviar emails (isolados — cada um para o destinatário correto)
-        self._send_onboarding_emails(onboarding)
+        try:
+            self._send_onboarding_emails(onboarding)
+        except Exception as exc:
+            logger.warning('Onboarding %s: send_emails falhou: %s', onboarding.id, exc)
 
         return Response(
             {'success': True, 'message': 'Dados recebidos com sucesso!'},
@@ -298,67 +406,58 @@ class ClientOnboardingPublicView(APIView):
 
     @staticmethod
     def _sync_customer(onboarding):
-        """Atualiza o Customer vinculado com os dados do onboarding (com lock)."""
-        from django.db import transaction as db_tx
+        """Atualiza o Customer vinculado com os dados do onboarding (com lock).
 
-        try:
-            # Determinar qual customer atualizar
-            customer_id = onboarding.customer_id
-            if not customer_id:
-                prospect_customer = getattr(onboarding.prospect, 'customer', None)
-                if prospect_customer:
-                    customer_id = prospect_customer.id
-            if not customer_id:
-                return
+        F7B.4: chamada ja roda dentro de transacao. Se algo falha, propaga
+        a Exception pro caller fazer rollback do submit. Antes, qualquer
+        erro virava `logger.warning` e o submit ficava marcado como
+        completo mesmo com dados nao sincronizados.
+        """
+        # Determinar qual customer atualizar
+        customer_id = onboarding.customer_id
+        if not customer_id:
+            prospect_customer = getattr(onboarding.prospect, 'customer', None)
+            if prospect_customer:
+                customer_id = prospect_customer.id
+        if not customer_id:
+            # Sem customer ainda — onboarding sera vinculado ao fechar o lead.
+            # Nao e' erro.
+            return
 
-            # Validar integridade: se ambos existem, devem ser o mesmo
-            if (onboarding.customer_id
-                    and onboarding.prospect.customer_id
-                    and onboarding.customer_id != onboarding.prospect.customer_id):
-                logger.warning(
-                    f"Onboarding {onboarding.id}: customer_id ({onboarding.customer_id}) "
-                    f"difere do prospect.customer_id ({onboarding.prospect.customer_id}). "
-                    f"Sync cancelado para evitar corrupção."
-                )
-                return
+        # Lock no customer para evitar race com edicao concorrente.
+        customer = Customer.objects.select_for_update().get(id=customer_id)
 
-            # Lock no customer para evitar race condition
-            with db_tx.atomic():
-                customer = Customer.objects.select_for_update().get(id=customer_id)
+        # Montar endereço completo da empresa
+        addr_parts = [onboarding.company_street]
+        if onboarding.company_number:
+            addr_parts.append(onboarding.company_number)
+        if onboarding.company_complement:
+            addr_parts.append(f'- {onboarding.company_complement}')
+        if onboarding.company_neighborhood:
+            addr_parts.append(f'- {onboarding.company_neighborhood}')
 
-                # Montar endereço completo da empresa
-                addr_parts = [onboarding.company_street]
-                if onboarding.company_number:
-                    addr_parts.append(onboarding.company_number)
-                if onboarding.company_complement:
-                    addr_parts.append(f'- {onboarding.company_complement}')
-                if onboarding.company_neighborhood:
-                    addr_parts.append(f'- {onboarding.company_neighborhood}')
+        customer.company_name = onboarding.company_legal_name
+        customer.document = onboarding.company_cnpj
+        customer.address = ', '.join(addr_parts)
+        customer.city = onboarding.company_city
+        customer.state = onboarding.company_state
+        customer.cep = onboarding.company_cep
+        customer.save(update_fields=[
+            'company_name', 'document', 'address',
+            'city', 'state', 'cep', 'updated_at',
+        ])
 
-                customer.company_name = onboarding.company_legal_name
-                customer.document = onboarding.company_cnpj
-                customer.address = ', '.join(addr_parts)
-                customer.city = onboarding.company_city
-                customer.state = onboarding.company_state
-                customer.cep = onboarding.company_cep
-                customer.save(update_fields=[
-                    'company_name', 'document', 'address',
-                    'city', 'state', 'cep', 'updated_at',
-                ])
+        # Vincular onboarding ao customer se ainda não estiver
+        if not onboarding.customer_id:
+            onboarding.customer = customer
+            onboarding.save(update_fields=['customer'])
 
-                # Vincular onboarding ao customer se ainda não estiver
-                if not onboarding.customer_id:
-                    onboarding.customer = customer
-                    onboarding.save(update_fields=['customer'])
-
-            logger.info(
-                f"Customer {customer_id} atualizado via onboarding "
-                f"{onboarding.id} ({onboarding.company_legal_name})"
-            )
-        except Customer.DoesNotExist:
-            logger.warning(f"Customer {customer_id} não encontrado para onboarding {onboarding.id}")
-        except Exception as e:
-            logger.warning(f"Erro ao sincronizar customer via onboarding: {e}")
+        # F7B.5: nao logar razao social/CNPJ em texto-plano. Apenas IDs.
+        logger.info(
+            'Customer %s atualizado via onboarding %s (empresa: %s)',
+            customer_id, onboarding.id,
+            mask_company_name(onboarding.company_legal_name),
+        )
 
     @staticmethod
     def _send_onboarding_emails(onboarding):
@@ -372,6 +471,10 @@ class ClientOnboardingPublicView(APIView):
                 'nome_representante': onboarding.rep_full_name,
                 'empresa': onboarding.company_legal_name,
             })
+            logger.info(
+                'Onboarding %s: email cliente enfileirado para %s',
+                onboarding.id, mask_email(client_email),
+            )
 
         # Email 2 → SOMENTE a equipe Inova (admins/managers)
         from django.contrib.auth import get_user_model
@@ -379,6 +482,7 @@ class ClientOnboardingPublicView(APIView):
         team_emails = User.objects.filter(
             role__in=['admin', 'manager'], is_active=True,
         ).values_list('email', flat=True)
+        team_count = 0
         for email in team_emails:
             if email:
                 send_template_email.delay('onboarding_submitted_team', email, {
@@ -386,35 +490,41 @@ class ClientOnboardingPublicView(APIView):
                     'nome_representante': onboarding.rep_full_name,
                     'cnpj': onboarding.company_cnpj,
                 })
+                team_count += 1
+        if team_count:
+            logger.info(
+                'Onboarding %s: email equipe enfileirado para %s admin/manager',
+                onboarding.id, team_count,
+            )
 
     @staticmethod
     def _notify_team(onboarding):
         """Cria notificações para a equipe sobre o preenchimento."""
-        try:
-            from notifications.models import Notification
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
+        from notifications.models import Notification
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
 
-            recipients = User.objects.filter(
-                role__in=['admin', 'manager'], is_active=True,
+        recipients = User.objects.filter(
+            role__in=['admin', 'manager'], is_active=True,
+        )
+        if onboarding.prospect.assigned_to_id:
+            recipients = recipients | User.objects.filter(
+                id=onboarding.prospect.assigned_to_id,
             )
-            if onboarding.prospect.assigned_to_id:
-                recipients = recipients | User.objects.filter(
-                    id=onboarding.prospect.assigned_to_id,
-                )
 
-            for user in recipients.distinct():
-                Notification.objects.create(
-                    user=user,
-                    notification_type='general',
-                    title=f'Cadastro recebido — {onboarding.prospect.company_name}',
-                    message=f'{onboarding.rep_full_name} preencheu o formulário de cadastro.',
-                    object_type='onboarding',
-                    object_id=onboarding.id,
-                )
-            logger.info(
-                f"Notificações de onboarding {onboarding.id} enviadas "
-                f"para {recipients.distinct().count()} usuários"
+        # Titulo/mensagem da notificacao IN-APP podem mostrar dados — sao
+        # vistos por usuarios autenticados. Apenas o LOG e' que nao deve
+        # vazar PII em texto-plano.
+        for user in recipients.distinct():
+            Notification.objects.create(
+                user=user,
+                notification_type='general',
+                title=f'Cadastro recebido — {onboarding.prospect.company_name}',
+                message=f'{onboarding.rep_full_name} preencheu o formulário de cadastro.',
+                object_type='onboarding',
+                object_id=onboarding.id,
             )
-        except Exception as e:
-            logger.warning(f"Erro ao notificar equipe sobre onboarding {onboarding.id}: {e}")
+        logger.info(
+            'Notificacoes de onboarding %s enviadas para %s usuarios',
+            onboarding.id, recipients.distinct().count(),
+        )

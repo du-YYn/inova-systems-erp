@@ -1072,18 +1072,64 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='upload-pdf')
     def upload_pdf(self, request, pk=None):
-        """Upload de arquivo da proposta (HTML ou PDF)."""
+        """Upload de arquivo da proposta (HTML ou PDF).
+
+        F7B.3: HTML eh sanitizado server-side com bleach antes de salvar
+        (allow-list de tags/atributos/schemes). Magic bytes sao verificados
+        para impedir bypass por extensao trocada.
+        """
         import uuid
+        from django.core.files.base import ContentFile
+        from .html_sanitizer import sanitize_proposal_html
+
         proposal = self.get_object()
         file = request.FILES.get('proposal_file')
         if not file:
             return Response({'error': 'Nenhum arquivo.'}, status=status.HTTP_400_BAD_REQUEST)
         if file.size > 10 * 1024 * 1024:
             return Response({'error': 'Máximo 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
-        allowed = ('.html', '.htm', '.pdf')
-        if not file.name.lower().endswith(allowed):
+
+        name_lower = file.name.lower()
+        is_pdf_ext = name_lower.endswith('.pdf')
+        is_html_ext = name_lower.endswith(('.html', '.htm'))
+        if not (is_pdf_ext or is_html_ext):
             return Response({'error': 'Apenas HTML ou PDF.'}, status=status.HTTP_400_BAD_REQUEST)
-        proposal.proposal_file = file
+
+        # F7B.3: validar magic bytes para impedir `evil.html` que e' na verdade
+        # binario / SVG / outro formato. Le primeiros 8 bytes, depois rebobina.
+        head = file.read(8)
+        file.seek(0)
+
+        if is_pdf_ext:
+            if not head.startswith(b'%PDF-'):
+                return Response(
+                    {'error': 'Arquivo PDF invalido (magic bytes nao conferem).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            proposal.proposal_file = file
+        else:  # HTML
+            # Magic bytes "soft": HTML pode comecar com BOM, espacos, comentario
+            # ou tag. Rejeita binarios obvios (bytes nulos/control sequences
+            # tipicas de formatos binarios).
+            if b'\x00' in head or head.startswith((b'\x89PNG', b'GIF8', b'\xff\xd8\xff', b'PK')):
+                return Response(
+                    {'error': 'Arquivo HTML invalido (parece binario).'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Sanitizar com bleach antes de salvar.
+            raw = file.read()
+            file.seek(0)
+            try:
+                cleaned = sanitize_proposal_html(raw)
+            except Exception as exc:
+                logger.warning('upload_pdf: falha ao sanitizar HTML da proposta %s: %s', proposal.number, exc)
+                return Response(
+                    {'error': 'Erro ao processar HTML.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            proposal.proposal_file = ContentFile(cleaned.encode('utf-8'), name=file.name)
+
         if not proposal.public_token:
             proposal.public_token = uuid.uuid4()
         proposal.save(update_fields=['proposal_file', 'public_token'])
@@ -1137,6 +1183,34 @@ class ProposalViewSet(viewsets.ModelViewSet):
             'ip_address': v.ip_address,
             'user_agent': v.user_agent[:100],
         } for v in views])
+
+    @action(detail=True, methods=['post'], url_path='regenerate-token',
+            permission_classes=[IsAdminOrManagerOrOperatorStrict])
+    def regenerate_token(self, request, pk=None):
+        """Rotaciona o public_token da proposta (F7B.6).
+
+        Use quando o link publico vazou ou foi compartilhado por engano.
+        Invalida imediatamente o link antigo — qualquer GET com o token
+        velho passa a retornar 404. Acao auditada.
+        """
+        import uuid
+        proposal = self.get_object()
+        old_token = str(proposal.public_token) if proposal.public_token else None
+        proposal.public_token = uuid.uuid4()
+        proposal.save(update_fields=['public_token'])
+
+        log_audit(
+            request.user, 'regenerate_proposal_token', 'proposal', proposal.id,
+            details=f'old={old_token[:8] + "..." if old_token else "none"}',
+        )
+        logger.info(
+            'Proposta %s: token rotacionado por %s',
+            proposal.number, request.user.username,
+        )
+        return Response({
+            'public_token': str(proposal.public_token),
+            'message': 'Token regenerado. Link antigo invalidado.',
+        })
 
 
 @extend_schema(tags=['sales'])
