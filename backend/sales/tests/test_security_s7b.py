@@ -278,8 +278,8 @@ class TestF7B4SanitizerCoverage:
         assert '<script' not in result
 
     def test_reveal_fix_css_injected_when_script_removed(self):
-        """Quando removemos um <script>, injetamos CSS reveal-fix antes de
-        </body> (ou no fim) pra neutralizar 'hide com CSS, mostra com JS'."""
+        """Quando removemos um <script>, injetamos CSS reveal-fix pra
+        neutralizar 'hide com CSS, mostra com JS'."""
         html = (
             '<html><body>'
             '<style>.hidden{opacity:0}</style>'
@@ -289,13 +289,15 @@ class TestF7B4SanitizerCoverage:
             '</body></html>'
         )
         result = sanitize_proposal_html(html)
-        # Reveal-fix injetado
+        # Reveal-fix injetado com marker identificavel
         assert 'data-injected="reveal-fix"' in result
         # Cobre os patterns mais comuns
         assert '.hidden' in result and '!important' in result
         assert '[data-aos]' in result
-        # Posicao correta: antes de </body>
-        assert result.index('data-injected="reveal-fix"') < result.index('</body>')
+        # Reveal-fix vem DEPOIS do conteudo (apendado no fim — bleach strippa
+        # <body>/<html> do fragmento, entao a posicao relativa e' garantida
+        # pelo append no final). Verificar que o conteudo precede o fix:
+        assert result.index('Features') < result.index('data-injected="reveal-fix"')
 
     def test_reveal_fix_NOT_injected_when_no_script(self):
         """Sem <script> no input, nao injeta CSS extra (evita bloat)."""
