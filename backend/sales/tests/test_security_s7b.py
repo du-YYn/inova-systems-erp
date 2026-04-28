@@ -237,6 +237,263 @@ class TestHtmlSanitizer:
         assert '<object' not in result
         assert '<embed' not in result
 
+
+# ─── F7B.4: Cobertura de templates modernos ──────────────────────────────────
+
+
+class TestF7B4SanitizerCoverage:
+    """Cobre os gaps achados na auditoria — templates de marketing modernos
+    que estavam sendo mutilados pelo sanitizer original."""
+
+    def test_script_pre_strip_removes_js_from_text(self):
+        """F7B.4 fix: bleach com strip=True deixava o JS aparecer como TEXTO
+        depois de remover a tag. Agora pre-process remove o bloco completo."""
+        html = (
+            '<section><h1>Hero</h1></section>'
+            '<script>document.querySelectorAll(".section").forEach(s=>s.classList.add("v"))</script>'
+            '<section>Features</section>'
+        )
+        result = sanitize_proposal_html(html)
+        # Nem tag nem conteudo JS sobreviveram
+        assert '<script' not in result
+        assert 'querySelectorAll' not in result
+        assert 'document.' not in result
+        # Conteudo das secoes preservado
+        assert '<h1>Hero</h1>' in result
+        assert '>Features<' in result
+
+    def test_noscript_block_stripped(self):
+        """<noscript> tambem e' pre-strip — irrelevante na nossa arquitetura
+        (iframe sandbox sempre bloqueia JS)."""
+        html = '<section>OK</section><noscript>JS desligado</noscript>'
+        result = sanitize_proposal_html(html)
+        assert '<noscript' not in result
+        assert 'JS desligado' not in result
+        assert '<section>OK</section>' in result
+
+    def test_script_orphan_open_tag_stripped(self):
+        """Tag <script> sem fechamento (orfa) tambem e' removida."""
+        html = '<section><script src="x.js"></section>'
+        result = sanitize_proposal_html(html)
+        assert '<script' not in result
+
+    def test_reveal_fix_css_injected_when_script_removed(self):
+        """Quando removemos um <script>, injetamos CSS reveal-fix antes de
+        </body> (ou no fim) pra neutralizar 'hide com CSS, mostra com JS'."""
+        html = (
+            '<html><body>'
+            '<style>.hidden{opacity:0}</style>'
+            '<script>$(".hidden").show()</script>'
+            '<section>Hero</section>'
+            '<section class="hidden">Features</section>'
+            '</body></html>'
+        )
+        result = sanitize_proposal_html(html)
+        # Reveal-fix injetado
+        assert 'data-injected="reveal-fix"' in result
+        # Cobre os patterns mais comuns
+        assert '.hidden' in result and '!important' in result
+        assert '[data-aos]' in result
+        # Posicao correta: antes de </body>
+        assert result.index('data-injected="reveal-fix"') < result.index('</body>')
+
+    def test_reveal_fix_NOT_injected_when_no_script(self):
+        """Sem <script> no input, nao injeta CSS extra (evita bloat)."""
+        html = '<html><body><section>Hero</section></body></html>'
+        result = sanitize_proposal_html(html)
+        assert 'data-injected="reveal-fix"' not in result
+
+    def test_svg_inline_preserved(self):
+        """SVG inline (icones, ilustracoes) preservado com viewBox + path d."""
+        html = (
+            '<section><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">'
+            '<path d="M5 12h14" stroke="#000" stroke-width="2"/>'
+            '<circle cx="12" cy="12" r="10"/>'
+            '</svg></section>'
+        )
+        result = sanitize_proposal_html(html)
+        assert '<svg' in result
+        assert 'viewBox=' in result
+        assert '<path' in result
+        assert 'd="M5 12h14"' in result
+        assert '<circle' in result
+        assert 'cx="12"' in result
+
+    def test_picture_source_responsive_images_preserved(self):
+        """<picture> + <source> (imagens responsivas) preservados."""
+        html = (
+            '<picture>'
+            '<source media="(min-width:600px)" srcset="big.jpg">'
+            '<source media="(min-width:300px)" srcset="med.jpg">'
+            '<img src="small.jpg" alt="" loading="lazy" decoding="async">'
+            '</picture>'
+        )
+        result = sanitize_proposal_html(html)
+        assert '<picture>' in result
+        assert '<source' in result
+        assert 'srcset=' in result
+        assert 'media=' in result
+        assert 'loading="lazy"' in result
+        assert 'decoding="async"' in result
+
+    def test_data_attrs_preserved(self):
+        """data-* preservados — inertes sem JS, seguros."""
+        html = (
+            '<section data-aos="fade-up" data-delay="200" data-custom-x="y">'
+            '<h1 data-text="hero">Hero</h1></section>'
+        )
+        result = sanitize_proposal_html(html)
+        assert 'data-aos="fade-up"' in result
+        assert 'data-delay="200"' in result
+        assert 'data-custom-x="y"' in result
+        assert 'data-text="hero"' in result
+
+    def test_aria_attrs_preserved(self):
+        """aria-* preservados (acessibilidade) em tags que ficam na allow-list.
+        button nao e' permitido (forms ficam fora), mas section/div sim."""
+        html = '<section role="banner" aria-label="hero" aria-hidden="false">x</section>'
+        result = sanitize_proposal_html(html)
+        assert 'role="banner"' in result
+        assert 'aria-label="hero"' in result
+        assert 'aria-hidden="false"' in result
+
+    def test_css_variables_inline_preserved(self):
+        """CSS variables (--*) em inline style preservadas — def E reference."""
+        html = (
+            '<section style="--bg: #fff; --pad: 2rem; '
+            'background: var(--bg); padding: var(--pad)">x</section>'
+        )
+        result = sanitize_proposal_html(html)
+        assert '--bg' in result
+        assert '--pad' in result
+        assert 'var(--bg)' in result
+        assert 'var(--pad)' in result
+
+    def test_modern_css_properties_preserved(self):
+        """Propriedades CSS modernas (aspect-ratio, gap, filter, etc) preservadas."""
+        html = (
+            '<section style="aspect-ratio: 16/9; gap: 2rem; '
+            'filter: brightness(1.1); backdrop-filter: blur(10px); '
+            'inset: 0; place-items: center; clip-path: inset(0)">x</section>'
+        )
+        result = sanitize_proposal_html(html)
+        for prop in (
+            'aspect-ratio', 'gap', 'filter', 'backdrop-filter',
+            'inset', 'place-items', 'clip-path',
+        ):
+            assert prop in result, f'Propriedade {prop} foi removida do CSS'
+
+    def test_keyframes_animations_preserved(self):
+        """@keyframes + animation em <style> preservados."""
+        html = (
+            '<style>'
+            '@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }'
+            '.box { animation: fadeIn 1s ease forwards }'
+            '</style>'
+            '<div class="box">x</div>'
+        )
+        result = sanitize_proposal_html(html)
+        assert '@keyframes fadeIn' in result
+        assert 'animation:' in result.replace(' ', '')
+
+    def test_media_queries_preserved(self):
+        """@media queries preservadas pra responsividade funcionar."""
+        html = (
+            '<style>'
+            '@media (min-width: 768px) { .grid { display: grid } }'
+            '@media (max-width: 480px) { .hidden-mobile { display: none } }'
+            '</style>'
+            '<div class="grid hidden-mobile">x</div>'
+        )
+        result = sanitize_proposal_html(html)
+        assert '@media' in result
+        assert 'min-width' in result
+        assert 'max-width' in result
+
+    def test_event_handlers_stripped(self):
+        """on* handlers continuam removidos (segurança)."""
+        html = '<a href="x" onclick="alert(1)" onmouseover="x()">click</a>'
+        result = sanitize_proposal_html(html)
+        assert 'onclick' not in result
+        assert 'onmouseover' not in result
+        assert '<a' in result and '>click</a>' in result
+
+    def test_javascript_scheme_stripped(self):
+        """javascript: e vbscript: continuam removidos."""
+        html = (
+            '<a href="javascript:alert(1)">x</a>'
+            '<a href="vbscript:msgbox(1)">y</a>'
+            '<a href="https://safe.com">z</a>'
+        )
+        result = sanitize_proposal_html(html)
+        assert 'javascript:' not in result.lower()
+        assert 'vbscript:' not in result.lower()
+        # Link seguro preservado
+        assert 'https://safe.com' in result
+
+    def test_data_uri_blocked(self):
+        """data: URI continua bloqueada (vetor de injection histórico)."""
+        html = '<img src="data:text/html,<svg/onload=alert(1)>">'
+        result = sanitize_proposal_html(html)
+        assert 'data:' not in result
+
+    def test_full_landing_page_smoke_test(self):
+        """End-to-end: input com hero + features escondidas → output com tudo
+        renderizavel (sem JS, mas com reveal-fix CSS injetado)."""
+        html = '''<!DOCTYPE html>
+<html>
+<head>
+<title>Proposta</title>
+<style>
+:root { --primary: #A6864A; --gap: 2rem }
+.hidden-on-load { opacity: 0 }
+@media (min-width: 768px) { .grid { display: grid; gap: var(--gap) } }
+</style>
+</head>
+<body>
+<section class="hero" style="background: var(--primary)">
+  <h1>Hero — sempre visivel</h1>
+  <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+</section>
+<script>
+document.querySelectorAll('.hidden-on-load').forEach(el => {
+  el.style.opacity = '1';
+});
+</script>
+<section class="hidden-on-load grid" data-aos="fade-up">
+  <h2>Features — escondida via JS</h2>
+  <picture>
+    <source media="(min-width:600px)" srcset="big.jpg">
+    <img src="small.jpg" alt="">
+  </picture>
+</section>
+<section class="hidden-on-load" data-animation="slide-up">
+  <h2>Pricing — tambem escondida</h2>
+</section>
+</body>
+</html>'''
+        result = sanitize_proposal_html(html)
+
+        # Hero intacto
+        assert 'Hero — sempre visivel' in result
+        # Features e Pricing presentes (texto preservado)
+        assert 'Features — escondida via JS' in result
+        assert 'Pricing — tambem escondida' in result
+        # SVG inline preservado
+        assert '<svg' in result and 'd="M5 12h14"' in result
+        # Picture/source preservados
+        assert '<picture>' in result and '<source' in result
+        # CSS vars preservadas
+        assert '--primary' in result
+        # Script removido completamente
+        assert '<script' not in result
+        assert 'querySelectorAll' not in result
+        # Reveal-fix CSS injetado pra mostrar `.hidden-on-load`/`data-aos`/`data-animation`
+        assert 'data-injected="reveal-fix"' in result
+        # Data attrs preservados
+        assert 'data-aos="fade-up"' in result
+        assert 'data-animation="slide-up"' in result
+
     def test_strips_event_handlers(self):
         html = '<html><body><p onclick="alert(1)" onmouseover="x()">Ola</p></body></html>'
         result = sanitize_proposal_html(html)
