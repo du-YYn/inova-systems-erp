@@ -3,6 +3,11 @@ name: CD — Deploy to Production
 on:
   push:
     branches: [main]
+  # Permite re-disparar o deploy manualmente sem precisar de novo commit.
+  # Útil quando o CD passou (containers Started) mas algum servico nao
+  # ficou listening na porta esperada — caso classico do frontend Next.js
+  # subir mas Easypanel/Traefik nao registrar a rota a tempo.
+  workflow_dispatch:
 
 # Princípio do menor privilégio — deploy via SSH não precisa escrever no repo.
 permissions:
@@ -43,8 +48,9 @@ jobs:
             # ficar healthy — o diagnóstico abaixo precisa rodar para capturar o log.
             docker compose up -d --build --remove-orphans || echo "⚠ docker compose up retornou erro — prosseguindo para diagnóstico"
 
-            # Smoke test com retry — 18 tentativas × 5s = 90s total (comporta migrations mais pesadas)
-            echo "Executando smoke test (até 90s)..."
+            # ── Smoke test 1/2: BACKEND ──────────────────────────────────
+            # 18 tentativas × 5s = 90s (comporta migrations mais pesadas).
+            echo "Smoke test backend (até 90s)..."
             SUCCESS=false
             for i in $(seq 1 18); do
               HTTP_STATUS=$(docker compose exec -T backend curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ 2>/dev/null || echo "000")
@@ -55,6 +61,32 @@ jobs:
               echo "Tentativa $i/18 — HTTP $HTTP_STATUS — aguardando..."
               sleep 5
             done
+
+            # ── Smoke test 2/2: FRONTEND ──────────────────────────────────
+            # Anteriormente, frontend caia em crash loop pos-rebuild mas o CD
+            # marcava "success" porque so checava backend. Resultado: subdominio
+            # proposta.* devolvia ERR_CONNECTION_REFUSED em prod por causa do
+            # Traefik nao achando upstream listening. Esta segunda checagem
+            # garante que Next.js esta de fato respondendo na porta 3000 antes
+            # do CD declarar deploy ok.
+            FRONTEND_OK=false
+            if [ "$SUCCESS" = "true" ]; then
+              echo "Smoke test frontend (até 60s)..."
+              for i in $(seq 1 12); do
+                # Acessamos uma rota leve que nao depende de auth nem do backend.
+                FE_STATUS=$(docker compose exec -T frontend wget -q -O /dev/null -S http://localhost:3000/ 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
+                # Aceita 200 ou 307 (redirect comum em SSR) ou 404 (rota raiz pode nao existir mas servidor responde).
+                case "$FE_STATUS" in
+                  200|301|302|307|308|404) FRONTEND_OK=true; break ;;
+                esac
+                echo "Tentativa frontend $i/12 — HTTP $FE_STATUS — aguardando..."
+                sleep 5
+              done
+              if [ "$FRONTEND_OK" != "true" ]; then
+                echo "⚠ Frontend nao respondeu em 60s — marcando deploy como falho."
+                SUCCESS=false
+              fi
+            fi
 
             if [ "$SUCCESS" != "true" ]; then
               echo ""
@@ -74,8 +106,14 @@ jobs:
               echo "--- Últimos 30 logs do postgres ---"
               docker compose logs postgres --tail 30 2>&1 || true
               echo ""
-              echo "--- Health endpoint (última tentativa) ---"
+              echo "--- Últimos 100 logs do frontend ---"
+              docker compose logs frontend --tail 100 2>&1 || true
+              echo ""
+              echo "--- Health endpoint backend (última tentativa) ---"
               docker compose exec -T backend curl -v http://localhost:8000/api/v1/core/health/ 2>&1 || true
+              echo ""
+              echo "--- Frontend listener (última tentativa) ---"
+              docker compose exec -T frontend wget -O - http://localhost:3000/ 2>&1 | head -20 || true
               echo "=============================================="
               echo ""
 
