@@ -224,6 +224,10 @@ SIMPLE_JWT = {
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
 JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
 JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com em prod
+# F7B.5: cookie e' httpOnly (JS nao acessa) + iframe da proposta e' sandbox
+# null-origin (sem allow-same-origin). Mesmo com COOKIE_DOMAIN amplo,
+# JS no iframe da proposta NAO consegue ler/usar o cookie de auth.
+# Exfiltracao via fetch tambem bloqueada por CSP connect-src 'none'.
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
