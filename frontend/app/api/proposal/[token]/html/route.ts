@@ -28,11 +28,27 @@ export async function GET(
       );
       if (res.ok) {
         const html = await res.text();
+        // F7B.5: JS inline liberado mas sem hosts em script-src (script
+        // remoto bloqueado pelo browser). connect-src 'none' impede
+        // exfiltracao via fetch/XHR/WebSocket/sendBeacon. Combinado com
+        // iframe sandbox null-origin (sem allow-same-origin) no parent.
+        const csp = [
+          "default-src 'none'",
+          "script-src 'unsafe-inline' 'unsafe-eval'",
+          "style-src 'unsafe-inline' https: data:",
+          "font-src https: data:",
+          "img-src https: data: blob:",
+          "media-src https: data:",
+          "connect-src 'none'",
+          "frame-ancestors 'self'",
+          "base-uri 'none'",
+          "form-action 'none'",
+        ].join('; ');
         return new NextResponse(html, {
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Content-Security-Policy': "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;",
+            'Content-Security-Policy': csp,
             'X-Content-Type-Options': 'nosniff',
             'X-XSS-Protection': '1; mode=block',
             'Cache-Control': 'no-store, no-cache',

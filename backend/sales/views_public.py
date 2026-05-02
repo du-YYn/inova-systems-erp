@@ -171,7 +171,27 @@ class ProposalPublicHTMLView(APIView):
         content = self._inject_cta_buttons(content, proposal)
 
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
-        csp = "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;"
+        # F7B.5: JS inline e' permitido (`'unsafe-inline'`), mas:
+        #  - `script-src` SEM hosts -> JS remoto (script src=...) nao carrega
+        #  - `connect-src 'none'` -> JS nao consegue exfiltrar dados
+        #    (fetch/XHR/WebSocket/sendBeacon/EventSource bloqueados)
+        #  - `frame-ancestors 'self'` -> so o /p/{token} pode embedar
+        #  - `base-uri 'none'` + `form-action 'none'` -> sem hijack de URLs
+        # Combinado com iframe sandbox null-origin (sem allow-same-origin),
+        # JS pode animar mas nao pode acessar cookies/localStorage do parent
+        # nem mandar dados pra fora.
+        csp = (
+            "default-src 'none'; "
+            "script-src 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'unsafe-inline' https: data:; "
+            "font-src https: data:; "
+            "img-src https: data: blob:; "
+            "media-src https: data:; "
+            "connect-src 'none'; "
+            "frame-ancestors 'self'; "
+            "base-uri 'none'; "
+            "form-action 'none';"
+        )
         response['Content-Security-Policy'] = csp
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-XSS-Protection'] = '1; mode=block'

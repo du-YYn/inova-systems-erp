@@ -35,18 +35,25 @@ export default function ProposalPublicPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  // F7B (M2): iframe com `src` (nao `srcDoc`) — preserva o CSP que o backend
-  // retorna em /api/proposal/[token]/html. Com srcDoc o documento herda o CSP
-  // da pagina pai, que e' mais permissivo. Sandbox sem `allow-same-origin`
-  // mantem o iframe em origin nulo (sem acesso a cookies/localStorage do ERP).
-  // `allow-popups` + `allow-popups-to-escape-sandbox` permite que botoes CTA
-  // com target="_blank" abram em nova aba (corrige bug F7B.1 do "Aceito proposta").
+  // F7B (M2) + F7B.5: iframe com `src` (nao `srcDoc`) — preserva o CSP que
+  // o backend retorna. Sandbox SEM `allow-same-origin` mantem o iframe em
+  // origin nulo (no acesso a cookies/localStorage do parent / ERP).
+  //
+  // F7B.5: `allow-scripts` libera JS necessario para animacoes e
+  // posicionamento dinamico nos templates de proposta. Combinado com
+  // origin nulo + CSP `connect-src 'none'`, o JS pode animar mas nao
+  // exfiltra dados nem acessa estado do parent.
+  //
+  // `allow-popups` + `allow-popups-to-escape-sandbox` permite CTAs com
+  // target="_blank" abrirem em nova aba. NAO adicionar `allow-forms`,
+  // `allow-top-navigation`, `allow-modals` — aumentaria superficie sem
+  // necessidade (propostas nao tem forms nativos, navegam via <a>).
   if (!loading && !error) {
     return (
       <iframe
         title="Proposta"
         src={`/api/proposal/${token}/html`}
-        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         style={{ width: '100vw', height: '100vh', border: 'none', display: 'block' }}
       />
     );

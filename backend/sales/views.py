@@ -1074,10 +1074,14 @@ class ProposalViewSet(viewsets.ModelViewSet):
     def upload_pdf(self, request, pk=None):
         """Upload de arquivo da proposta (HTML ou PDF).
 
-        F7B.3: HTML eh sanitizado server-side com bleach antes de salvar
+        F7B.3: HTML eh sanitizado server-side com bleach antes de salvar.
+        F7B.5: HTML pode conter <script> inline (executa no iframe
+        sandbox null-origin). Audit log registra hash do arquivo +
+        usuario para rastreabilidade.
         (allow-list de tags/atributos/schemes). Magic bytes sao verificados
         para impedir bypass por extensao trocada.
         """
+        import hashlib
         import uuid
         from django.core.files.base import ContentFile
         from .html_sanitizer import sanitize_proposal_html
@@ -1133,6 +1137,29 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if not proposal.public_token:
             proposal.public_token = uuid.uuid4()
         proposal.save(update_fields=['proposal_file', 'public_token'])
+
+        # F7B.5: auditoria do upload — hash SHA-256 do conteudo final
+        # (PDF: bytes brutos; HTML: ja sanitizado). Permite rastrear se
+        # o mesmo arquivo foi reutilizado e identificar quem subiu.
+        try:
+            proposal.proposal_file.open('rb')
+            file_bytes = proposal.proposal_file.read()
+            proposal.proposal_file.close()
+            file_sha256 = hashlib.sha256(file_bytes).hexdigest()
+        except Exception:
+            file_sha256 = 'unknown'
+
+        log_audit(
+            request.user, 'upload_proposal_file', 'proposal', proposal.id,
+            details=f"kind={'pdf' if is_pdf_ext else 'html'} size={file.size} sha256={file_sha256[:16]}",
+            new_value={
+                'filename': file.name,
+                'size_bytes': file.size,
+                'sha256': file_sha256,
+                'kind': 'pdf' if is_pdf_ext else 'html',
+            },
+            request=request,
+        )
 
         # Auto-criar onboarding para o prospect (gera link de cadastro)
         # Cria mesmo sem customer — será vinculado ao fechar o lead
