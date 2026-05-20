@@ -290,7 +290,26 @@ class ProspectViewSet(viewsets.ModelViewSet):
         log_crm_activity(prospect, 'lead_created', f'Lead recebido — {prospect.company_name}', self.request.user)
 
     def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
         old_status = serializer.instance.status if serializer.instance else None
+        new_status = serializer.validated_data.get('status', old_status)
+
+        # Bug #7: para marcar como 'lost', exige WinLossReason ja registrado.
+        # Frontend cria a WinLossReason ANTES do PATCH (ver FunilTab.handleLossSubmit),
+        # mas o backend nao validava — qualquer PATCH com status=lost passava e
+        # o KPI de motivo de perda ficava vazio quando o frontend falhava no
+        # POST de win-loss.
+        if new_status == 'lost' and old_status != 'lost':
+            if not WinLossReason.objects.filter(
+                prospect=serializer.instance, result='lost',
+            ).exists():
+                raise DRFValidationError({
+                    'status': (
+                        'Para marcar como Perdido, registre o motivo via '
+                        'POST /sales/win-loss/ antes (result=lost).'
+                    )
+                })
+
         instance = serializer.save()
         # Log status change
         if old_status and old_status != instance.status:

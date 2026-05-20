@@ -232,6 +232,55 @@ class TestProspect:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['status'] == 'qualified'
 
+    # ── Bug #7: WinLossReason obrigatorio na transicao para 'lost' ──────────
+    def test_transition_to_lost_without_win_loss_reason_is_rejected(
+        self, manager_client, db, manager_user,
+    ):
+        """PATCH status='lost' sem WinLossReason existente deve falhar (400).
+        Antes do fix, o backend aceitava e o KPI de motivo de perda era
+        perdido se o frontend nao registrasse depois.
+        """
+        prospect = Prospect.objects.create(
+            company_name='Lost Co', contact_name='X',
+            contact_email='x@lost.com',
+            status='proposal', source='website',
+            created_by=manager_user,
+        )
+        response = manager_client.patch(
+            f'/api/v1/sales/prospects/{prospect.id}/',
+            {'status': 'lost'}, format='json',
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, (
+            f"PATCH lost sem WinLossReason deveria ser 400, foi "
+            f"{response.status_code}: {response.data}"
+        )
+        prospect.refresh_from_db()
+        assert prospect.status != 'lost', (
+            f'Status nao deveria ter mudado, esta {prospect.status}'
+        )
+
+    def test_transition_to_lost_with_win_loss_reason_is_accepted(
+        self, manager_client, db, manager_user,
+    ):
+        """PATCH status='lost' com WinLossReason ja registrado deve passar."""
+        from sales.models import WinLossReason
+        prospect = Prospect.objects.create(
+            company_name='Lost OK Inc', contact_name='X',
+            contact_email='x@lostok.com',
+            status='proposal', source='website',
+            created_by=manager_user,
+        )
+        WinLossReason.objects.create(
+            prospect=prospect, result='lost', reason='price',
+        )
+        response = manager_client.patch(
+            f'/api/v1/sales/prospects/{prospect.id}/',
+            {'status': 'lost'}, format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        prospect.refresh_from_db()
+        assert prospect.status == 'lost'
+
 
 # ─── PROPOSAL ────────────────────────────────────────────────────────────────
 

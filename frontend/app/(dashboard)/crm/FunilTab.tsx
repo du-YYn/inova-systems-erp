@@ -805,16 +805,18 @@ export default function FunilTab() {
     if (!lossModalProspect || !lossForm.reason || !lossForm.remarketing) return;
     setSavingLoss(true);
     try {
-      // Atualizar status para perdido
-      await api.patch(`/sales/prospects/${lossModalProspect.id}/`, { status: 'lost' });
-
-      // Registrar motivo de perda via win-loss
+      // Bug #7: registrar motivo ANTES do PATCH — o backend agora exige
+      // WinLossReason existente para aceitar status='lost'. Se a ordem
+      // for invertida, o PATCH falha com 400.
       await api.post('/sales/win-loss/', {
         prospect: lossModalProspect.id,
         result: 'lost',
         reason: lossForm.reason,
         notes: `${lossForm.remarketing === 'sim' ? '[REMARKETING] ' : ''}${lossForm.notes}`,
       });
+
+      // Atualizar status para perdido
+      await api.patch(`/sales/prospects/${lossModalProspect.id}/`, { status: 'lost' });
 
       toast.success('Lead movido para Perdido.');
       setLossModalProspect(null);
