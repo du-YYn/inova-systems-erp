@@ -142,6 +142,30 @@ class TestAcceptButtonTarget:
         # rel noopener noreferrer no link de onboarding
         assert 'rel="noopener noreferrer"' in result
 
+    # ── Bug #9 (LGPD): HTML publico NAO pode expor token do onboarding ──────
+    def test_inject_cta_does_not_leak_onboarding_token(
+        self, proposal, onboarding,
+    ):
+        """Bug #9 (LGPD): qualquer um com o link publico da proposta tinha
+        tambem o link do onboarding (token UUID embutido no HTML). Permitia
+        preencher dados em nome da empresa antes do cliente real.
+        Agora o botao 'Aceito' aponta para WhatsApp — equipe envia o link
+        de onboarding por canal direto.
+        """
+        from sales.views_public import ProposalPublicHTMLView
+        view = ProposalPublicHTMLView()
+        html = b'<html><body><h1>Proposta</h1></body></html>'
+        result = view._inject_cta_buttons(html, proposal).decode()
+
+        # O token do onboarding NAO deve aparecer no HTML publico
+        assert str(onboarding.public_token) not in result, (
+            'Token do onboarding vazou no HTML publico da proposta'
+        )
+        # Tambem nao deve aparecer o host de cadastro com path completo
+        assert '/cadastro' not in result.lower() or 'cadastro.inova' not in result, (
+            'Host de onboarding nao deveria estar no HTML publico'
+        )
+
 
 # ─── F7B.2: IDOR / LGPD ───────────────────────────────────────────────────
 
@@ -166,6 +190,57 @@ class TestPublicEndpointsLGPD:
         )
         assert 'number' in body
         assert 'title' in body
+
+    # ── Bug #16: primeira visualizacao publica deve marcar 'viewed' ─────────
+    def test_first_public_view_marks_proposal_as_viewed(
+        self, api_client, proposal,
+    ):
+        """Quando um cliente acessa o link publico de uma proposta em 'sent'
+        pela primeira vez, o status deve ir para 'viewed' e viewed_at deve
+        ser gravado. Antes do fix, view_count incrementava mas o status nunca
+        mudava — KPI 'visualizada' ficava sempre zerado.
+        """
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html></html>', content_type='text/html',
+        )
+        proposal.status = 'sent'
+        proposal.viewed_at = None
+        proposal.save()
+
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        proposal.refresh_from_db()
+        assert proposal.status == 'viewed', (
+            f"Status deveria mudar para 'viewed', está '{proposal.status}'"
+        )
+        assert proposal.viewed_at is not None, (
+            'viewed_at deveria ter sido gravado na primeira visualizacao'
+        )
+
+    def test_public_view_does_not_downgrade_approved_proposal(
+        self, api_client, proposal,
+    ):
+        """Se a proposta ja esta 'approved' (ou outro estado posterior),
+        uma nova visualizacao NAO deve reverter o status para 'viewed'.
+        """
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html></html>', content_type='text/html',
+        )
+        proposal.status = 'approved'
+        proposal.save()
+
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        proposal.refresh_from_db()
+        assert proposal.status == 'approved', (
+            f"Status nao deveria mudar (era 'approved'), virou '{proposal.status}'"
+        )
 
     def test_onboarding_get_pre_submit_returns_full_data(
         self, api_client, onboarding,
@@ -674,6 +749,39 @@ class TestAtomicSubmit:
             'finance_contact_phone': '(41) 99999-9999',
             'finance_contact_email': 'joao@a.com',
         }
+
+    # ── Bug #8 (LGPD): submit recusado em Customer anonimizado ─────────────
+    def test_submit_rejected_when_customer_is_anonymized(
+        self, api_client, onboarding, customer,
+    ):
+        """LGPD Art. 18 VI: se o Customer ja foi anonimizado (direito ao
+        esquecimento), o submit publico do onboarding NAO pode sobrescrever
+        os campos e re-popular dados que o cliente pediu para apagar.
+        """
+        # Marca o customer como anonimizado (padrao usado em CustomerViewSet.anonymize)
+        customer.company_name = 'ANON-ABCDEF'
+        customer.name = 'CLIENTE-ANON-ABCDEF'
+        customer.document = ''
+        customer.email = 'anon-abcdef@anonymized.local'
+        customer.is_active = False
+        customer.save()
+
+        resp = api_client.post(
+            f'/api/v1/sales/onboarding/public/{onboarding.public_token}/',
+            self._payload(), format='json',
+        )
+        assert resp.status_code == status.HTTP_410_GONE, (
+            f"Submit em customer anonimizado deveria ser 410 Gone, "
+            f"foi {resp.status_code}: {resp.content}"
+        )
+        onboarding.refresh_from_db()
+        assert onboarding.status == 'pending', (
+            'Submit recusado NAO deveria marcar onboarding como submitted'
+        )
+        # Customer permanece anonimizado
+        customer.refresh_from_db()
+        assert customer.company_name == 'ANON-ABCDEF'
+        assert customer.document == ''
 
     def test_submit_rejects_inconsistent_customer_link(
         self, api_client, onboarding, prospect, admin_user,

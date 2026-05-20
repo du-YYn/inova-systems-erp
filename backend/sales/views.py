@@ -45,6 +45,36 @@ from .serializers import (
 logger = logging.getLogger('sales')
 
 
+def _apply_period_filter(queryset, request, field='created_at'):
+    """Filtra um queryset por start_date / end_date passados na query string.
+
+    Datas no formato YYYY-MM-DD. start_date eh inclusivo (>=), end_date eh
+    inclusivo (<= 23:59:59 do dia). Strings invalidas sao ignoradas
+    silenciosamente — chamador continua com o queryset sem filtro.
+
+    Usado nos dashboards comerciais (D3): KPIs de acumulo (Aprovadas,
+    Conversao) filtram por created_at; KPIs snapshot (Em Aberto, MRR,
+    Contratos Ativos) NAO chamam este helper — sao sempre "agora".
+    """
+    from datetime import datetime
+    start_str = (request.query_params.get('start_date') or '').strip()
+    end_str = (request.query_params.get('end_date') or '').strip()
+
+    if start_str:
+        try:
+            start = datetime.strptime(start_str, '%Y-%m-%d').date()
+            queryset = queryset.filter(**{f'{field}__date__gte': start})
+        except ValueError:
+            pass
+    if end_str:
+        try:
+            end = datetime.strptime(end_str, '%Y-%m-%d').date()
+            queryset = queryset.filter(**{f'{field}__date__lte': end})
+        except ValueError:
+            pass
+    return queryset
+
+
 def log_crm_activity(prospect, activity_type, subject, user, description=''):
     """Registra atividade automática no histórico do CRM."""
     try:
@@ -290,7 +320,26 @@ class ProspectViewSet(viewsets.ModelViewSet):
         log_crm_activity(prospect, 'lead_created', f'Lead recebido — {prospect.company_name}', self.request.user)
 
     def perform_update(self, serializer):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
         old_status = serializer.instance.status if serializer.instance else None
+        new_status = serializer.validated_data.get('status', old_status)
+
+        # Bug #7: para marcar como 'lost', exige WinLossReason ja registrado.
+        # Frontend cria a WinLossReason ANTES do PATCH (ver FunilTab.handleLossSubmit),
+        # mas o backend nao validava — qualquer PATCH com status=lost passava e
+        # o KPI de motivo de perda ficava vazio quando o frontend falhava no
+        # POST de win-loss.
+        if new_status == 'lost' and old_status != 'lost':
+            if not WinLossReason.objects.filter(
+                prospect=serializer.instance, result='lost',
+            ).exists():
+                raise DRFValidationError({
+                    'status': (
+                        'Para marcar como Perdido, registre o motivo via '
+                        'POST /sales/win-loss/ antes (result=lost).'
+                    )
+                })
+
         instance = serializer.save()
         # Log status change
         if old_status and old_status != instance.status:
@@ -310,6 +359,22 @@ class ProspectViewSet(viewsets.ModelViewSet):
             self._mark_entry_paid(instance, self.request.user)
 
     @staticmethod
+    def _resolve_project_value(prospect):
+        """Bug #10: comissao de parceiro NAO pode ser derivada de campo
+        livremente editavel (prospect.proposal_value). Prefere o valor de
+        uma Proposal aprovada/convertida — esse valor passou pelo workflow
+        de aprovacao e e' auditavel. So cai em prospect.proposal_value /
+        estimated_value como fallback (leads sem proposta formal).
+        """
+        approved_proposal = Proposal.objects.filter(
+            prospect=prospect,
+            status__in=['approved', 'converted'],
+        ).order_by('-created_at').first()
+        if approved_proposal and approved_proposal.total_value:
+            return float(approved_proposal.total_value)
+        return float(prospect.proposal_value or prospect.estimated_value or 0)
+
+    @staticmethod
     def _generate_partner_commission(prospect):
         """Gera comissão do parceiro (se lead foi indicado por parceiro)."""
         if not prospect.referred_by_id:
@@ -324,7 +389,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         # Evitar duplicata (forma segura para OneToOne)
         if PartnerCommission.objects.filter(prospect=prospect).exists():
             return
-        project_value = float(prospect.proposal_value or prospect.estimated_value or 0)
+        project_value = ProspectViewSet._resolve_project_value(prospect)
         if project_value < 10_000:
             logger.info(
                 f"Comissão não gerada: valor R${project_value:.2f} abaixo da faixa mínima "
@@ -357,10 +422,20 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _generate_receivables(prospect, user):
-        """Gera faturas A Receber ao fechar lead."""
+        """Gera faturas A Receber ao fechar lead.
+
+        Idempotente: se `prospect.receivables_generated_at` ja esta setado,
+        nao gera de novo (evita duplicacao em won -> production -> won).
+        Atomico: o conjunto de invoices eh criado dentro de uma unica
+        transacao — se qualquer parcela falhar, nenhuma fica commitada.
+        """
         from finance.models import Invoice
         from django.db import transaction as db_tx
         from datetime import date
+
+        # Bug #3: idempotencia — nao re-gerar se ja rodou
+        if prospect.receivables_generated_at is not None:
+            return
 
         total = float(prospect.proposal_value or prospect.estimated_value or 0)
         if total <= 0:
@@ -376,72 +451,83 @@ class ProspectViewSet(viewsets.ModelViewSet):
         desc_base = f'{prospect.company_name}'
 
         def make_invoice(desc, value, due_date):
-            with db_tx.atomic():
-                last = Invoice.objects.select_for_update().filter(
-                    invoice_type='receivable'
-                ).order_by('-id').first()
-                seq = 0
-                if last:
-                    try:
-                        seq = int(last.number.split('-')[1])
-                    except (IndexError, ValueError):
-                        seq = 0
-                Invoice.objects.create(
-                    invoice_type='receivable',
-                    number=f"REC-{seq + 1:05d}",
-                    description=desc,
-                    customer=customer,
-                    value=value, discount=0, interest=0, tax=0, total=value,
-                    issue_date=date.today(), due_date=due_date,
-                    status='pending',
-                    payment_method=method,
-                    notes=f'Gerada do lead: {prospect.company_name}',
-                    created_by=user,
-                )
-
-        if pay_type == 'one_time':
-            make_invoice(f'{desc_base} — Pagamento único', total, due)
-
-        elif pay_type == 'split':
-            pct = prospect.payment_split_pct or 50
-            entrada = round(total * pct / 100, 2)
-            entrega = round(total - entrada, 2)
-            make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
-            # Entrega: 3 meses depois
-            em = due.month + 3
-            ey = due.year + (em - 1) // 12
-            em = (em - 1) % 12 + 1
-            entrega_due = date(ey, em, min(due.day, 28))
-            make_invoice(
-                f'{desc_base} — Entrega ({100 - pct}%)',
-                entrega, entrega_due,
+            # select_for_update precisa estar dentro de uma transaction.atomic.
+            # O caller envolve tudo num bloco atomic mais externo (ver abaixo),
+            # entao aqui nao precisamos abrir outro.
+            last = Invoice.objects.select_for_update().filter(
+                invoice_type='receivable'
+            ).order_by('-id').first()
+            seq = 0
+            if last:
+                try:
+                    seq = int(last.number.split('-')[1])
+                except (IndexError, ValueError):
+                    seq = 0
+            Invoice.objects.create(
+                invoice_type='receivable',
+                number=f"REC-{seq + 1:05d}",
+                description=desc,
+                customer=customer,
+                value=value, discount=0, interest=0, tax=0, total=value,
+                issue_date=date.today(), due_date=due_date,
+                status='pending',
+                payment_method=method,
+                notes=f'Gerada do lead: {prospect.company_name}',
+                created_by=user,
             )
 
-        elif pay_type == 'installments':
-            n = prospect.payment_installments or 1
-            parcela = round(total / n, 2)
-            for i in range(n):
-                m = due.month + i
-                y = due.year + (m - 1) // 12
-                m = (m - 1) % 12 + 1
-                d = min(due.day, 28)
-                make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
-                             date(y, m, d))
+        # Bug #5: todo o conjunto de receivables fica numa unica transacao.
+        # Se a 2a parcela falhar, a 1a NAO fica commitada — o estado
+        # "metade gerado" deixa de existir.
+        with db_tx.atomic():
+            if pay_type == 'one_time':
+                make_invoice(f'{desc_base} — Pagamento único', total, due)
 
-        elif pay_type == 'monthly':
-            mv = float(prospect.payment_monthly_value or total)
-            make_invoice(f'{desc_base} — Mensalidade', mv, due)
+            elif pay_type == 'split':
+                pct = prospect.payment_split_pct or 50
+                entrada = round(total * pct / 100, 2)
+                entrega = round(total - entrada, 2)
+                make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
+                # Entrega: 3 meses depois
+                em = due.month + 3
+                ey = due.year + (em - 1) // 12
+                em = (em - 1) % 12 + 1
+                entrega_due = date(ey, em, min(due.day, 28))
+                make_invoice(
+                    f'{desc_base} — Entrega ({100 - pct}%)',
+                    entrega, entrega_due,
+                )
 
-        elif pay_type == 'setup_monthly':
-            setup = float(prospect.estimated_value or total)
-            mv = float(prospect.payment_monthly_value or 0)
-            make_invoice(f'{desc_base} — Setup', setup, due)
-            if mv > 0:
-                m2 = due.month + 1
-                y2 = due.year + (m2 - 1) // 12
-                m2 = (m2 - 1) % 12 + 1
-                make_invoice(f'{desc_base} — Mensalidade', mv,
-                             date(y2, m2, min(due.day, 28)))
+            elif pay_type == 'installments':
+                n = prospect.payment_installments or 1
+                parcela = round(total / n, 2)
+                for i in range(n):
+                    m = due.month + i
+                    y = due.year + (m - 1) // 12
+                    m = (m - 1) % 12 + 1
+                    d = min(due.day, 28)
+                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
+                                 date(y, m, d))
+
+            elif pay_type == 'monthly':
+                mv = float(prospect.payment_monthly_value or total)
+                make_invoice(f'{desc_base} — Mensalidade', mv, due)
+
+            elif pay_type == 'setup_monthly':
+                setup = float(prospect.estimated_value or total)
+                mv = float(prospect.payment_monthly_value or 0)
+                make_invoice(f'{desc_base} — Setup', setup, due)
+                if mv > 0:
+                    m2 = due.month + 1
+                    y2 = due.year + (m2 - 1) // 12
+                    m2 = (m2 - 1) % 12 + 1
+                    make_invoice(f'{desc_base} — Mensalidade', mv,
+                                 date(y2, m2, min(due.day, 28)))
+
+            # Marca como gerado DENTRO da mesma transacao — se algo acima
+            # falhar, o flag tambem rola back e a proxima tentativa pode rodar.
+            prospect.receivables_generated_at = timezone.now()
+            prospect.save(update_fields=['receivables_generated_at'])
 
     @staticmethod
     def _mark_entry_paid(prospect, user):
@@ -786,9 +872,19 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _generate_commissions(proposal, user):
-        """Gera ClientCost de comissão Closer/SDR ao aprovar proposta."""
+        """Gera ClientCost de comissão Closer/SDR ao aprovar proposta.
+
+        Idempotente: se `proposal.commissions_generated_at` ja esta setado,
+        nao gera de novo (evita duplicacao em re-aprovacao quando admin
+        reverte status via Django Admin).
+        """
         from decimal import Decimal, ROUND_HALF_UP
+        from django.db import transaction as db_tx
         from finance.models import ClientCost
+
+        # Bug #4: idempotencia — nao re-gerar se ja rodou
+        if proposal.commissions_generated_at is not None:
+            return
 
         total = proposal.total_value or Decimal('0')
         if total <= 0:
@@ -808,17 +904,21 @@ class ProposalViewSet(viewsets.ModelViewSet):
         CLOSER_PCT = Decimal('10')
         SDR_PCT = Decimal('5')
 
-        for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
-            value = (total * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            ClientCost.objects.create(
-                customer=customer,
-                cost_category='comercial',
-                description=desc,
-                value=value,
-                reference_month=ref_month,
-                notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
-                created_by=user,
-            )
+        # Atomic: ou cria os 2 ClientCost + marca flag, ou nada.
+        with db_tx.atomic():
+            for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
+                value = (total * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                ClientCost.objects.create(
+                    customer=customer,
+                    cost_category='comercial',
+                    description=desc,
+                    value=value,
+                    reference_month=ref_month,
+                    notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
+                    created_by=user,
+                )
+            proposal.commissions_generated_at = timezone.now()
+            proposal.save(update_fields=['commissions_generated_at'])
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
@@ -1041,6 +1141,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
                     },
                 )
 
+            # Marca a proposta como convertida — sai do pipeline "em aberto"
+            # do dashboard. Sem isso, a proposta fica eternamente como
+            # 'approved' e continua sendo contabilizada como pipeline mesmo
+            # após o contrato ser criado.
+            proposal.status = 'converted'
+            proposal.save(update_fields=['status'])
+
         # Log de atividade no CRM
         if proposal.prospect:
             log_crm_activity(
@@ -1055,19 +1162,35 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
-        pipeline_statuses = ['sent', 'viewed', 'negotiation', 'approved']
-        qs = Proposal.objects.all()
-        stats = qs.aggregate(
-            pipeline_count=Count('id', filter=Q(status__in=pipeline_statuses)),
-            pipeline_value=Sum('total_value', filter=Q(status__in=pipeline_statuses)),
-            approved_count=Count('id', filter=Q(status='approved')),
-            approved_value=Sum('total_value', filter=Q(status='approved')),
+        # Bug D2: 'approved' NAO conta como "em aberto". Quando o cliente
+        # aprova, a proposta sai do KPI "Propostas em Aberto" e vai
+        # exclusivamente para "Propostas Aprovadas". Sem essa separacao,
+        # toda proposta aprovada era contada duas vezes (em ambos os cards),
+        # inflando o total e quebrando a taxa de aprovacao.
+        open_statuses = ['sent', 'viewed', 'negotiation']
+
+        # D3: filtro de periodo opcional. 'Em Aberto' eh snapshot — ignora
+        # o filtro (proposta enviada ha 90 dias e ainda esperando resposta
+        # do cliente CONTINUA em aberto agora, independente do periodo de
+        # analise). 'Aprovadas' eh acumulo — filtra por created_at no
+        # periodo solicitado.
+        all_props = Proposal.objects.all()
+        approved_qs = all_props.filter(status='approved')
+        approved_qs = _apply_period_filter(approved_qs, request)
+
+        open_stats = all_props.aggregate(
+            pipeline_count=Count('id', filter=Q(status__in=open_statuses)),
+            pipeline_value=Sum('total_value', filter=Q(status__in=open_statuses)),
+        )
+        approved_stats = approved_qs.aggregate(
+            approved_count=Count('id'),
+            approved_value=Sum('total_value'),
         )
         return Response({
-            'sent_count':     stats['pipeline_count'] or 0,
-            'sent_value':     float(stats['pipeline_value'] or 0),
-            'approved_count': stats['approved_count'] or 0,
-            'approved_value': float(stats['approved_value'] or 0),
+            'sent_count':     open_stats['pipeline_count'] or 0,
+            'sent_value':     float(open_stats['pipeline_value'] or 0),
+            'approved_count': approved_stats['approved_count'] or 0,
+            'approved_value': float(approved_stats['approved_value'] or 0),
         })
 
     @action(detail=True, methods=['post'], url_path='upload-pdf')

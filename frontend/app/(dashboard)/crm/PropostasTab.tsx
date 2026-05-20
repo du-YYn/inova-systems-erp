@@ -68,12 +68,14 @@ type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'purple' | 'gold'
 
 const statusBadge: Record<string, BadgeVariant> = {
   draft: 'neutral', sent: 'info', viewed: 'info',
-  negotiation: 'warning', approved: 'success', rejected: 'error', expired: 'warning',
+  negotiation: 'warning', approved: 'success', converted: 'purple',
+  rejected: 'error', expired: 'warning',
 };
 
 const statusLabels: Record<string, string> = {
   draft: 'Rascunho', sent: 'Enviada', viewed: 'Visualizada',
-  negotiation: 'Em Negociação', approved: 'Aprovada', rejected: 'Recusada', expired: 'Expirada',
+  negotiation: 'Em Negociação', approved: 'Aprovada', converted: 'Convertida',
+  rejected: 'Recusada', expired: 'Expirada',
 };
 
 const proposalTypeLabels: Record<string, string> = {

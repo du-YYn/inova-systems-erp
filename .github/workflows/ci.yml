@@ -107,8 +107,12 @@ jobs:
         run: |
           # CVE-2026-4539 (pygments): sem versão de correção disponível ainda;
           # dependência transitiva de drf-spectacular/sentry-sdk. Ignorado até fix oficial.
+          # PYSEC-2025-183 (pyjwt): "weak encryption" — disputado pelo supplier; é
+          # responsabilidade da aplicação usar key forte (DJANGO_SECRET_KEY ja
+          # eh validado). Sem versão de fix disponível para qualquer versão.
           pip-audit -r requirements.txt --progress-spinner off \
-            --ignore-vuln CVE-2026-4539
+            --ignore-vuln CVE-2026-4539 \
+            --ignore-vuln PYSEC-2025-183
 
       - name: bandit — análise estática de segurança
         run: |

@@ -2,6 +2,7 @@ import logging
 import re
 from celery import shared_task
 from datetime import timedelta, date
+from django.db import transaction
 
 logger = logging.getLogger('sales')
 
@@ -64,6 +65,9 @@ def check_contract_renewals():
         end_date__isnull=False,
     )
 
+    # Imports locais para evitar circular imports
+    from .models import ContractPaymentPlan, ContractService
+
     renewed_count = 0
     for contract in auto_renew_contracts:
         duration = contract.end_date - contract.start_date
@@ -74,27 +78,62 @@ def check_contract_renewals():
         renewal_num = Contract.objects.filter(number__startswith=base_number).count()
         new_number = f"{base_number}-R{renewal_num}"
 
-        Contract.objects.create(
-            proposal=None,
-            customer=contract.customer,
-            number=new_number,
-            title=f"{contract.title} (Renovação)",
-            contract_type=contract.contract_type,
-            billing_type=contract.billing_type,
-            start_date=new_start,
-            end_date=new_end,
-            auto_renew=contract.auto_renew,
-            renewal_days=contract.renewal_days,
-            monthly_value=contract.monthly_value,
-            hourly_rate=contract.hourly_rate,
-            total_hours_monthly=contract.total_hours_monthly,
-            status='active',
-            notes=f"Renovação automática de {contract.number}",
-            terms=contract.terms,
-            created_by=contract.created_by,
-        )
-        contract.status = 'renewed'
-        contract.save(update_fields=['status'])
+        # Bug #6: copia payment_plan e service_items dentro de uma transacao
+        # unica com a criacao do novo contrato. Sem isso, o Financeiro fica
+        # com um Contract 'active' SEM payment_plan — MRR aparece no
+        # dashboard mas faturas recorrentes nunca sao geradas.
+        with transaction.atomic():
+            renewed = Contract.objects.create(
+                proposal=None,
+                customer=contract.customer,
+                number=new_number,
+                title=f"{contract.title} (Renovação)",
+                contract_type=contract.contract_type,
+                billing_type=contract.billing_type,
+                start_date=new_start,
+                end_date=new_end,
+                auto_renew=contract.auto_renew,
+                renewal_days=contract.renewal_days,
+                monthly_value=contract.monthly_value,
+                hourly_rate=contract.hourly_rate,
+                total_hours_monthly=contract.total_hours_monthly,
+                status='active',
+                notes=f"Renovação automática de {contract.number}",
+                terms=contract.terms,
+                created_by=contract.created_by,
+            )
+
+            # Copia services (escopo do contrato)
+            for item in contract.service_items.all():
+                ContractService.objects.create(
+                    contract=renewed,
+                    service=item.service,
+                    notes=item.notes,
+                    display_order=item.display_order,
+                )
+
+            # Copia payment_plan (OneToOne — pode nao existir em contratos legados)
+            src_plan = getattr(contract, 'payment_plan', None)
+            if src_plan is not None:
+                ContractPaymentPlan.objects.create(
+                    contract=renewed,
+                    plan_type=src_plan.plan_type,
+                    one_time_amount=src_plan.one_time_amount,
+                    one_time_method=src_plan.one_time_method,
+                    one_time_installments=src_plan.one_time_installments,
+                    one_time_first_due=src_plan.one_time_first_due,
+                    one_time_notes=src_plan.one_time_notes,
+                    recurring_amount=src_plan.recurring_amount,
+                    recurring_method=src_plan.recurring_method,
+                    recurring_day_of_month=src_plan.recurring_day_of_month,
+                    recurring_duration_months=src_plan.recurring_duration_months,
+                    recurring_first_due=src_plan.recurring_first_due,
+                    recurring_notes=src_plan.recurring_notes,
+                )
+
+            contract.status = 'renewed'
+            contract.save(update_fields=['status'])
+
         renewed_count += 1
         logger.info(f"Contrato {contract.number} renovado automaticamente como {new_number}")
 
