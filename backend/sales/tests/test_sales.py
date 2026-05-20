@@ -580,6 +580,76 @@ class TestContract:
         response = manager_client.post(url)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    # ── Bug #6: auto-renew deve copiar payment_plan e services ─────────────
+    def test_auto_renew_copies_payment_plan_and_services(
+        self, db, manager_user, customer,
+    ):
+        """Renovacao automatica via Celery deve copiar ContractPaymentPlan e
+        ContractService do contrato original. Sem isso, o Financeiro nao tem
+        plano para gerar faturas recorrentes — MRR "fantasma" inflado.
+        """
+        from datetime import date as _date, timedelta as _td
+        from sales.tasks import check_contract_renewals
+        from sales.models import (
+            ContractPaymentPlan, ContractService, Service,
+        )
+
+        # Servico no catalogo
+        svc = Service.objects.create(
+            code='test-renew-svc', name='Test Renew Service',
+        )
+
+        # Contrato original — ja vencido + auto_renew=True
+        original = Contract.objects.create(
+            customer=customer,
+            number='CTR-RENEW-001',
+            title='Contrato Original',
+            contract_type='software_dev',
+            billing_type='monthly',
+            start_date=_date.today() - _td(days=365),
+            end_date=_date.today() - _td(days=1),
+            auto_renew=True,
+            monthly_value=1500,
+            status='active',
+            created_by=manager_user,
+        )
+        ContractService.objects.create(
+            contract=original, service=svc, display_order=0, notes='kickoff',
+        )
+        ContractPaymentPlan.objects.create(
+            contract=original,
+            plan_type='recurring_only',
+            recurring_amount=1500,
+            recurring_duration_months=12,
+        )
+
+        # Roda a task de renovacao
+        result = check_contract_renewals()
+
+        # Deve ter renovado 1 contrato
+        assert result['renewed'] == 1, (
+            f"Esperava 1 renovacao, foi {result['renewed']}"
+        )
+
+        # Acha o contrato renovado
+        renewed = Contract.objects.filter(
+            notes__icontains='Renovação automática',
+        ).first()
+        assert renewed is not None, 'Contrato renovado nao foi criado'
+
+        # payment_plan copiado
+        assert hasattr(renewed, 'payment_plan'), (
+            'payment_plan nao foi copiado — Financeiro nao gerara faturas'
+        )
+        assert renewed.payment_plan.recurring_amount == original.payment_plan.recurring_amount
+        assert renewed.payment_plan.plan_type == 'recurring_only'
+
+        # services copiados
+        assert renewed.service_items.count() == 1, (
+            'service_items nao foram copiados'
+        )
+        assert renewed.service_items.first().service_id == svc.id
+
     def test_cancel_contract(self, manager_client, contract):
         contract.status = 'active'
         contract.save()
