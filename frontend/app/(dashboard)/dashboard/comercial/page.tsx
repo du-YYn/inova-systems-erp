@@ -70,7 +70,10 @@ export default function DashboardComercial() {
         prospectList.forEach(p => {
           if (!grouped[p.status]) grouped[p.status] = { count: 0, value: 0 };
           grouped[p.status].count++;
-          grouped[p.status].value += p.estimated_value || 0;
+          // Bug D1: DRF serializa DecimalField como string ("10000.00").
+          // Sem Number(), += faz concatenacao e o resultado vira "R$ NaN"
+          // depois do Intl.NumberFormat.
+          grouped[p.status].value += Number(p.estimated_value) || 0;
         });
         setPipeline(Object.entries(grouped).map(([s, d]) => ({ label: statusLabels[s] || s, count: d.count, value: d.value })));
 

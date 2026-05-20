@@ -1132,11 +1132,16 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
-        pipeline_statuses = ['sent', 'viewed', 'negotiation', 'approved']
+        # Bug D2: 'approved' NAO conta como "em aberto". Quando o cliente
+        # aprova, a proposta sai do KPI "Propostas em Aberto" e vai
+        # exclusivamente para "Propostas Aprovadas". Sem essa separacao,
+        # toda proposta aprovada era contada duas vezes (em ambos os cards),
+        # inflando o total e quebrando a taxa de aprovacao.
+        open_statuses = ['sent', 'viewed', 'negotiation']
         qs = Proposal.objects.all()
         stats = qs.aggregate(
-            pipeline_count=Count('id', filter=Q(status__in=pipeline_statuses)),
-            pipeline_value=Sum('total_value', filter=Q(status__in=pipeline_statuses)),
+            pipeline_count=Count('id', filter=Q(status__in=open_statuses)),
+            pipeline_value=Sum('total_value', filter=Q(status__in=open_statuses)),
             approved_count=Count('id', filter=Q(status='approved')),
             approved_value=Sum('total_value', filter=Q(status='approved')),
         )

@@ -514,6 +514,58 @@ class TestProposal:
             f"{response.data['sent_count']}, status={proposal.status}"
         )
 
+    # ── Bug D2: proposta aprovada deve sair de "em aberto" ──────────────────
+    def test_approved_proposal_excluded_from_open_kpi(
+        self, manager_client, proposal,
+    ):
+        """Dashboard Comercial — proposta aprovada vai para o card "Aprovadas"
+        e DEVE sair de "Em Aberto". Antes do fix, 'approved' estava em
+        pipeline_statuses junto com sent/viewed/negotiation, causando
+        dupla contagem e inflando o KPI de em aberto.
+        """
+        proposal.status = 'approved'
+        proposal.save()
+
+        response = manager_client.get(f'{self.url}dashboard/')
+        assert response.status_code == status.HTTP_200_OK
+
+        # Aprovada conta APENAS em approved_count, NAO em sent_count
+        assert response.data['approved_count'] == 1
+        assert response.data['sent_count'] == 0, (
+            f"Proposta aprovada nao deveria contar como 'em aberto'. "
+            f"sent_count={response.data['sent_count']}"
+        )
+        # Valores idem: sent_value zera, approved_value tem o valor
+        assert response.data['sent_value'] == 0
+        assert response.data['approved_value'] > 0
+
+    def test_open_kpi_counts_only_sent_viewed_negotiation(
+        self, manager_client, db, manager_user, customer,
+    ):
+        """3 propostas: 1 sent, 1 viewed, 1 negotiation, 1 approved, 1 rejected.
+        sent_count deve ser 3 (apenas sent/viewed/negotiation).
+        """
+        for i, st in enumerate(['sent', 'viewed', 'negotiation', 'approved', 'rejected']):
+            Proposal.objects.create(
+                customer=customer,
+                number=f'PROP-D2-{i:03d}',
+                title=f'P{i}',
+                proposal_type='software_dev', billing_type='fixed',
+                total_value=1000,
+                valid_until=timezone.now().date(),
+                status=st,
+                created_by=manager_user,
+            )
+
+        response = manager_client.get(f'{self.url}dashboard/')
+        assert response.data['sent_count'] == 3, (
+            f"sent_count deveria ser 3 (sent+viewed+negotiation), "
+            f"foi {response.data['sent_count']}"
+        )
+        assert response.data['approved_count'] == 1
+        assert float(response.data['sent_value']) == 3000.0
+        assert float(response.data['approved_value']) == 1000.0
+
     # ── Bug #3+#5: idempotencia e atomicidade de _generate_receivables ──────
     def test_won_revert_does_not_duplicate_receivables(
         self, manager_client, db, manager_user,
