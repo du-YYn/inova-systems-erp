@@ -188,23 +188,28 @@ class ProposalPublicHTMLView(APIView):
         return response
 
     def _inject_cta_buttons(self, content: bytes, proposal) -> bytes:
-        """Injeta botões de ação no final do HTML (puro CSS, sem JS)."""
-        # Resolver link de onboarding
-        onboarding_url = ''
-        if proposal.prospect_id:
-            try:
-                onboarding = proposal.prospect.onboarding
-                if onboarding and onboarding.public_token:
-                    onboarding_host = os.environ.get('ONBOARDING_HOST', 'cadastro.inovasystemssolutions.com')
-                    onboarding_url = f'https://{onboarding_host}/{onboarding.public_token}'
-            except ClientOnboarding.DoesNotExist:
-                pass  # Prospect sem onboarding — botão não aparece
-            except Exception as e:
-                logger.warning('Erro ao resolver onboarding para proposta %s: %s', proposal.number, e)
+        """Injeta botões de ação no final do HTML (puro CSS, sem JS).
 
+        Bug #9 (LGPD): o link de onboarding NAO eh mais injetado no HTML
+        publico. Antes, o token UUID do onboarding ficava exposto no
+        proprio HTML servido por ProposalPublicHTMLView — qualquer um com
+        o link da proposta tinha tambem o link do onboarding e podia
+        preencher os dados em nome da empresa antes do cliente real.
+
+        Agora o botao 'Aceito proposta' aponta para WhatsApp com mensagem
+        de aceite — a equipe envia o link de onboarding por canal direto
+        (email/WhatsApp) ao representante autorizado.
+        """
         whatsapp_url = (
             f'https://wa.me/{self.WHATSAPP_NUMBER}'
             f'?text=Ol%C3%A1!%20Vi%20a%20proposta%20e%20gostaria%20de%20tirar%20algumas%20d%C3%BAvidas.'
+        )
+        # WhatsApp para aceite (acao "intent to accept" — gera contato direto
+        # com a equipe, que envia o cadastro por canal autenticado).
+        accept_url = (
+            f'https://wa.me/{self.WHATSAPP_NUMBER}'
+            f'?text=Aceito%20a%20proposta%20%23{proposal.number}%20e%20gostaria%20'
+            f'de%20receber%20o%20cadastro%20para%20iniciar.'
         )
 
         buttons_html = f'''
@@ -230,7 +235,7 @@ class ProposalPublicHTMLView(APIView):
         margin: 0 0 28px;
     ">Aceite e preencha o cadastro para darmos início, ou tire suas dúvidas pelo WhatsApp.</p>
     <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
-        {f"""<a href="{onboarding_url}" target="_blank" rel="noopener noreferrer" style="
+        <a href="{accept_url}" target="_blank" rel="noopener noreferrer" style="
             display: inline-flex; align-items: center; gap: 8px;
             padding: 14px 32px;
             background: linear-gradient(135deg, #A6864A, #c9a75e);
@@ -240,7 +245,7 @@ class ProposalPublicHTMLView(APIView):
             transition: transform 0.2s;
         ">
             &#10003; Aceito proposta de investimento
-        </a>""" if onboarding_url else ""}
+        </a>
         <a href="{whatsapp_url}" target="_blank" style="
             display: inline-flex; align-items: center; gap: 8px;
             padding: 14px 32px;
@@ -358,6 +363,32 @@ class ClientOnboardingPublicView(APIView):
             return Response(
                 {'error': 'Inconsistência de dados detectada. Contate o suporte.'},
                 status=status.HTTP_409_CONFLICT,
+            )
+
+        # Bug #8: LGPD Art. 18 VI — se o Customer ja foi anonimizado, o submit
+        # do onboarding sobrescreveria os campos (company_name, document,
+        # endereco, etc) re-populando dados que o cliente pediu para apagar.
+        # Bloqueia explicitamente. Marcador: customer.is_active=False AND
+        # company_name comeca com 'ANON-' (padrao definido em
+        # CustomerViewSet.anonymize).
+        target_customer = (
+            onboarding.customer
+            or getattr(onboarding.prospect, 'customer', None)
+        )
+        if target_customer and (
+            not target_customer.is_active
+            and target_customer.company_name.startswith('ANON-')
+        ):
+            logger.warning(
+                'Onboarding %s: submit recusado — Customer %s anonimizado (LGPD).',
+                onboarding.id, target_customer.id,
+            )
+            return Response(
+                {'error': (
+                    'Este cadastro nao pode mais ser preenchido. '
+                    'Entre em contato com o suporte para abrir um novo cliente.'
+                )},
+                status=status.HTTP_410_GONE,
             )
 
         serializer = ClientOnboardingPublicSerializer(
