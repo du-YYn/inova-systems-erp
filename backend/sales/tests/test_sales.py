@@ -566,6 +566,84 @@ class TestProposal:
         assert float(response.data['sent_value']) == 3000.0
         assert float(response.data['approved_value']) == 1000.0
 
+    # ── D3: filtro de data nos KPIs de acumulo ──────────────────────────────
+    def test_dashboard_date_filter_restricts_approved_to_period(
+        self, manager_client, db, manager_user, customer,
+    ):
+        """KPI 'Aprovadas' deve responder ao filtro start_date/end_date
+        (created_at). KPI 'Em Aberto' continua snapshot do estado atual —
+        nao filtra (proposta aprovada ha 6 meses, mas que ainda esta no
+        funil hoje, conta como em aberto agora).
+        """
+        from datetime import date as _date, timedelta as _td
+
+        # Cria 2 propostas aprovadas: uma ha 90 dias, outra hoje
+        old = Proposal.objects.create(
+            customer=customer, number='PROP-OLD',
+            title='Antiga', proposal_type='software_dev', billing_type='fixed',
+            total_value=5000,
+            valid_until=timezone.now().date(),
+            status='approved', created_by=manager_user,
+        )
+        # Forca created_at retroativo via update (auto_now_add nao deixa setar no create)
+        Proposal.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - _td(days=90),
+        )
+        Proposal.objects.create(
+            customer=customer, number='PROP-NEW',
+            title='Nova', proposal_type='software_dev', billing_type='fixed',
+            total_value=2000,
+            valid_until=timezone.now().date(),
+            status='approved', created_by=manager_user,
+        )
+
+        # Sem filtro: 2 aprovadas, R$ 7000
+        resp = manager_client.get(f'{self.url}dashboard/')
+        assert resp.data['approved_count'] == 2
+        assert float(resp.data['approved_value']) == 7000.0
+
+        # Com filtro nos ultimos 30 dias: apenas a nova
+        start = (_date.today() - _td(days=30)).isoformat()
+        end = _date.today().isoformat()
+        resp = manager_client.get(
+            f'{self.url}dashboard/?start_date={start}&end_date={end}',
+        )
+        assert resp.data['approved_count'] == 1, (
+            f"Com filtro 30d, deveria ter 1 aprovada, "
+            f"foi {resp.data['approved_count']}"
+        )
+        assert float(resp.data['approved_value']) == 2000.0
+
+    def test_dashboard_date_filter_does_not_affect_open_kpi(
+        self, manager_client, db, manager_user, customer,
+    ):
+        """Em Aberto é snapshot — filtro de data NAO altera o numero."""
+        from datetime import timedelta as _td
+
+        # Proposta enviada ha 90 dias, ainda em aberto hoje
+        old = Proposal.objects.create(
+            customer=customer, number='PROP-OPEN-OLD',
+            title='Em aberto antigo', proposal_type='software_dev',
+            billing_type='fixed', total_value=5000,
+            valid_until=timezone.now().date(),
+            status='sent', created_by=manager_user,
+        )
+        Proposal.objects.filter(pk=old.pk).update(
+            created_at=timezone.now() - _td(days=90),
+        )
+
+        # Filtro restrito (ultimos 7 dias) — proposta antiga continua em aberto
+        from datetime import date as _date
+        start = (_date.today() - _td(days=7)).isoformat()
+        end = _date.today().isoformat()
+        resp = manager_client.get(
+            f'{self.url}dashboard/?start_date={start}&end_date={end}',
+        )
+        assert resp.data['sent_count'] == 1, (
+            f"Em Aberto deveria continuar 1 (snapshot, ignora filtro), "
+            f"foi {resp.data['sent_count']}"
+        )
+
     # ── Bug #3+#5: idempotencia e atomicidade de _generate_receivables ──────
     def test_won_revert_does_not_duplicate_receivables(
         self, manager_client, db, manager_user,

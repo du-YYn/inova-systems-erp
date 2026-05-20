@@ -45,6 +45,36 @@ from .serializers import (
 logger = logging.getLogger('sales')
 
 
+def _apply_period_filter(queryset, request, field='created_at'):
+    """Filtra um queryset por start_date / end_date passados na query string.
+
+    Datas no formato YYYY-MM-DD. start_date eh inclusivo (>=), end_date eh
+    inclusivo (<= 23:59:59 do dia). Strings invalidas sao ignoradas
+    silenciosamente — chamador continua com o queryset sem filtro.
+
+    Usado nos dashboards comerciais (D3): KPIs de acumulo (Aprovadas,
+    Conversao) filtram por created_at; KPIs snapshot (Em Aberto, MRR,
+    Contratos Ativos) NAO chamam este helper — sao sempre "agora".
+    """
+    from datetime import datetime
+    start_str = (request.query_params.get('start_date') or '').strip()
+    end_str = (request.query_params.get('end_date') or '').strip()
+
+    if start_str:
+        try:
+            start = datetime.strptime(start_str, '%Y-%m-%d').date()
+            queryset = queryset.filter(**{f'{field}__date__gte': start})
+        except ValueError:
+            pass
+    if end_str:
+        try:
+            end = datetime.strptime(end_str, '%Y-%m-%d').date()
+            queryset = queryset.filter(**{f'{field}__date__lte': end})
+        except ValueError:
+            pass
+    return queryset
+
+
 def log_crm_activity(prospect, activity_type, subject, user, description=''):
     """Registra atividade automática no histórico do CRM."""
     try:
@@ -1138,18 +1168,29 @@ class ProposalViewSet(viewsets.ModelViewSet):
         # toda proposta aprovada era contada duas vezes (em ambos os cards),
         # inflando o total e quebrando a taxa de aprovacao.
         open_statuses = ['sent', 'viewed', 'negotiation']
-        qs = Proposal.objects.all()
-        stats = qs.aggregate(
+
+        # D3: filtro de periodo opcional. 'Em Aberto' eh snapshot — ignora
+        # o filtro (proposta enviada ha 90 dias e ainda esperando resposta
+        # do cliente CONTINUA em aberto agora, independente do periodo de
+        # analise). 'Aprovadas' eh acumulo — filtra por created_at no
+        # periodo solicitado.
+        all_props = Proposal.objects.all()
+        approved_qs = all_props.filter(status='approved')
+        approved_qs = _apply_period_filter(approved_qs, request)
+
+        open_stats = all_props.aggregate(
             pipeline_count=Count('id', filter=Q(status__in=open_statuses)),
             pipeline_value=Sum('total_value', filter=Q(status__in=open_statuses)),
-            approved_count=Count('id', filter=Q(status='approved')),
-            approved_value=Sum('total_value', filter=Q(status='approved')),
+        )
+        approved_stats = approved_qs.aggregate(
+            approved_count=Count('id'),
+            approved_value=Sum('total_value'),
         )
         return Response({
-            'sent_count':     stats['pipeline_count'] or 0,
-            'sent_value':     float(stats['pipeline_value'] or 0),
-            'approved_count': stats['approved_count'] or 0,
-            'approved_value': float(stats['approved_value'] or 0),
+            'sent_count':     open_stats['pipeline_count'] or 0,
+            'sent_value':     float(open_stats['pipeline_value'] or 0),
+            'approved_count': approved_stats['approved_count'] or 0,
+            'approved_value': float(approved_stats['approved_value'] or 0),
         })
 
     @action(detail=True, methods=['post'], url_path='upload-pdf')
