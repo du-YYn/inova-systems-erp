@@ -294,6 +294,7 @@ class Proposal(models.Model):
         ('viewed', 'Visualizada'),
         ('negotiation', 'Em Negociação'),
         ('approved', 'Aprovada'),
+        ('converted', 'Convertida em Contrato'),
         ('rejected', 'Recusada'),
         ('expired', 'Expirada'),
     ]

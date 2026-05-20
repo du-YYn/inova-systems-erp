@@ -167,6 +167,57 @@ class TestPublicEndpointsLGPD:
         assert 'number' in body
         assert 'title' in body
 
+    # ── Bug #16: primeira visualizacao publica deve marcar 'viewed' ─────────
+    def test_first_public_view_marks_proposal_as_viewed(
+        self, api_client, proposal,
+    ):
+        """Quando um cliente acessa o link publico de uma proposta em 'sent'
+        pela primeira vez, o status deve ir para 'viewed' e viewed_at deve
+        ser gravado. Antes do fix, view_count incrementava mas o status nunca
+        mudava — KPI 'visualizada' ficava sempre zerado.
+        """
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html></html>', content_type='text/html',
+        )
+        proposal.status = 'sent'
+        proposal.viewed_at = None
+        proposal.save()
+
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        proposal.refresh_from_db()
+        assert proposal.status == 'viewed', (
+            f"Status deveria mudar para 'viewed', está '{proposal.status}'"
+        )
+        assert proposal.viewed_at is not None, (
+            'viewed_at deveria ter sido gravado na primeira visualizacao'
+        )
+
+    def test_public_view_does_not_downgrade_approved_proposal(
+        self, api_client, proposal,
+    ):
+        """Se a proposta ja esta 'approved' (ou outro estado posterior),
+        uma nova visualizacao NAO deve reverter o status para 'viewed'.
+        """
+        proposal.proposal_file = SimpleUploadedFile(
+            'p.html', b'<html></html>', content_type='text/html',
+        )
+        proposal.status = 'approved'
+        proposal.save()
+
+        resp = api_client.get(
+            f'/api/v1/sales/proposals/public/{proposal.public_token}/',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        proposal.refresh_from_db()
+        assert proposal.status == 'approved', (
+            f"Status nao deveria mudar (era 'approved'), virou '{proposal.status}'"
+        )
+
     def test_onboarding_get_pre_submit_returns_full_data(
         self, api_client, onboarding,
     ):

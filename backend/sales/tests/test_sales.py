@@ -372,6 +372,47 @@ class TestProposal:
         response = api_client.get(self.url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+    # ── Bug #11: proposal status após conversão em contrato ─────────────────
+    def test_convert_to_contract_marks_proposal_as_converted(
+        self, manager_client, proposal
+    ):
+        """Após convert_to_contract, a Proposal deve sair de 'approved'
+        e ir para 'converted' — caso contrário ela permanece eternamente
+        no KPI de 'propostas em aberto' do dashboard.
+        """
+        proposal.status = 'approved'
+        proposal.save()
+        url = f'{self.url}{proposal.id}/convert_to_contract/'
+        response = manager_client.post(url)
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        proposal.refresh_from_db()
+        assert proposal.status == 'converted', (
+            f"Proposta deveria estar 'converted', está '{proposal.status}'"
+        )
+
+    def test_converted_proposal_excluded_from_pipeline_kpi(
+        self, manager_client, proposal
+    ):
+        """Dashboard deve contar 'em aberto' SEM incluir propostas convertidas.
+        Antes do fix, converted era 'approved' e contava como pipeline para sempre.
+        """
+        proposal.status = 'approved'
+        proposal.save()
+        # Converte
+        manager_client.post(f'{self.url}{proposal.id}/convert_to_contract/')
+        # Dashboard não deve contar essa proposta como pipeline
+        response = manager_client.get(f'{self.url}dashboard/')
+        assert response.status_code == status.HTTP_200_OK
+        proposal.refresh_from_db()
+        # KPI 'sent_count' representa pipeline em aberto. Proposta convertida
+        # não conta porque já virou contrato.
+        # A asserção é por valor: se essa única proposta converteu, sent_count
+        # da fixture deve ser 0 (não havia outras propostas em aberto).
+        assert response.data['sent_count'] == 0, (
+            f"Proposta convertida ainda aparece em 'sent_count'="
+            f"{response.data['sent_count']}, status={proposal.status}"
+        )
+
 
 # ─── CONTRACT ────────────────────────────────────────────────────────────────
 

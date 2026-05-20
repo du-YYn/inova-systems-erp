@@ -1041,6 +1041,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
                     },
                 )
 
+            # Marca a proposta como convertida — sai do pipeline "em aberto"
+            # do dashboard. Sem isso, a proposta fica eternamente como
+            # 'approved' e continua sendo contabilizada como pipeline mesmo
+            # após o contrato ser criado.
+            proposal.status = 'converted'
+            proposal.save(update_fields=['status'])
+
         # Log de atividade no CRM
         if proposal.prospect:
             log_crm_activity(

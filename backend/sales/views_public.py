@@ -94,7 +94,15 @@ class ProposalPublicView(APIView):
                 user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
             )
             proposal.view_count = (proposal.view_count or 0) + 1
-            proposal.save(update_fields=['view_count'])
+            update_fields = ['view_count']
+            # Bug #16: na primeira visualizacao, promove 'sent' -> 'viewed'
+            # e grava viewed_at. Status posteriores (negotiation/approved/
+            # converted/rejected/expired) NAO sao revertidos.
+            if proposal.status == 'sent':
+                proposal.status = 'viewed'
+                proposal.viewed_at = tz.now()
+                update_fields.extend(['status', 'viewed_at'])
+            proposal.save(update_fields=update_fields)
 
         # F7B.2: nao exponha view_count publicamente — telemetria interna.
         # Cliente/competidor nao precisa saber engajamento da empresa.
