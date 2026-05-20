@@ -357,10 +357,20 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _generate_receivables(prospect, user):
-        """Gera faturas A Receber ao fechar lead."""
+        """Gera faturas A Receber ao fechar lead.
+
+        Idempotente: se `prospect.receivables_generated_at` ja esta setado,
+        nao gera de novo (evita duplicacao em won -> production -> won).
+        Atomico: o conjunto de invoices eh criado dentro de uma unica
+        transacao — se qualquer parcela falhar, nenhuma fica commitada.
+        """
         from finance.models import Invoice
         from django.db import transaction as db_tx
         from datetime import date
+
+        # Bug #3: idempotencia — nao re-gerar se ja rodou
+        if prospect.receivables_generated_at is not None:
+            return
 
         total = float(prospect.proposal_value or prospect.estimated_value or 0)
         if total <= 0:
@@ -376,72 +386,83 @@ class ProspectViewSet(viewsets.ModelViewSet):
         desc_base = f'{prospect.company_name}'
 
         def make_invoice(desc, value, due_date):
-            with db_tx.atomic():
-                last = Invoice.objects.select_for_update().filter(
-                    invoice_type='receivable'
-                ).order_by('-id').first()
-                seq = 0
-                if last:
-                    try:
-                        seq = int(last.number.split('-')[1])
-                    except (IndexError, ValueError):
-                        seq = 0
-                Invoice.objects.create(
-                    invoice_type='receivable',
-                    number=f"REC-{seq + 1:05d}",
-                    description=desc,
-                    customer=customer,
-                    value=value, discount=0, interest=0, tax=0, total=value,
-                    issue_date=date.today(), due_date=due_date,
-                    status='pending',
-                    payment_method=method,
-                    notes=f'Gerada do lead: {prospect.company_name}',
-                    created_by=user,
-                )
-
-        if pay_type == 'one_time':
-            make_invoice(f'{desc_base} — Pagamento único', total, due)
-
-        elif pay_type == 'split':
-            pct = prospect.payment_split_pct or 50
-            entrada = round(total * pct / 100, 2)
-            entrega = round(total - entrada, 2)
-            make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
-            # Entrega: 3 meses depois
-            em = due.month + 3
-            ey = due.year + (em - 1) // 12
-            em = (em - 1) % 12 + 1
-            entrega_due = date(ey, em, min(due.day, 28))
-            make_invoice(
-                f'{desc_base} — Entrega ({100 - pct}%)',
-                entrega, entrega_due,
+            # select_for_update precisa estar dentro de uma transaction.atomic.
+            # O caller envolve tudo num bloco atomic mais externo (ver abaixo),
+            # entao aqui nao precisamos abrir outro.
+            last = Invoice.objects.select_for_update().filter(
+                invoice_type='receivable'
+            ).order_by('-id').first()
+            seq = 0
+            if last:
+                try:
+                    seq = int(last.number.split('-')[1])
+                except (IndexError, ValueError):
+                    seq = 0
+            Invoice.objects.create(
+                invoice_type='receivable',
+                number=f"REC-{seq + 1:05d}",
+                description=desc,
+                customer=customer,
+                value=value, discount=0, interest=0, tax=0, total=value,
+                issue_date=date.today(), due_date=due_date,
+                status='pending',
+                payment_method=method,
+                notes=f'Gerada do lead: {prospect.company_name}',
+                created_by=user,
             )
 
-        elif pay_type == 'installments':
-            n = prospect.payment_installments or 1
-            parcela = round(total / n, 2)
-            for i in range(n):
-                m = due.month + i
-                y = due.year + (m - 1) // 12
-                m = (m - 1) % 12 + 1
-                d = min(due.day, 28)
-                make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
-                             date(y, m, d))
+        # Bug #5: todo o conjunto de receivables fica numa unica transacao.
+        # Se a 2a parcela falhar, a 1a NAO fica commitada — o estado
+        # "metade gerado" deixa de existir.
+        with db_tx.atomic():
+            if pay_type == 'one_time':
+                make_invoice(f'{desc_base} — Pagamento único', total, due)
 
-        elif pay_type == 'monthly':
-            mv = float(prospect.payment_monthly_value or total)
-            make_invoice(f'{desc_base} — Mensalidade', mv, due)
+            elif pay_type == 'split':
+                pct = prospect.payment_split_pct or 50
+                entrada = round(total * pct / 100, 2)
+                entrega = round(total - entrada, 2)
+                make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
+                # Entrega: 3 meses depois
+                em = due.month + 3
+                ey = due.year + (em - 1) // 12
+                em = (em - 1) % 12 + 1
+                entrega_due = date(ey, em, min(due.day, 28))
+                make_invoice(
+                    f'{desc_base} — Entrega ({100 - pct}%)',
+                    entrega, entrega_due,
+                )
 
-        elif pay_type == 'setup_monthly':
-            setup = float(prospect.estimated_value or total)
-            mv = float(prospect.payment_monthly_value or 0)
-            make_invoice(f'{desc_base} — Setup', setup, due)
-            if mv > 0:
-                m2 = due.month + 1
-                y2 = due.year + (m2 - 1) // 12
-                m2 = (m2 - 1) % 12 + 1
-                make_invoice(f'{desc_base} — Mensalidade', mv,
-                             date(y2, m2, min(due.day, 28)))
+            elif pay_type == 'installments':
+                n = prospect.payment_installments or 1
+                parcela = round(total / n, 2)
+                for i in range(n):
+                    m = due.month + i
+                    y = due.year + (m - 1) // 12
+                    m = (m - 1) % 12 + 1
+                    d = min(due.day, 28)
+                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
+                                 date(y, m, d))
+
+            elif pay_type == 'monthly':
+                mv = float(prospect.payment_monthly_value or total)
+                make_invoice(f'{desc_base} — Mensalidade', mv, due)
+
+            elif pay_type == 'setup_monthly':
+                setup = float(prospect.estimated_value or total)
+                mv = float(prospect.payment_monthly_value or 0)
+                make_invoice(f'{desc_base} — Setup', setup, due)
+                if mv > 0:
+                    m2 = due.month + 1
+                    y2 = due.year + (m2 - 1) // 12
+                    m2 = (m2 - 1) % 12 + 1
+                    make_invoice(f'{desc_base} — Mensalidade', mv,
+                                 date(y2, m2, min(due.day, 28)))
+
+            # Marca como gerado DENTRO da mesma transacao — se algo acima
+            # falhar, o flag tambem rola back e a proxima tentativa pode rodar.
+            prospect.receivables_generated_at = timezone.now()
+            prospect.save(update_fields=['receivables_generated_at'])
 
     @staticmethod
     def _mark_entry_paid(prospect, user):
@@ -786,9 +807,19 @@ class ProposalViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _generate_commissions(proposal, user):
-        """Gera ClientCost de comissão Closer/SDR ao aprovar proposta."""
+        """Gera ClientCost de comissão Closer/SDR ao aprovar proposta.
+
+        Idempotente: se `proposal.commissions_generated_at` ja esta setado,
+        nao gera de novo (evita duplicacao em re-aprovacao quando admin
+        reverte status via Django Admin).
+        """
         from decimal import Decimal, ROUND_HALF_UP
+        from django.db import transaction as db_tx
         from finance.models import ClientCost
+
+        # Bug #4: idempotencia — nao re-gerar se ja rodou
+        if proposal.commissions_generated_at is not None:
+            return
 
         total = proposal.total_value or Decimal('0')
         if total <= 0:
@@ -808,17 +839,21 @@ class ProposalViewSet(viewsets.ModelViewSet):
         CLOSER_PCT = Decimal('10')
         SDR_PCT = Decimal('5')
 
-        for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
-            value = (total * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            ClientCost.objects.create(
-                customer=customer,
-                cost_category='comercial',
-                description=desc,
-                value=value,
-                reference_month=ref_month,
-                notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
-                created_by=user,
-            )
+        # Atomic: ou cria os 2 ClientCost + marca flag, ou nada.
+        with db_tx.atomic():
+            for desc, pct in [('Comissão Closer', CLOSER_PCT), ('Comissão SDR', SDR_PCT)]:
+                value = (total * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                ClientCost.objects.create(
+                    customer=customer,
+                    cost_category='comercial',
+                    description=desc,
+                    value=value,
+                    reference_month=ref_month,
+                    notes=f'Automática — Proposta #{proposal.number} ({pct}% de R${total:.2f})',
+                    created_by=user,
+                )
+            proposal.commissions_generated_at = timezone.now()
+            proposal.save(update_fields=['commissions_generated_at'])
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):

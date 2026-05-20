@@ -262,6 +262,11 @@ class Prospect(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Idempotencia: marca quando _generate_receivables rodou com sucesso para
+    # este prospect. Sem isso, won -> production -> won re-dispara e duplica
+    # faturas.
+    receivables_generated_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = 'prospects'
         ordering = ['-created_at']
@@ -339,6 +344,10 @@ class Proposal(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_proposals')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Idempotencia: marca quando _generate_commissions rodou com sucesso para
+    # esta proposta. Sem isso, re-aprovar duplica os ClientCost de Closer/SDR.
+    commissions_generated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'proposals'

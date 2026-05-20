@@ -413,6 +413,90 @@ class TestProposal:
             f"{response.data['sent_count']}, status={proposal.status}"
         )
 
+    # ── Bug #3+#5: idempotencia e atomicidade de _generate_receivables ──────
+    def test_won_revert_does_not_duplicate_receivables(
+        self, manager_client, db, manager_user,
+    ):
+        """Mover prospect won -> production -> won NAO deve duplicar
+        as faturas A Receber. Sem o fix, cada transicao para 'won'
+        re-dispara _generate_receivables.
+        """
+        from finance.models import Invoice
+        Customer.objects.create(
+            company_name='Idempo Corp', email='idempo@x.com',
+            customer_type='PJ', created_by=manager_user,
+        )
+        prospect = Prospect.objects.create(
+            company_name='Idempo Corp', contact_name='X',
+            contact_email='x@idempo.com',
+            status='proposal', source='website',
+            created_by=manager_user,
+            proposal_value=10000, payment_type='one_time',
+        )
+
+        prospects_url = '/api/v1/sales/prospects/'
+
+        # 1a transicao para won — gera receivables
+        r1 = manager_client.patch(
+            f'{prospects_url}{prospect.id}/', {'status': 'won'}, format='json',
+        )
+        assert r1.status_code == status.HTTP_200_OK, r1.data
+        count_first = Invoice.objects.filter(invoice_type='receivable').count()
+        assert count_first >= 1, 'Primeira transicao deveria gerar receivables'
+
+        # Volta para production, depois para won de novo
+        manager_client.patch(
+            f'{prospects_url}{prospect.id}/', {'status': 'production'},
+            format='json',
+        )
+        manager_client.patch(
+            f'{prospects_url}{prospect.id}/', {'status': 'won'},
+            format='json',
+        )
+
+        count_second = Invoice.objects.filter(invoice_type='receivable').count()
+        assert count_second == count_first, (
+            f"Receivables duplicaram em re-transicao won: "
+            f"{count_first} -> {count_second}"
+        )
+
+    # ── Bug #4: idempotencia de _generate_commissions ───────────────────────
+    def test_approve_proposal_does_not_duplicate_commissions(
+        self, manager_client, proposal,
+    ):
+        """Aprovar a mesma proposta duas vezes (admin revertendo status no
+        Django Admin) NAO deve duplicar ClientCost de comissoes Closer/SDR.
+        """
+        from finance.models import ClientCost
+        proposal.status = 'sent'
+        proposal.total_value = 10000
+        proposal.save()
+
+        # 1a aprovacao — cria Closer + SDR
+        r1 = manager_client.post(f'{self.url}{proposal.id}/approve/')
+        assert r1.status_code == status.HTTP_200_OK, r1.data
+        count_first = ClientCost.objects.filter(
+            cost_category='comercial',
+            notes__icontains=proposal.number,
+        ).count()
+        assert count_first >= 2, 'Primeira aprovacao deveria criar 2 ClientCost'
+
+        # Admin reverte para 'sent' e re-aprova
+        proposal.refresh_from_db()
+        proposal.status = 'sent'
+        proposal.save(update_fields=['status'])
+        r2 = manager_client.post(f'{self.url}{proposal.id}/approve/')
+        assert r2.status_code == status.HTTP_200_OK, r2.data
+
+        count_second = ClientCost.objects.filter(
+            cost_category='comercial',
+            notes__icontains=proposal.number,
+        ).count()
+        assert count_second == count_first, (
+            f"Comissoes duplicaram em re-aprovacao: "
+            f"{count_first} -> {count_second}"
+        )
+
 
 # ─── CONTRACT ────────────────────────────────────────────────────────────────
 
