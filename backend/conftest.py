@@ -6,12 +6,20 @@ def use_locmem_cache(settings):
     """
     Substitui o Redis por cache em memória durante os testes.
     Cada teste começa com cache vazio — throttle não persiste entre testes.
+
+    LocMemCache pode persistir entre testes dentro do mesmo processo se
+    nao for explicitamente limpo. Garante reset por teste com cache.clear()
+    apos atribuir o backend. Sem isso, throttles em endpoints publicos
+    (ex.: 3/h em onboarding submit) somavam chamadas entre tests da mesma
+    classe e quebravam o CI quando rodava em ambiente mais rapido.
     """
     settings.CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         }
     }
+    from django.core.cache import cache
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)
