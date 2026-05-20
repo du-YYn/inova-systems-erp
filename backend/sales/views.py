@@ -329,6 +329,22 @@ class ProspectViewSet(viewsets.ModelViewSet):
             self._mark_entry_paid(instance, self.request.user)
 
     @staticmethod
+    def _resolve_project_value(prospect):
+        """Bug #10: comissao de parceiro NAO pode ser derivada de campo
+        livremente editavel (prospect.proposal_value). Prefere o valor de
+        uma Proposal aprovada/convertida — esse valor passou pelo workflow
+        de aprovacao e e' auditavel. So cai em prospect.proposal_value /
+        estimated_value como fallback (leads sem proposta formal).
+        """
+        approved_proposal = Proposal.objects.filter(
+            prospect=prospect,
+            status__in=['approved', 'converted'],
+        ).order_by('-created_at').first()
+        if approved_proposal and approved_proposal.total_value:
+            return float(approved_proposal.total_value)
+        return float(prospect.proposal_value or prospect.estimated_value or 0)
+
+    @staticmethod
     def _generate_partner_commission(prospect):
         """Gera comissão do parceiro (se lead foi indicado por parceiro)."""
         if not prospect.referred_by_id:
@@ -343,7 +359,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         # Evitar duplicata (forma segura para OneToOne)
         if PartnerCommission.objects.filter(prospect=prospect).exists():
             return
-        project_value = float(prospect.proposal_value or prospect.estimated_value or 0)
+        project_value = ProspectViewSet._resolve_project_value(prospect)
         if project_value < 10_000:
             logger.info(
                 f"Comissão não gerada: valor R${project_value:.2f} abaixo da faixa mínima "

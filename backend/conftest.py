@@ -12,3 +12,14 @@ def use_locmem_cache(settings):
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         }
     }
+
+
+@pytest.fixture(autouse=True)
+def celery_eager(settings):
+    """
+    Roda tasks Celery sincrono nos testes — evita tentativa de conexao
+    com Redis quando o codigo invoca .delay() durante uma transicao
+    (ex: notificacoes de email em _generate_partner_commission).
+    """
+    settings.CELERY_TASK_ALWAYS_EAGER = True
+    settings.CELERY_TASK_EAGER_PROPAGATES = False  # nao propaga erro do task

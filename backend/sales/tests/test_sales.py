@@ -232,6 +232,58 @@ class TestProspect:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['status'] == 'qualified'
 
+    # ── Bug #10: comissao de parceiro NAO pode vir de campo livre ──────────
+    def test_partner_commission_uses_approved_proposal_value(
+        self, db, manager_user, customer,
+    ):
+        """Bug #10: comissao de parceiro deve usar Proposal.total_value de
+        proposta aprovada (passou pelo workflow), NAO prospect.proposal_value
+        que e' livremente editavel pelo operator.
+        """
+        from sales.models import PartnerCommission, Proposal as P
+        from sales.views import ProspectViewSet
+
+        partner = User.objects.create_user(
+            username='partner_af', email='partner_af@x.com',
+            password='x', role='partner', is_active=True,
+        )
+
+        prospect = Prospect.objects.create(
+            company_name='Anti Fraude Co', contact_name='X',
+            contact_email='x@af.com',
+            status='proposal', source='referral',
+            created_by=manager_user,
+            proposal_value=50000,  # INFLADO — operator mexeu livremente
+            referred_by=partner,
+        )
+
+        # Proposta aprovada com valor REAL (passou pelo fluxo de aprovacao)
+        P.objects.create(
+            prospect=prospect, customer=customer,
+            number='PROP-AF-001', title='AF', proposal_type='software_dev',
+            billing_type='fixed',
+            total_value=15000,  # valor real
+            valid_until=timezone.now().date(),
+            status='approved',
+            created_by=manager_user,
+        )
+
+        # Dispara geracao de comissao
+        ProspectViewSet._generate_partner_commission(prospect)
+
+        commission = PartnerCommission.objects.filter(prospect=prospect).first()
+        assert commission is not None, 'Comissao deveria ter sido criada'
+        # Comissao usa 15000 (Proposal.total_value), NAO 50000 (proposal_value inflado)
+        # Faixa 10-25k = 10% = 1500
+        assert float(commission.project_value) == 15000.0, (
+            f"project_value deveria ser 15000 (do Proposal aprovado), "
+            f"foi {commission.project_value}"
+        )
+        assert float(commission.commission_value) == 1500.0, (
+            f"commission_value deveria ser 1500 (10% de 15000), "
+            f"foi {commission.commission_value}"
+        )
+
     # ── Bug #7: WinLossReason obrigatorio na transicao para 'lost' ──────────
     def test_transition_to_lost_without_win_loss_reason_is_rejected(
         self, manager_client, db, manager_user,
