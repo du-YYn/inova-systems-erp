@@ -73,8 +73,10 @@ jobs:
             if [ "$SUCCESS" = "true" ]; then
               echo "Smoke test frontend (até 60s)..."
               for i in $(seq 1 12); do
-                # Acessamos uma rota leve que nao depende de auth nem do backend.
-                FE_STATUS=$(docker compose exec -T frontend wget -q -O /dev/null -S http://localhost:3000/ 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
+                # 127.0.0.1 explicito: Next.js standalone listen em 0.0.0.0 (IPv4-only).
+                # 'localhost' no Alpine resolver retorna ::1 (IPv6) primeiro — wget
+                # recebia "Connection refused" mesmo com o Next.js rodando.
+                FE_STATUS=$(docker compose exec -T frontend wget -q -O /dev/null -S http://127.0.0.1:3000/ 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
                 # Aceita 200 ou 307 (redirect comum em SSR) ou 404 (rota raiz pode nao existir mas servidor responde).
                 case "$FE_STATUS" in
                   200|301|302|307|308|404) FRONTEND_OK=true; break ;;
@@ -113,7 +115,7 @@ jobs:
               docker compose exec -T backend curl -v http://localhost:8000/api/v1/core/health/ 2>&1 || true
               echo ""
               echo "--- Frontend listener (última tentativa) ---"
-              docker compose exec -T frontend wget -O - http://localhost:3000/ 2>&1 | head -20 || true
+              docker compose exec -T frontend wget -O - http://127.0.0.1:3000/ 2>&1 | head -20 || true
               echo "=============================================="
               echo ""
 
