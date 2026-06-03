@@ -1,27 +1,34 @@
-"""Sanitizador de HTML usado em propostas publicas (F7B.3 + F7B.4).
+"""Sanitizador de HTML usado em propostas publicas (F7B.3 + F7B.4 + F7B.5).
 
-Defesa em camadas: a primeira linha contra XSS sao o iframe sandbox sem
-`allow-scripts` e o CSP `script-src 'none'` retornado pelo backend. Mas
-nem sempre podemos confiar que essas duas mitigacoes vao continuar
-funcionando (bug em browser, override de CSP por extensao, etc.). O HTML
-das propostas eh enviado pelo time comercial e nao por um cliente — mas
-um vetor interno (operator comprometido) tambem e' real.
+Modelo de seguranca (F7B.5):
+- Propostas sao arquivos de marketing com HTML+CSS+JS feitos pelo time
+  comercial — JS e' necessario para animacoes, posicionamento de texto
+  em circulos, parallax, etc.
+- O isolamento NAO depende mais de bloquear JS no sanitizer. Depende de:
+    1. iframe sandbox SEM `allow-same-origin` -> origem nula, JS nao
+       acessa cookies/localStorage/parent window do dominio publico.
+    2. CSP `connect-src 'none'` -> JS nao consegue exfiltrar dados pra
+       servidor de attacker (nem fetch, nem XHR, nem WebSocket, nem
+       sendBeacon).
+    3. CSP `script-src 'unsafe-inline'` SEM hosts permitidos -> JS
+       remoto (`<script src="https://evil.com/...">`) e' bloqueado pelo
+       browser; so inline executa.
+    4. Sanitizer continua removendo o que NAO eh script-controlado:
+       <iframe>, <object>, <embed>, atributos `on*`, `srcdoc`,
+       `formaction`, schemes `javascript:`/`data:`/`vbscript:` em href.
+- Auditoria: upload eh logado com SHA-256 do conteudo + usuario.
 
-Politica:
-- Pre-strip de blocos <script>/<noscript>/<style> com expression() ANTES
-  do bleach (F7B.4) — evita que conteudo do <script> apareca como texto
-  literal apos bleach remover so a tag.
-- Allow-list explicita de tags (cobre templates de marketing modernos:
-  HTML5 sectioning, SVG inline, <picture>/<source> responsivo).
-- Allow-list de atributos por tag, incluindo `data-*` (inertes sem JS,
-  seguros — JS ja esta bloqueado em todas as camadas).
+O que ESTE sanitizer faz:
+- Allow-list explicita de tags (HTML5 sectioning, SVG inline, picture,
+  + `<script>` inline-only).
+- Para `<script>`: rejeita atributo `src` (impede JS remoto), rejeita
+  `srcdoc`. Aceita `type` (com whitelist de valores) e `nonce`.
+- Allow-list de atributos por tag, incluindo `data-*` e `aria-*`.
 - Allow-list de schemes em href/src (`http`, `https`, `mailto`, `tel`).
 - Inline styles passam por `bleach.css_sanitizer` (CSS allow-list,
   proibicao de `expression()`/`url(javascript:...)`); CSS variables
   custom (`--prefixed`) sao permitidas.
-- Reveal-fix CSS auto-injetado quando o pre-strip remove pelo menos um
-  <script> — neutraliza padroes "hide com CSS, mostra com JS" que sem
-  o script ficam permanentemente invisiveis.
+- <noscript> continua sendo strip (irrelevante quando JS roda).
 """
 from __future__ import annotations
 
@@ -31,23 +38,31 @@ import bleach
 from bleach.css_sanitizer import CSSSanitizer
 
 
-# ── Pre-strip patterns (F7B.4) ──────────────────────────────────────────────
-# bleach com `strip=True` remove a tag mas mantem o INNER TEXT. Para
-# <script>, isso significa que o JS aparece como texto literal na pagina —
-# bug catastrofico. Removemos blocos completos antes de chamar bleach.
-_SCRIPT_BLOCK_RE = re.compile(
-    r'<script\b[^>]*>.*?</script\s*>',
-    re.IGNORECASE | re.DOTALL,
-)
-# <noscript> tambem: nao queremos vazamento de texto que so existia pra
-# usuarios sem JS (irrelevante no nosso contexto).
+# ── Pre-strip patterns ─────────────────────────────────────────────────────
+# F7B.5: <script> agora passa pelo bleach (com filter de attrs) em vez de
+# ser pre-stripped. So `<noscript>` continua removido — irrelevante no
+# nosso contexto onde JS sempre roda.
 _NOSCRIPT_BLOCK_RE = re.compile(
     r'<noscript\b[^>]*>.*?</noscript\s*>',
     re.IGNORECASE | re.DOTALL,
 )
-# <script> orfa (sem fechamento) — defesa contra mismatching tags.
-_SCRIPT_OPEN_RE = re.compile(
-    r'<script\b[^>]*/?>',
+
+# F7B.5: blocos perigosos que bleach com strip=True deixaria como texto
+# literal — pre-strip mantem o documento limpo.
+_DANGEROUS_BLOCK_RE = re.compile(
+    r'<(iframe|object|embed|frame|frameset|applet)\b[^>]*>.*?</\1\s*>',
+    re.IGNORECASE | re.DOTALL,
+)
+_DANGEROUS_OPEN_RE = re.compile(
+    r'<(iframe|object|embed|frame|frameset|applet)\b[^>]*/?>',
+    re.IGNORECASE,
+)
+# F7B.5: <meta http-equiv=...> remove a tag inteira (refresh, content-type,
+# X-UA-Compatible — todos perigosos ou inuteis). Sem isso, bleach removeria
+# so o atributo http-equiv mas manteria a tag e o `content="..."`, deixando
+# fragmento confuso (ex.: `<meta content="0;url=evil">`).
+_META_HTTP_EQUIV_RE = re.compile(
+    r'<meta\b[^>]*\bhttp-equiv\b[^>]*/?>',
     re.IGNORECASE,
 )
 
@@ -55,7 +70,10 @@ _SCRIPT_OPEN_RE = re.compile(
 # ── Tag allow-list ──────────────────────────────────────────────────────────
 ALLOWED_TAGS = frozenset({
     # Estrutura HTML5
-    'html', 'body', 'head', 'title', 'style',
+    'html', 'body', 'head', 'title', 'style', 'meta', 'link',
+    # F7B.5: <script> inline permitido. Atributo `src` e' rejeitado pelo
+    # _attribute_filter — so JS embutido no proprio arquivo executa.
+    'script',
     # Sectioning (landing page typical)
     'article', 'aside', 'footer', 'header', 'main', 'nav', 'section',
     # Texto
@@ -104,6 +122,43 @@ def _attribute_filter(tag, name, value):
         'hidden',
     ):
         return True
+
+    # F7B.5: <script> inline-only. `src` e' EXPLICITAMENTE rejeitado —
+    # o que impede `<script src="https://evil.com/x.js">` carregar JS
+    # remoto que escaparia da auditoria de upload. `srcdoc` tambem fora.
+    # Aceita apenas `type` (whitelist de valores conhecidos) e `nonce`.
+    if tag == 'script':
+        if name == 'type':
+            allowed_types = {
+                'text/javascript', 'application/javascript', 'module',
+                'application/json', 'application/ld+json',
+                'text/template', 'text/x-template',
+            }
+            return value.lower() in allowed_types if value else True
+        if name == 'nonce':
+            return True
+        # Bloqueia src, srcdoc, integrity, crossorigin, async, defer,
+        # event handlers, qualquer outro.
+        return False
+
+    # F7B.5: <link rel=...> permitido para fontes/preload/preconnect.
+    # `href` aceita schemes seguros (HTTP/HTTPS) — javascript: bloqueado
+    # por ALLOWED_PROTOCOLS no bleach.
+    if tag == 'link':
+        return name in {
+            'rel', 'href', 'type', 'media', 'sizes', 'as', 'crossorigin',
+            'integrity', 'fetchpriority', 'imagesrcset', 'imagesizes',
+            'hreflang', 'referrerpolicy', 'disabled',
+        }
+
+    # F7B.5: <meta> charset/viewport/og/twitter — comum em templates.
+    # `http-equiv` e' EXPLICITAMENTE rejeitado para impedir
+    # `<meta http-equiv="refresh" content="0;url=evil.com">` (redirect
+    # hijack da pagina da proposta).
+    if tag == 'meta':
+        return name in {
+            'charset', 'name', 'content', 'property', 'media',
+        }
 
     # Por tag
     table = {
@@ -283,48 +338,30 @@ class _CssAllowList:
 _CSS = CSSSanitizer(allowed_css_properties=_CssAllowList(ALLOWED_CSS_PROPERTIES))
 
 
-# ── Reveal-fix CSS (F7B.4) ──────────────────────────────────────────────────
-# Templates modernos escondem secoes com CSS e mostram via JS scroll-triggered
-# (AOS, GSAP, framer-motion). Sem JS, conteudo fica permanentemente oculto.
-# Quando detectamos remocao de <script>, injetamos esse CSS pra neutralizar
-# os padroes mais comuns de "hide-then-reveal".
-_REVEAL_FIX_CSS = '''
-<style data-injected="reveal-fix">
-/* F7B.4: garante que conteudo escondido por convencao volte a aparecer
-   quando o JS de reveal e' removido pelo sanitizer. */
-.hidden, .invisible, .opacity-0,
-[data-aos], [data-animation], [data-animate], [data-fade],
-[data-reveal], [data-scroll-reveal],
-[class*="hidden-until"], [class*="reveal-on"],
-[class*="fade-up"], [class*="fade-down"], [class*="fade-in"],
-[class*="slide-up"], [class*="slide-down"], [class*="slide-in"] {
-    opacity: 1 !important;
-    visibility: visible !important;
-    transform: none !important;
-}
-</style>
-'''
-
-
 def sanitize_proposal_html(content: bytes | str) -> str:
     """Sanitiza o HTML de uma proposta antes de servir publicamente.
 
     Aceita bytes (do FileField.read()) ou str. Retorna sempre str UTF-8.
     Tags fora do allow-list sao removidas. Atributos `on*` / `srcdoc` /
     hrefs com scheme inseguro sao zerados.
+
+    F7B.5: <script> inline e' preservado (atributo `src` e' removido).
+    O isolamento ficou na trinca sandbox null-origin + CSP `connect-src
+    'none'` + CSP sem hosts em `script-src`. Vide docstring do modulo.
     """
     if isinstance(content, bytes):
         text = content.decode('utf-8', errors='replace')
     else:
         text = content
 
-    # F7B.4: pre-strip de blocos completos de <script>/<noscript> antes do
-    # bleach. Sem isso, bleach removeria so a tag e o JS apareceria como
-    # texto literal na pagina.
-    had_script = bool(_SCRIPT_BLOCK_RE.search(text) or _SCRIPT_OPEN_RE.search(text))
-    text = _SCRIPT_BLOCK_RE.sub('', text)
+    # F7B.5: pre-strip apenas de blocos perigosos que NAO estao no
+    # allow-list de tags (iframe, object, embed, frame, applet).
+    # Sem isso, bleach com strip=True deixaria o conteudo interno como
+    # texto literal. <script> e' tratado pelo bleach + _attribute_filter.
     text = _NOSCRIPT_BLOCK_RE.sub('', text)
-    text = _SCRIPT_OPEN_RE.sub('', text)
+    text = _DANGEROUS_BLOCK_RE.sub('', text)
+    text = _DANGEROUS_OPEN_RE.sub('', text)
+    text = _META_HTTP_EQUIV_RE.sub('', text)
 
     cleaned = bleach.clean(
         text,
@@ -335,16 +372,5 @@ def sanitize_proposal_html(content: bytes | str) -> str:
         strip=True,
         strip_comments=True,
     )
-
-    # F7B.4: se removemos pelo menos um <script>, injeta CSS reveal-fix
-    # antes de </body> (ou no final, se nao houver) pra neutralizar
-    # "hide com CSS, mostra com JS".
-    if had_script:
-        body_close = re.search(r'</body\s*>', cleaned, re.IGNORECASE)
-        if body_close:
-            insert_pos = body_close.start()
-            cleaned = cleaned[:insert_pos] + _REVEAL_FIX_CSS + cleaned[insert_pos:]
-        else:
-            cleaned = cleaned + _REVEAL_FIX_CSS
 
     return cleaned
