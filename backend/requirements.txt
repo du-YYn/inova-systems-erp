@@ -6,7 +6,10 @@ djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.3.1
 
 # ─── Database ────────────────────────────────────────────────────────────────
-psycopg2-binary==2.9.12
+# Source build (não `psycopg2-binary`): o binary wheel inclui libssl/libcrypto
+# vendorizadas que não recebem patches do SO. Fonte exige `libpq-dev` no
+# Dockerfile mas usa o OpenSSL do sistema (apt unattended).
+psycopg2==2.9.12
 
 # ─── Environment ─────────────────────────────────────────────────────────────
 # python-dotenv 1.2.2 corrige CVE-2026-28684

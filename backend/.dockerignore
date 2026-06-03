@@ -48,3 +48,10 @@ db.sqlite3
 .idea/
 *.swp
 *.swo
+
+# Documentação interna — não vai pra imagem (reduz superfície + size).
+# CLAUDE.md em particular pode conter convenções/segredos arquiteturais.
+*.md
+CLAUDE.md
+docs/
+README*
