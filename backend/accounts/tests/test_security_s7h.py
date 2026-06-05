@@ -43,7 +43,7 @@ def _flush_cache_between_tests():
 @pytest.fixture
 def user_factory(db):
     def _create(username='s7h_user', email='s7h@user.com',
-                password='pass12345', role='operator', is_active=True,
+                password='pass12345', role='operator', is_active=True,  # noqa: S107
                 is_2fa_enabled=False, totp_secret=''):
         u = User.objects.create_user(
             username=username, email=email, password=password,

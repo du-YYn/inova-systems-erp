@@ -245,8 +245,12 @@ class TestLogout:
         response = api_client.post(self.url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_logout_success(self, auth_client):
-        response = auth_client.post(self.url, {'refresh': 'sometoken'})
+    def test_logout_success(self, auth_client, regular_user):
+        # S7H: LogoutView agora aceita SO via cookie (fallback no body removido).
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(regular_user)
+        auth_client.cookies['refresh_token'] = str(refresh)
+        response = auth_client.post(self.url)
         assert response.status_code == status.HTTP_200_OK
 
 
