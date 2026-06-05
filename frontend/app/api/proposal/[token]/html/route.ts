@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getInternalBackendUrls } from '@/lib/internalBackend';
 
-const BACKEND_URLS = [
-  process.env.INTERNAL_API_URL,
-  'http://backend:8000/api/v1',
-  'http://grupo_ry_inova-erp_backend:8000/api/v1',
-  process.env.NEXT_PUBLIC_API_URL,
-].filter(Boolean) as string[];
+const BACKEND_URLS = getInternalBackendUrls();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -32,7 +28,20 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            'Content-Security-Policy': "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;",
+            // CSP estrita: HTML público de proposta — sem scripts, sem rede
+            // externa, sem iframes. Permite estilos/fontes/imagens inline e
+            // dados embutidos (data:) que o template do backend usa.
+            'Content-Security-Policy': [
+              "default-src 'none'",
+              "script-src 'none'",
+              "style-src 'self' 'unsafe-inline'",
+              "font-src 'self' data:",
+              "img-src 'self' data: https:",
+              "frame-ancestors 'none'",
+              "base-uri 'none'",
+              "object-src 'none'",
+              "form-action 'none'",
+            ].join('; '),
             'X-Content-Type-Options': 'nosniff',
             'X-XSS-Protection': '1; mode=block',
             'Cache-Control': 'no-store, no-cache',

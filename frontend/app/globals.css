@@ -333,3 +333,11 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Kanban (CRM Funil) — scrollbar styling movido do JSX para cá para
+   compatibilidade com CSP `style-src 'self' 'nonce-…'` (sem unsafe-inline). */
+.kanban-scroll::-webkit-scrollbar { height: 12px; }
+.kanban-scroll::-webkit-scrollbar-track { background: #1a1a2e; border-radius: 6px; }
+.kanban-scroll::-webkit-scrollbar-thumb { background: #A6864A; border-radius: 6px; }
+.kanban-scroll::-webkit-scrollbar-thumb:hover { background: #c9a75e; }
+.kanban-scroll { scrollbar-width: auto; scrollbar-color: #A6864A #1a1a2e; }

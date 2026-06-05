@@ -7,6 +7,7 @@ import { TableSkeleton } from '@/components/ui/Skeleton';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api, { ApiError } from '@/lib/api';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 
 interface Rate {
   id: number;
@@ -52,7 +53,8 @@ export default function BancosConfigPage() {
   const toast = useToast();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // isAdmin vem do backend via /accounts/me/ — nunca de localStorage.
+  const { isAdmin } = useCurrentUser();
 
   // Modal de edição de provider
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
@@ -71,13 +73,6 @@ export default function BancosConfigPage() {
     notes: '',
   });
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    try {
-      const u = JSON.parse(localStorage.getItem('user') || '{}');
-      setIsAdmin(u?.role === 'admin');
-    } catch { /* */ }
-  }, []);
 
   const fetchProviders = useCallback(async () => {
     setLoading(true);

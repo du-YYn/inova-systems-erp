@@ -22,6 +22,9 @@ urlpatterns = [
     path('2fa/setup/', TwoFactorSetupView.as_view(), name='2fa_setup'),
     path('2fa/verify/', TwoFactorVerifyView.as_view(), name='2fa_verify'),
     path('profile/', ProfileView.as_view(), name='profile'),
+    # /me/ é alias de /profile/ — usado pelo frontend para obter user atual
+    # (incluindo role) sem depender de localStorage, que pode ser adulterado.
+    path('me/', ProfileView.as_view(), name='me'),
     path('change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('password-reset/', PasswordResetRequestView.as_view(), name='password_reset'),
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
