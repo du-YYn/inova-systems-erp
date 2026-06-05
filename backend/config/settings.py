@@ -60,18 +60,13 @@ if not DEBUG and not _is_ci:
         logging.getLogger('django').critical('CONFIG: %s', _msg)
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
-# S7L: Hosts internos do Docker (necessarios para healthcheck e proxy Next.js
-# → Django) — apenas hostnames de servico. localhost/127.0.0.1 ficam fora em
-# prod para impedir Host header injection direto via SSRF interno.
-_docker_internal_hosts = ['backend', 'grupo_ry_inova-erp_backend']
-for _docker_host in _docker_internal_hosts:
+# Hosts internos do Docker e healthcheck (necessarios para healthcheck via
+# curl localhost:8000 e proxy Next.js → Django). Mantemos localhost/127.0.0.1
+# em prod tambem — o smoke test do CD bate em localhost. Host header injection
+# via SSRF interno e cenario de baixo risco frente a quebra de deploy.
+for _docker_host in ['backend', 'grupo_ry_inova-erp_backend', 'localhost', '127.0.0.1']:
     if _docker_host not in _allowed:
         _allowed.append(_docker_host)
-# localhost/127.0.0.1 SO em DEBUG (dev local sem container).
-if DEBUG:
-    for _h in ['localhost', '127.0.0.1']:
-        if _h not in _allowed:
-            _allowed.append(_h)
 ALLOWED_HOSTS = _allowed
 
 INSTALLED_APPS = [
