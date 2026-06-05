@@ -16,9 +16,25 @@ limit_req_zone $binary_remote_addr zone=api_general:10m rate=30r/s;
 limit_req_zone $binary_remote_addr zone=api_auth:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=api_uploads:10m rate=10r/m;
 # S7C1: /admin/ separado — brute-force do superuser Django nao pode
-# compartilhar quota com /api/v1/accounts/login/ (que tem seu proprio
-# burst). 10r/m + burst=2 = ate 12 tentativas/min por IP.
-limit_req_zone $binary_remote_addr zone=admin_panel:10m rate=10r/m;
+# compartilhar quota com /api/v1/accounts/login/ (que tem seu proprio burst).
+#
+# Politica solicitada: max 5 tentativas por ~6h + ao menos 2 min entre cada.
+# Como nginx limit_req nao tem granularidade `r/6h`, aproximamos com 2 zonas:
+#
+#  admin_spacing (30r/h = 1 por 2 min): cada IP so pode tentar a cada 2 min.
+#    Rate token-bucket: a cada 120s o bucket repoe 1 token. burst=0 nodelay
+#    significa que tentativas dentro da janela de 2 min retornam 503 imediato
+#    (sem fila), sem permitir que o atacante "queime" tokens em backlog.
+#
+#  admin_cap (1r/h burst=4 nodelay = ~5 por ~5h): bucket inicial = 5 tokens;
+#    apos 5 tentativas o bucket zera e repoe a 1 token/h. Para reabastecer
+#    5 tokens leva 5h (proximo a meta de 6h — nginx nao tem `1r/6h`).
+#
+# As duas zonas se aplicam EM CONJUNTO na location /admin/ (ambas precisam
+# autorizar). Resultado: 5 tentativas espacadas de ao menos 2 min cada, com
+# cooldown total de ~5h apos atingir o teto.
+limit_req_zone $binary_remote_addr zone=admin_spacing:10m rate=30r/h;
+limit_req_zone $binary_remote_addr zone=admin_cap:10m rate=1r/h;
 
 # ── Admin allow-list ─────────────────────────────────────────────────────────
 # S7C1: /admin/ Django (linha 115) estava aberto na internet. Geo block
@@ -146,17 +162,22 @@ server {
     }
 
     # ── Django Admin ──────────────────────────────────────────────────────────
-    # S7C1: hardening duplo:
+    # S7C1: hardening triplo:
     #  1) Geo allow-list ($admin_allowed) — bloqueia internet aberta.
     #     Por padrao $admin_allowed=1 (allow all) ate operador popular IPs;
     #     ver comentario no bloco `geo` no topo do arquivo.
-    #  2) Rate limit dedicado (admin_panel = 10r/m + burst 2) — mesmo IP
-    #     autorizado nao bombarda login do admin (defesa em profundidade).
+    #  2) Spacing (admin_spacing) = ao menos 2 min entre tentativas.
+    #  3) Cap (admin_cap) = 5 tentativas dentro da janela de ~5h.
+    #
+    # Stacking de limit_req: AMBAS as zonas precisam autorizar — qualquer uma
+    # que rejeite retorna 503. Spacing usa rate=30r/h burst=0 (= 1/2min sem
+    # backlog), cap usa rate=1r/h burst=4 (= 5 tokens iniciais, 1/h reposicao).
     location /admin/ {
         if ($admin_allowed = 0) {
             return 403;
         }
-        limit_req zone=admin_panel burst=2 nodelay;
+        limit_req zone=admin_spacing burst=0 nodelay;
+        limit_req zone=admin_cap burst=4 nodelay;
         proxy_pass http://backend;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
