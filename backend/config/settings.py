@@ -158,10 +158,12 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     # S7C1: SECURE_SSL_REDIRECT default true em prod (forca HTTPS).
-    # CI continua podendo desativar via env var. Antes era default 'false'
-    # → deploy esquecendo a var aceitava HTTP em texto puro se nginx
-    # cair fora ou for bypassado (acesso direto ao container).
-    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() == 'true'
+    # CI roda DEBUG=False mas em HTTP — desabilita auto via _is_ci.
+    # Em prod real (sem CI flag), default true.
+    if _is_ci:
+        SECURE_SSL_REDIRECT = False
+    else:
+        SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() == 'true'
     # S7C1: Django atras de nginx/Traefik com TLS terminado no proxy precisa
     # saber que a request original era HTTPS. Sem isso `request.is_secure()`
     # retorna False, `build_absolute_uri()` gera links http:// em emails de

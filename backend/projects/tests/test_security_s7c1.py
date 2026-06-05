@@ -41,10 +41,11 @@ def operator_client(api_client, operator_user):
 
 
 @pytest.fixture
-def customer(db):
+def customer(db, operator_user):
     return Customer.objects.create(
         name='Cliente S7C1', email='cli@s7c1.com',
-        document='12345678000100', document_type='cnpj',
+        document='12345678000100', customer_type='PJ',
+        created_by=operator_user,
     )
 
 
@@ -100,7 +101,7 @@ class TestMilestoneMassAssignment:
         milestone.refresh_from_db()
         assert milestone.completed_at is None
 
-    def test_patch_invoice_fk_is_ignored(self, operator_client, milestone, project, customer):
+    def test_patch_invoice_fk_is_ignored(self, operator_client, operator_user, milestone, project, customer):
         """Linkar invoice via PATCH direto nao deve ser possivel.
 
         Mesmo se o ID for valido, deve ser ignorado/proibido — o link
@@ -110,7 +111,8 @@ class TestMilestoneMassAssignment:
         # Cria invoice de OUTRO cliente para tentar exploitar
         other_customer = Customer.objects.create(
             name='Outro', email='outro@x.com',
-            document='98765432000100', document_type='cnpj',
+            document='98765432000100', customer_type='PJ',
+            created_by=operator_user,
         )
         invoice = Invoice.objects.create(
             customer=other_customer,

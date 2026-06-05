@@ -8,7 +8,7 @@ deadlines de SLA monitorados por Celery beat.
 - S7C1.5: SupportTicket.resolved_at / closed_at via PATCH
 - S7C1.6: SupportTicket.sla_*_deadline / first_response_at via PATCH
 """
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import timedelta
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -42,10 +42,11 @@ def operator_client(api_client, operator_user):
 
 
 @pytest.fixture
-def customer(db):
+def customer(db, operator_user):
     return Customer.objects.create(
         name='Cliente Sup S7C1', email='cli@sup-s7c1.com',
-        document='12345678000111', document_type='cnpj',
+        document='12345678000111', customer_type='PJ',
+        created_by=operator_user,
     )
 
 
