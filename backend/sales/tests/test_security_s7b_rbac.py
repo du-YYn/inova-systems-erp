@@ -113,7 +113,7 @@ class TestS7B_2_ProspectReferredByMassAssignment:
             'contact_name': 'Joao Mass',
             'contact_email': 'mass@assign.com',
             'contact_phone': '11999999999',
-            'source': 'manual',
+            'source': 'website',
             'status': 'new',
             'referred_by': partner_user.id,
         }, format='json')
@@ -152,7 +152,7 @@ class TestS7B_2_ProspectReferredByMassAssignment:
             'contact_name': 'Joao Admin',
             'contact_email': 'admin-sets@assign.com',
             'contact_phone': '11999999999',
-            'source': 'manual',
+            'source': 'website',
             'status': 'new',
             'referred_by': partner_user.id,
         }, format='json')
@@ -169,7 +169,7 @@ class TestS7B_2_ProspectReferredByMassAssignment:
             'contact_name': 'Joao Manager',
             'contact_email': 'mgr-sets@assign.com',
             'contact_phone': '11999999999',
-            'source': 'manual',
+            'source': 'website',
             'status': 'new',
             'referred_by': partner_user.id,
         }, format='json')
