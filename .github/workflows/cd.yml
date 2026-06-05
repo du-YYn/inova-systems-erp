@@ -13,6 +13,17 @@ on:
 permissions:
   contents: read
 
+# CRITICAL: evita que multiplos deploys rodem em paralelo no mesmo servidor —
+# `docker compose up` concorrente causa "Container name already in use" e
+# deixa o servico em estado quebrado (containers parcialmente recriados).
+# Mudancas rapidas em main devem enfileirar; cada push espera o anterior.
+# `cancel-in-progress: false` garante que push mais novo NAO mata deploy em
+# andamento (pode estar no rollback). Se quiser deploy fresco apos serie de
+# merges, use workflow_dispatch.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy
