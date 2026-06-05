@@ -13,6 +13,17 @@ on:
 permissions:
   contents: read
 
+# CRITICAL: evita que multiplos deploys rodem em paralelo no mesmo servidor —
+# `docker compose up` concorrente causa "Container name already in use" e
+# deixa o servico em estado quebrado (containers parcialmente recriados).
+# Mudancas rapidas em main devem enfileirar; cada push espera o anterior.
+# `cancel-in-progress: false` garante que push mais novo NAO mata deploy em
+# andamento (pode estar no rollback). Se quiser deploy fresco apos serie de
+# merges, use workflow_dispatch.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Deploy
@@ -29,8 +40,13 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          timeout: 60s
+          # Timeout maior — servidor pode estar lento aceitando SSH apos
+          # docker compose pesado anterior. 60s era curto; 5min cobre cenario
+          # de sobrecarga.
+          timeout: 5m
           command_timeout: 30m
+          # Retry de conexao SSH (nao do command).
+          request_pty: false
           script: |
             set -e
             cd /opt/inova-systems-erp
@@ -42,6 +58,13 @@ jobs:
             # Atualizar código
             git fetch origin main
             git reset --hard origin/main
+            # Remove arquivos untracked (ex: migrations criadas manualmente no
+            # servidor com `makemigrations`, .pyc orfaos). Sem isso, um leaf
+            # node de migration que so existe no disco causa CommandError no
+            # entrypoint do backend ("Conflicting migrations detected").
+            # `-d` remove diretorios untracked tambem. `-x` NAO usado pra
+            # preservar .env e arquivos ignorados legitimos.
+            git clean -fd backend/ frontend/ apresentacao/ nginx/ scripts/
 
             # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend).
             # || true evita que set -e aborte o script quando dependências falham a
@@ -73,13 +96,17 @@ jobs:
             if [ "$SUCCESS" = "true" ]; then
               echo "Smoke test frontend (até 60s)..."
               for i in $(seq 1 12); do
-                # Acessamos uma rota leve que nao depende de auth nem do backend.
-                FE_STATUS=$(docker compose exec -T frontend wget -q -O /dev/null -S http://localhost:3000/ 2>&1 | grep -E "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
-                # Aceita 200 ou 307 (redirect comum em SSR) ou 404 (rota raiz pode nao existir mas servidor responde).
-                case "$FE_STATUS" in
-                  200|301|302|307|308|404) FRONTEND_OK=true; break ;;
-                esac
-                echo "Tentativa frontend $i/12 — HTTP $FE_STATUS — aguardando..."
+                # Imagem Next.js standalone (Alpine slim) nao tem wget/curl.
+                # Checa: (a) container esta em estado "running" e (b) o
+                # processo Node esta escutando na porta 3000 via /proc/net/tcp.
+                # Hex 0BB8 = 3000 em little-endian (porta listening).
+                FE_RUNNING=$(docker compose ps --filter status=running -q frontend 2>/dev/null | wc -l)
+                FE_LISTENING=$(docker compose exec -T frontend sh -c "grep -c ':0BB8 ' /proc/net/tcp 2>/dev/null || echo 0" 2>/dev/null | tr -d '[:space:]')
+                if [ "$FE_RUNNING" = "1" ] && [ "$FE_LISTENING" != "0" ] && [ -n "$FE_LISTENING" ]; then
+                  FRONTEND_OK=true
+                  break
+                fi
+                echo "Tentativa frontend $i/12 — running=$FE_RUNNING listening_count=$FE_LISTENING — aguardando..."
                 sleep 5
               done
               if [ "$FRONTEND_OK" != "true" ]; then

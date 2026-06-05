@@ -119,6 +119,38 @@ class ProspectSerializer(serializers.ModelSerializer):
                 data.pop(field, None)
         return data
 
+    def validate_referred_by(self, value):
+        """S7B.2: mass-assignment — só admin/manager seta/altera referred_by.
+
+        Antes: operator escolhia parceiro para receber comissão. Vetor de fraude
+        (operator manda comissão para conta de parceiro cúmplice).
+
+        Admin/manager continuam podendo, requests via n8n-bot / website-bot
+        (que também são role=operator) ficam bloqueados — passes server-side
+        via .objects.create() em n8n_views/WebsiteLeadSerializer não usam este
+        serializer.
+        """
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        if user is None or not getattr(user, 'is_authenticated', False):
+            # Sem usuário no contexto (ex.: shell, fixtures): deixa o caller.
+            return value
+
+        if getattr(user, 'role', None) in ('admin', 'manager'):
+            return value
+
+        # Se valor coincide com o atual da instância (PATCH sem alteração),
+        # é no-op — não bloqueia.
+        if self.instance is not None:
+            current = getattr(self.instance, 'referred_by_id', None)
+            new_id = getattr(value, 'id', None) if value is not None else None
+            if current == new_id:
+                return value
+
+        raise serializers.ValidationError(
+            'Apenas administradores e gerentes podem definir o parceiro de indicação.'
+        )
+
     class Meta:
         model = Prospect
         fields = [

@@ -8,12 +8,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
+# S7C1: removido fallback `django-insecure-dev-only-key-...` quando DEBUG=True.
+# Risco: se DEBUG=true vazasse em prod (env var trocada por engano), a chave
+# de assinatura JWT seria conhecida publicamente (esta no repo) → atacante
+# forja access_token de qualquer user (incluindo admin). Agora exige
+# DJANGO_SECRET_KEY sempre — dev configura no .env.local desde o setup.
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
-    if DEBUG:
-        SECRET_KEY = 'django-insecure-dev-only-key-do-not-use-in-production'
-    else:
-        raise ValueError('DJANGO_SECRET_KEY must be set in production')
+    raise ValueError(
+        'DJANGO_SECRET_KEY must be set (dev e prod). '
+        'Gere com: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+    )
 
 # Validate required secrets in production (skip in CI)
 _is_ci = os.environ.get('GITHUB_ACTIONS') == 'true' or os.environ.get('CI') == 'true'
@@ -152,9 +157,18 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000          # 1 ano
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    # Desativado por padrão para permitir testes de CI sem HTTPS.
-    # Em produção real, defina SECURE_SSL_REDIRECT=true no ambiente.
+    # S7C1: SECURE_SSL_REDIRECT controlado via env. Default false pois Django
+    # atras de Traefik/proxy ja recebe HTTPS terminado — habilitar redirect
+    # aqui pode causar loop infinito se X-Forwarded-Proto nao chegar correto.
+    # Operador deve setar SECURE_SSL_REDIRECT=true APENAS apos validar que o
+    # proxy envia o header. SECURE_PROXY_SSL_HEADER abaixo trata o caso comum.
     SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() == 'true'
+    # S7C1: Django atras de nginx/Traefik com TLS terminado no proxy precisa
+    # saber que a request original era HTTPS. Sem isso `request.is_secure()`
+    # retorna False, `build_absolute_uri()` gera links http:// em emails de
+    # password reset (token leak em redes intermediarias), e SECURE_SSL_REDIRECT
+    # entra em loop infinito quando o proxy nao envia X-Forwarded-Proto correto.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -222,23 +236,74 @@ SIMPLE_JWT = {
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
 # Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
-JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
+# S7C2: Strict (era Lax) — Lax permitia que cookie viajasse em top-level GET
+# cross-site (links em emails, popups), abrindo brecha para CSRF em endpoints
+# @action GET com side-effect. Strict so envia em requests originadas do
+# proprio dominio.
+JWT_COOKIE_SAMESITE = 'Strict'
 JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com em prod
+
+# ─── CSRF COOKIES (S7C2) ───────────────────────────────────────────────────────
+# JWT em cookie + double-submit token: o cookie `csrftoken` NAO pode ser
+# httpOnly (JS precisa ler), mas eh Secure+SameSite=Strict para nao vazar.
+# JWTCookieAuthentication valida que o request traz X-CSRFToken header batendo
+# com o cookie em metodos nao-safe.
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Strict'
+# CSRF_COOKIE_SECURE setado no bloco `if not DEBUG` abaixo (junto com SESSION).
+CSRF_USE_SESSIONS = False  # Default; mantemos explicito.
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+# S7B.8: lista de Origin/Referer permitidos para o endpoint público
+# /api/v1/sales/website-lead/. Defesa em profundidade adicional à API key
+# — bots externos com chave vazada precisam também spoofar o Origin.
+# S7L: default inclui dominios conhecidos do site Inova (deploy sem env var
+# ainda aceita lead form do site institucional). Operador pode adicionar
+# subdominios via env var (CSV) — substitui o default.
+# DEV/staging: setar via .env para incluir localhost.
+_default_website_origins = (
+    'https://www.inovasystemssolutions.com,'
+    'https://inovasystemssolutions.com'
+)
+WEBSITE_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        'WEBSITE_ALLOWED_ORIGINS', _default_website_origins,
+    ).split(',')
+    if o.strip()
+]
 
 # ─── TOTP ENCRYPTION (F3b) ────────────────────────────────────────────────────
-# Chave Fernet para cifrar User.totp_secret em repouso. Em dev/CI usa default
-# deterministico (gerado uma vez e reutilizado para nao invalidar secrets
-# entre restarts em fixtures de teste). Em prod, validacao acima obriga.
-TOTP_ENCRYPTION_KEY = os.environ.get(
-    'TOTP_ENCRYPTION_KEY',
-    # Fallback SO PARA DEV/CI (DEBUG=True ou GITHUB_ACTIONS=true).
-    # Fernet key base64 urlsafe 32 bytes — chave publica conhecida.
-    # Nao e seguro mas funciona em testes.
-    'aW5vdmEtZXJwLXRvdHAtZGV2LWtleS0yMDI2LSEhISE=',
-)
+# Chave Fernet para cifrar User.totp_secret em repouso.
+#
+# S7C1: removido fallback hardcoded `aW5vdmEtZXJwLXRvdHAtZGV2LWtleS0y...`.
+# Risco: se a env var nao fosse setada em prod (e o aviso ignorado), TODOS
+# os totp_secret seriam cifrados com chave publica conhecida (esta no repo).
+# Atacante com backup do DB decifra todos os TOTPs e bypass 2FA total.
+#
+# Comportamento atualizado:
+#  - Em dev/CI (DEBUG=True ou GITHUB_ACTIONS): chave deterministica gerada
+#    em memoria por processo via hash de uma fonte fixa do projeto. Tests
+#    rodam sem precisar de env var, mas chave NAO esta no codigo fonte.
+#  - Em prod: TOTP_ENCRYPTION_KEY obrigatoria (warning ja existente em
+#    fail-fast block). Fail-safe permite app subir; 2FA bloqueado ate setar.
+_explicit_totp = os.environ.get('TOTP_ENCRYPTION_KEY')
+if _explicit_totp:
+    TOTP_ENCRYPTION_KEY = _explicit_totp
+elif DEBUG or _is_ci:
+    # Deriva chave Fernet de um marcador deterministico (NAO publico).
+    # Chave muda se a hash mudar; testes precisam apenas que a chave seja
+    # estavel dentro do mesmo processo (round-trip encrypt/decrypt).
+    import base64
+    import hashlib
+    _seed = f'inova-erp-dev-{SECRET_KEY[:32]}'.encode()
+    _derived = hashlib.sha256(_seed).digest()
+    TOTP_ENCRYPTION_KEY = base64.urlsafe_b64encode(_derived).decode()
+else:
+    # Em prod o warning ja foi emitido no fail-fast block acima.
+    # Settamos None para forcar erro claro em totp_crypto.py se for usado.
+    TOTP_ENCRYPTION_KEY = None
 
 # ─── N8N INTEGRATION ─────────────────────────────────────────────────────────
 N8N_API_KEY = os.environ.get('N8N_API_KEY', '')
@@ -258,10 +323,31 @@ for subdomain in ['cadastro', 'parceiro']:
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF trusted origins (deve vir DEPOIS de CORS_ALLOWED_ORIGINS)
+#
+# S7C1: removido wildcard `https://*.inovasystemssolutions.com`.
+# Risco: subdomain takeover (DNS dangling, CNAME orfao em staging/dev)
+# concedia bypass de CSRF e — combinado com JWT_COOKIE_DOMAIN amplo —
+# roubo total de sessao. Agora enumeramos subdominios conhecidos.
+#
+# Como adicionar novos subdominios em prod:
+#   1) Setar CSRF_EXTRA_TRUSTED_ORIGINS no .env:
+#      CSRF_EXTRA_TRUSTED_ORIGINS=https://novo.inovasystemssolutions.com,https://outro.dominio
+#   2) Reiniciar backend.
 if not DEBUG:
-    CSRF_TRUSTED_ORIGINS = [
+    _csrf_trusted = [
         o for o in CORS_ALLOWED_ORIGINS if o.startswith('https://')
-    ] + ['https://*.inovasystemssolutions.com']
+    ]
+    # Subdominios conhecidos da Inova (substitui o wildcard).
+    for _sub in ['app', 'erp', 'cadastro', 'parceiro']:
+        _origin = f'https://{_sub}.inovasystemssolutions.com'
+        if _origin not in _csrf_trusted:
+            _csrf_trusted.append(_origin)
+    # Extras configuraveis sem deploy (env var).
+    _extra = os.environ.get('CSRF_EXTRA_TRUSTED_ORIGINS', '')
+    for _o in [x.strip() for x in _extra.split(',') if x.strip()]:
+        if _o.startswith('https://') and '*' not in _o and _o not in _csrf_trusted:
+            _csrf_trusted.append(_o)
+    CSRF_TRUSTED_ORIGINS = _csrf_trusted
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
 

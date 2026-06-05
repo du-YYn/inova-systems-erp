@@ -1,5 +1,19 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+// S7C2: metodos que precisam de CSRF double-submit token.
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * S7C2: le o cookie `csrftoken` setado pelo backend no login/refresh.
+ * Retorna string vazia se nao encontrar — chamadores devem tratar como
+ * potencial 403 do backend.
+ */
+function getCsrfToken(): string {
+  if (typeof document === 'undefined') return '';  // SSR
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
+}
+
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
   params?: Record<string, string>;
@@ -55,10 +69,20 @@ async function request<T = unknown>(
     });
   }
 
-  const headers: HeadersInit = {
+  const method = (options.method || 'GET').toUpperCase();
+
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...customHeaders,
+    ...(customHeaders as Record<string, string>),
   };
+
+  // S7C2: injeta CSRF token em POST/PUT/PATCH/DELETE (backend exige).
+  if (UNSAFE_METHODS.has(method)) {
+    const csrf = getCsrfToken();
+    if (csrf) {
+      headers['X-CSRFToken'] = csrf;
+    }
+  }
 
   const config: RequestInit = {
     credentials: 'include',
@@ -112,12 +136,19 @@ async function uploadFile<T = unknown>(endpoint: string, file: File, fieldName =
   const form = new FormData();
   form.append(fieldName, file);
 
-  let res = await fetch(url, { method: 'POST', credentials: 'include', body: form });
+  // S7C2: POST de upload tambem precisa de X-CSRFToken header
+  const csrf = getCsrfToken();
+  const headers: Record<string, string> = csrf ? { 'X-CSRFToken': csrf } : {};
+
+  let res = await fetch(url, { method: 'POST', credentials: 'include', body: form, headers });
 
   if (res.status === 401 && !endpoint.includes('/accounts/')) {
     const refreshed = await ensureRefresh();
     if (refreshed) {
-      res = await fetch(url, { method: 'POST', credentials: 'include', body: form });
+      // Re-le csrftoken (refresh pode ter rotacionado)
+      const csrf2 = getCsrfToken();
+      const headers2: Record<string, string> = csrf2 ? { 'X-CSRFToken': csrf2 } : {};
+      res = await fetch(url, { method: 'POST', credentials: 'include', body: form, headers: headers2 });
     }
   }
 
