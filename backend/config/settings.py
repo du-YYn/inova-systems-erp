@@ -227,6 +227,15 @@ JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemsso
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+# S7B.8: lista de Origin/Referer permitidos para o endpoint público
+# /api/v1/sales/website-lead/. Defesa em profundidade adicional à API key
+# — bots externos com chave vazada precisam também spoofar o Origin.
+# CSV em env var. Vazio = bloqueia tudo (DEV: setar via .env).
+WEBSITE_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get('WEBSITE_ALLOWED_ORIGINS', '').split(',')
+    if o.strip()
+]
 
 # ─── TOTP ENCRYPTION (F3b) ────────────────────────────────────────────────────
 # Chave Fernet para cifrar User.totp_secret em repouso. Em dev/CI usa default

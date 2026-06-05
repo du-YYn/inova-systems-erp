@@ -2,7 +2,6 @@ import logging
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import SimpleRateThrottle
 from django.core.mail import send_mail
 from django.conf import settings
@@ -11,7 +10,7 @@ from django.utils import timezone
 
 from .models import Prospect, Proposal, Customer
 from .serializers import ProspectSerializer, ProposalSerializer, ProspectMessageSerializer
-from .n8n_auth import N8NApiKeyAuthentication
+from .n8n_auth import N8NApiKeyAuthentication, IsN8NBot
 
 logger = logging.getLogger('sales')
 
@@ -28,9 +27,14 @@ class N8NRateThrottle(SimpleRateThrottle):
 
 
 class N8NBaseView(APIView):
-    """View base para todos os endpoints n8n."""
+    """View base para todos os endpoints n8n.
+
+    S7B.9: IsN8NBot — exige request.auth=='n8n-api-key' (não apenas
+    IsAuthenticated). Bloqueia o caso em que algum usuário humano consiga
+    autenticar como 'n8n-bot' por outro caminho (cookie JWT, basic auth).
+    """
     authentication_classes = [N8NApiKeyAuthentication]
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsN8NBot]
     throttle_classes = [N8NRateThrottle]
 
 
@@ -41,13 +45,41 @@ class NewLeadsView(N8NBaseView):
     Usado pelo workflow 'SDR - Polling ERP Leads' a cada 2 minutos.
     """
 
+    PAGE_SIZE = 100
+
     def get(self, request):
-        leads = Prospect.objects.filter(status='new').order_by('created_at')
-        data = ProspectSerializer(leads, many=True).data
-        return Response({
+        """S7B.7: paginação obrigatória — antes retornava TODOS os leads em
+        status='new'. Se N8N_API_KEY vazasse, leak total do funil top-of-funnel
+        em uma única request. Limite duro de 100 + cursor opcional.
+        """
+        # Cursor = id do último lead já processado (>0). next_cursor exposto
+        # quando há próxima página.
+        cursor = 0
+        raw_cursor = request.query_params.get('cursor', '0')
+        try:
+            cursor = int(raw_cursor)
+        except (TypeError, ValueError):
+            cursor = 0
+        if cursor < 0:
+            cursor = 0
+
+        qs = Prospect.objects.filter(status='new').order_by('id')
+        if cursor:
+            qs = qs.filter(id__gt=cursor)
+
+        # Pega PAGE_SIZE+1 para detectar próxima página
+        page = list(qs[: self.PAGE_SIZE + 1])
+        has_next = len(page) > self.PAGE_SIZE
+        page = page[: self.PAGE_SIZE]
+        data = ProspectSerializer(page, many=True).data
+
+        response = {
             'count': len(data),
             'leads': data,
-        })
+        }
+        if has_next and page:
+            response['next_cursor'] = page[-1].id
+        return Response(response)
 
 
 class LeadSearchView(N8NBaseView):

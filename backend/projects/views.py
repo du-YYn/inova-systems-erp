@@ -15,8 +15,26 @@ from .serializers import (
     MilestoneSerializer, ProjectTaskSerializer, TimeEntrySerializer, ProjectCommentSerializer
 )
 from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
+from rest_framework.permissions import BasePermission
 
 logger = logging.getLogger('projects')
+
+
+class _TimeEntryOwnerOrManager(BasePermission):
+    """S7B.1: object-level — admin/manager veem tudo; operator só objeto próprio.
+
+    Defesa em profundidade junto com TimeEntryViewSet.get_queryset() — caso o
+    queryset seja sobrescrito por um custom @action, ainda barra IDOR.
+    """
+    message = 'Você só pode acessar suas próprias horas.'
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.role in ('admin', 'manager'):
+            return True
+        return getattr(obj, 'user_id', None) == user.id
 
 
 @extend_schema(tags=['projects'])
@@ -254,6 +272,27 @@ class TimeEntryViewSet(viewsets.ModelViewSet):
     queryset = TimeEntry.objects.select_related('project', 'task', 'user')
     serializer_class = TimeEntrySerializer
     permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_queryset(self):
+        """S7B.1: IDOR — operator só vê/edita as próprias horas.
+
+        Antes do fix, qualquer operator podia listar/editar/deletar TimeEntry
+        de colegas via PK direto (CRUD aberto pelo IsAdminOrManagerOrOperator).
+        Admin/manager continuam vendo tudo (precisam fechar folhas).
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role in ('admin', 'manager'):
+            return qs
+        # operator/viewer: só as próprias entradas
+        return qs.filter(user=user)
+
+    def get_permissions(self):
+        """S7B.1: object-level — admin/manager livre, operator dono apenas."""
+        perms = super().get_permissions()
+        return perms + [_TimeEntryOwnerOrManager()]
 
     def _recalculate_task_hours(self, task):
         if task:

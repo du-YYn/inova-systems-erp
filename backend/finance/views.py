@@ -49,9 +49,19 @@ class BankAccountViewSet(viewsets.ModelViewSet):
 
 @extend_schema(tags=['finance'])
 class CategoryViewSet(viewsets.ModelViewSet):
+    """S7B.10: plano de contas — leitura para todos autenticados (operator
+    precisa montar transactions), escrita só admin/manager. Antes operator
+    podia criar/editar/deletar Category, alterando classificação contábil
+    e quebrando histórico de DRE.
+    """
     queryset = Category.objects.filter(is_active=True).select_related('parent')
     serializer_class = CategorySerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        from rest_framework.permissions import IsAuthenticated, SAFE_METHODS
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAdminOrManager()]
 
 
 @extend_schema(tags=['finance'])
