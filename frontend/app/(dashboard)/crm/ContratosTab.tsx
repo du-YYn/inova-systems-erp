@@ -10,6 +10,7 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { MultiSelect } from '@/components/ui/MultiSelect';
 import api, { ApiError } from '@/lib/api';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 import ProposalScopeEditor from './ProposalScopeEditor';
 import type { Service, PaymentPlanData } from './ProposalFormModal';
 import ContractActivationModal from './ContractActivationModal';
@@ -326,7 +327,9 @@ export default function ContratosTab() {
     recurring_amount: '', recurring_method: 'pix', recurring_day_of_month: 10,
     recurring_duration_months: 12, recurring_first_due: '', recurring_notes: '',
   });
-  const [isAdmin, setIsAdmin] = useState(false);
+  // role/isAdmin vem do backend via /accounts/me/ (autorizativo). Nunca de
+  // localStorage, que pode ser adulterado pelo usuário.
+  const { isAdmin } = useCurrentUser();
   const [scopeExpanded, setScopeExpanded] = useState(false);
 
   // Delete
@@ -535,16 +538,6 @@ export default function ContratosTab() {
       }
     }).catch(() => { /* silencioso */ });
   };
-
-  useEffect(() => {
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        setIsAdmin(parsed?.role === 'admin');
-      }
-    } catch {/* */}
-  }, []);
 
   // ── Update ───────────────────────────────────────────────────────────────
   const handleUpdate = async (e: React.FormEvent) => {

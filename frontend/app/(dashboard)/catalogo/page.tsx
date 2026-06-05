@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api, { ApiError } from '@/lib/api';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 
 interface Service {
   id: number;
@@ -49,7 +50,8 @@ export default function CatalogoPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
+  // role/isAdmin agora vem de /accounts/me/ — nunca de localStorage.
+  const { isAdmin } = useCurrentUser();
   const [showInactive, setShowInactive] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
@@ -59,18 +61,6 @@ export default function CatalogoPage() {
 
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [codeTouched, setCodeTouched] = useState(false);
-
-  useEffect(() => {
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        setIsAdmin(parsed?.role === 'admin');
-      }
-    } catch {
-      setIsAdmin(false);
-    }
-  }, []);
 
   const fetchServices = useCallback(async () => {
     setLoading(true);

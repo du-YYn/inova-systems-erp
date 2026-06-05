@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import FocusTrap from '@/components/ui/FocusTrap';
 import api, { ApiError } from '@/lib/api';
 import { buildProposalDefaults } from '@/lib/proposalDefaults';
+import { useCurrentUser } from '@/lib/useCurrentUser';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -134,7 +135,9 @@ export default function ProposalFormModal({
   const [saving, setSaving] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
   const [servicesLoading, setServicesLoading] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  // O role agora vem do backend (/accounts/me/) via hook — nunca de localStorage.
+  // localStorage pode ser adulterado e não é fonte de verdade para autorização.
+  const { isAdmin } = useCurrentUser();
 
   // Form state
   const [title, setTitle] = useState('');
@@ -150,19 +153,6 @@ export default function ProposalFormModal({
   const [newServiceName, setNewServiceName] = useState('');
   const [newServiceRecurrence, setNewServiceRecurrence] = useState<'one_time' | 'monthly'>('one_time');
   const [creatingService, setCreatingService] = useState(false);
-
-  // Detectar se é admin
-  useEffect(() => {
-    try {
-      const userData = localStorage.getItem('user');
-      if (userData) {
-        const parsed = JSON.parse(userData);
-        setIsAdmin(parsed?.role === 'admin');
-      }
-    } catch {
-      setIsAdmin(false);
-    }
-  }, []);
 
   // Carregar catálogo ao abrir
   const loadServices = useCallback(async () => {

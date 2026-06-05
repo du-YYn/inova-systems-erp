@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getInternalBackendUrls } from '@/lib/internalBackend';
 
-const BACKEND_URLS = [
-  process.env.INTERNAL_API_URL,
-  'http://backend:8000/api/v1',
-  'http://grupo_ry_inova-erp_backend:8000/api/v1',
-  process.env.NEXT_PUBLIC_API_URL,
-].filter(Boolean) as string[];
+const BACKEND_URLS = getInternalBackendUrls();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

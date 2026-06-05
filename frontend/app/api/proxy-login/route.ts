@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getInternalBackendUrls } from '@/lib/internalBackend';
 
 // POST /api/auth/login — proxy de login server-side
-// Resolve problemas de CSP e cookies cross-domain em subdomínios
+// Resolve problemas de CSP e cookies cross-domain em subdomínios.
 export async function POST(request: NextRequest) {
   let body;
   try {
@@ -10,19 +11,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido.' }, { status: 400 });
   }
 
-  // Construir lista de URLs para tentar (server-side, sem restrição CSP)
-  const urls: string[] = [];
-  if (process.env.INTERNAL_API_URL) urls.push(process.env.INTERNAL_API_URL);
-  if (process.env.NEXT_PUBLIC_API_URL) urls.push(process.env.NEXT_PUBLIC_API_URL);
-  urls.push('http://backend:8000/api/v1');
-  urls.push('http://grupo_ry_inova-erp_backend:8000/api/v1');
-
-  // Deduplicar
-  const unique = urls.filter((u, i) => urls.indexOf(u) === i);
+  // URLs internas vêm de uma única fonte (lib/internalBackend.ts), evitando
+  // hostnames Docker hardcoded em múltiplos arquivos.
+  const urls = getInternalBackendUrls();
 
   let lastError = '';
 
-  for (const baseUrl of unique) {
+  for (const baseUrl of urls) {
     try {
       // Extrair hostname para ALLOWED_HOSTS
       const urlObj = new URL(`${baseUrl}/accounts/login/`);
@@ -69,8 +64,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // NÃO retornamos `lastError` ao cliente — isso vazaria hostnames internos
+  // de Docker (ex.: http://backend:8000) e ajudaria a montar superfícies de
+  // ataque SSRF / fingerprinting. Log fica server-side apenas.
+  console.warn('[proxy-login] all backend URLs failed:', lastError);
   return NextResponse.json(
-    { error: 'Erro de conexão com o servidor.', detail: lastError },
-    { status: 502 }
+    { error: 'Erro de conexão com o servidor.' },
+    { status: 502 },
   );
 }

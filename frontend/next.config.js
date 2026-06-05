@@ -5,6 +5,14 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Remove chamadas a console.* em build production (mantém warn/info p/ alertas
+  // legítimos). Evita vazamento de payloads/credenciais via console.error nos
+  // catch-blocks do frontend.
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production'
+      ? { exclude: ['warn', 'info'] }
+      : false,
+  },
   async headers() {
     return [
       {
@@ -14,18 +22,15 @@ const nextConfig = {
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              `connect-src 'self' https://*.inovasystemssolutions.com https://erp.inovasystemssolutions.com https://cadastro.inovasystemssolutions.com https://parceiro.inovasystemssolutions.com https://viacep.com.br ${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}`,
-              "font-src 'self'",
-              "frame-ancestors 'none'",
-            ].join('; '),
-          },
+          // HSTS — força HTTPS por 2 anos, includeSubDomains e preload-ready.
+          // Sem efeito em HTTP/dev; browsers só honram via HTTPS.
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+          // COOP — isola janela do site de janelas cross-origin (Spectre, etc.)
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // CORP — só permite carregar recursos same-origin via subrecursos cross-origin
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+          // Nota: Content-Security-Policy é setado por request no middleware.ts
+          // (CSP nonce-based — não pode vir daqui pois nonce muda por request).
         ],
       },
     ];
