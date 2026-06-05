@@ -36,7 +36,13 @@ class ChangeRequestSerializer(serializers.ModelSerializer):
             'notes', 'created_by', 'created_by_name',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_by', 'approved_by', 'created_at', 'updated_at']
+        # S7C1: status/approved_at sao gerenciados pelas actions approve/reject
+        # que aplicam o self-approval block (F2.5). PATCH direto burlava esse
+        # check e permitia operator auto-aprovar a propria CR.
+        read_only_fields = [
+            'id', 'created_by', 'approved_by', 'created_at', 'updated_at',
+            'status', 'approved_at',
+        ]
 
 
 class ProjectEnvironmentSerializer(serializers.ModelSerializer):

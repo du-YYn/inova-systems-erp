@@ -15,7 +15,11 @@ class MilestoneSerializer(serializers.ModelSerializer):
         model = Milestone
         fields = ['id', 'project', 'name', 'description', 'due_date', 'is_completed',
                   'completed_at', 'invoice', 'order', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        # S7C1: is_completed/completed_at/invoice sao gerenciados pela action
+        # `complete` (que valida ownership de invoice). PATCH direto burlava
+        # essa validacao e permitia operator linkar invoice alheio ou marcar
+        # milestone de outro projeto como concluido.
+        read_only_fields = ['id', 'created_at', 'is_completed', 'completed_at', 'invoice']
 
 
 class ProjectCommentSerializer(serializers.ModelSerializer):
