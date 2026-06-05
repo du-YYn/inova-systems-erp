@@ -103,7 +103,7 @@ class TestSystemInfoVersionGate:
             password='SenhaFort3!@', role='viewer',
         )
         api_client.force_authenticate(user=viewer)
-        resp = api_client.get('/api/v1/core/system-info/')
+        resp = api_client.get('/api/v1/core/info/')
         assert resp.status_code == status.HTTP_200_OK
         assert 'version' not in resp.json()
 
@@ -113,7 +113,7 @@ class TestSystemInfoVersionGate:
             password='SenhaFort3!@', role='admin',
         )
         api_client.force_authenticate(user=admin)
-        resp = api_client.get('/api/v1/core/system-info/')
+        resp = api_client.get('/api/v1/core/info/')
         assert resp.status_code == status.HTTP_200_OK
         assert 'version' in resp.json()
 
