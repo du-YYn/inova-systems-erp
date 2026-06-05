@@ -235,8 +235,22 @@ SIMPLE_JWT = {
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
 # Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)
 JWT_COOKIE_SECURE = True if not DEBUG else os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
-JWT_COOKIE_SAMESITE = 'Lax'  # Proteção CSRF cross-site
+# S7C2: Strict (era Lax) — Lax permitia que cookie viajasse em top-level GET
+# cross-site (links em emails, popups), abrindo brecha para CSRF em endpoints
+# @action GET com side-effect. Strict so envia em requests originadas do
+# proprio dominio.
+JWT_COOKIE_SAMESITE = 'Strict'
 JWT_COOKIE_DOMAIN = os.environ.get('JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com em prod
+
+# ─── CSRF COOKIES (S7C2) ───────────────────────────────────────────────────────
+# JWT em cookie + double-submit token: o cookie `csrftoken` NAO pode ser
+# httpOnly (JS precisa ler), mas eh Secure+SameSite=Strict para nao vazar.
+# JWTCookieAuthentication valida que o request traz X-CSRFToken header batendo
+# com o cookie em metodos nao-safe.
+CSRF_COOKIE_HTTPONLY = False
+CSRF_COOKIE_SAMESITE = 'Strict'
+# CSRF_COOKIE_SECURE setado no bloco `if not DEBUG` abaixo (junto com SESSION).
+CSRF_USE_SESSIONS = False  # Default; mantemos explicito.
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
