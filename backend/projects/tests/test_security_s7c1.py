@@ -116,8 +116,11 @@ class TestMilestoneMassAssignment:
         )
         invoice = Invoice.objects.create(
             customer=other_customer,
+            invoice_type='receivable',
+            number='INV-S7C1-1',
             issue_date=date.today(),
             due_date=date.today() + timedelta(days=30),
+            value=Decimal('5000'),
             total=Decimal('5000'),
             status='pending',
         )
