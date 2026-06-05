@@ -21,8 +21,23 @@ function generateNonce(): string {
 
 /**
  * Constrói o header Content-Security-Policy.
- * Sem 'unsafe-inline' e sem 'unsafe-eval'. Scripts e estilos inline precisam
- * carregar o atributo nonce={nonce} (lido via headers().get('x-nonce')).
+ *
+ * script-src: 'self' + nonce + strict-dynamic — SEM 'unsafe-inline'/'unsafe-eval'.
+ *             Protecao XSS gold standard. NAO mexer.
+ *
+ * style-src:  'self' + 'unsafe-inline' — trade-off aceito.
+ *   Razao: React/Next obrigatoriamente gera atributos `style="..."` em
+ *   components (AnimatedCharacters, Framer Motion, transforms dinamicos).
+ *   Browser NAO aceita nonce em atributos `style="..."` (apenas em <style>
+ *   tags). Sem 'unsafe-inline' aqui, 24+ estilos legitimos sao bloqueados
+ *   e componentes visuais (ex: bonecos animados do login) somem.
+ *
+ *   CSS injection != XSS — CSS nao executa codigo. Atacante via CSS
+ *   injection pode mudar visual ou exfil lento via seletores (bytes/seg),
+ *   mas NAO consegue executar JavaScript.
+ *
+ *   OWASP CSP cheatsheet aceita esse trade-off para apps React/Vue.
+ *   Ver docs/security-decisions.md para detalhe completo.
  */
 function buildCsp(nonce: string): string {
   const publicApi = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -35,15 +50,10 @@ function buildCsp(nonce: string): string {
     publicApi,
   ].join(' ');
 
-  // 'strict-dynamic': scripts carregados por scripts com nonce válido herdam
-  // a confiança, permitindo que chunks gerados pelo Next.js sejam carregados
-  // sem precisar listar cada hash. Browsers antigos ignoram 'strict-dynamic'
-  // e caem de volta para 'self' + nonce.
-  // NUNCA usar 'unsafe-inline' nem 'unsafe-eval'.
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     `connect-src 'self' ${connectExtra}`,
     "font-src 'self' data:",
