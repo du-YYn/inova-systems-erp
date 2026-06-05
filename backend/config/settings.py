@@ -255,6 +255,24 @@ CSRF_USE_SESSIONS = False  # Default; mantemos explicito.
 
 # ─── WEBSITE INTEGRATION ──────────────────────────────────────────────────────
 WEBSITE_API_KEY = os.environ.get('WEBSITE_API_KEY', '')
+# S7B.8: lista de Origin/Referer permitidos para o endpoint público
+# /api/v1/sales/website-lead/. Defesa em profundidade adicional à API key
+# — bots externos com chave vazada precisam também spoofar o Origin.
+# S7L: default inclui dominios conhecidos do site Inova (deploy sem env var
+# ainda aceita lead form do site institucional). Operador pode adicionar
+# subdominios via env var (CSV) — substitui o default.
+# DEV/staging: setar via .env para incluir localhost.
+_default_website_origins = (
+    'https://www.inovasystemssolutions.com,'
+    'https://inovasystemssolutions.com'
+)
+WEBSITE_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        'WEBSITE_ALLOWED_ORIGINS', _default_website_origins,
+    ).split(',')
+    if o.strip()
+]
 
 # ─── TOTP ENCRYPTION (F3b) ────────────────────────────────────────────────────
 # Chave Fernet para cifrar User.totp_secret em repouso.

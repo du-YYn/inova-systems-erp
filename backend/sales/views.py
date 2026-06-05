@@ -850,6 +850,17 @@ class ProposalViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         proposal = self.get_object()
+        # S7B.3: self-approval — operator não pode aprovar a própria proposta
+        # (dispara _generate_commissions → ClientCost para si mesmo).
+        # admin/manager seguem podendo, é hierarquia normal do funil.
+        if (
+            proposal.created_by_id == request.user.id
+            and getattr(request.user, 'role', None) == 'operator'
+        ):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                'Operadores não podem aprovar a própria proposta.'
+            )
         if proposal.status not in ('sent', 'draft', 'negotiation', 'viewed'):
             return Response(
                 {'error': f'Proposta não pode ser aprovada (status atual: {proposal.status})'},
@@ -1410,6 +1421,17 @@ class ContractViewSet(viewsets.ModelViewSet):
         from finance.invoice_generator import generate_activation_invoices
 
         contract = self.get_object()
+        # S7B.4: self-approval — operator não pode ativar contrato próprio
+        # (gera invoices vinculadas ao próprio fluxo comercial, pode mascarar
+        # fraude/forçar batimento). admin/manager livres.
+        if (
+            contract.created_by_id == request.user.id
+            and getattr(request.user, 'role', None) == 'operator'
+        ):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                'Operadores não podem ativar o próprio contrato.'
+            )
         if contract.status != 'pending_signature':
             return Response(
                 {'error': f'Contrato não pode ser ativado (status atual: {contract.status})'},
@@ -1817,6 +1839,23 @@ class WebsiteLeadCreateView(APIView):
             logger.warning(f"Payload too large from {client_ip} ({len(request.body)} bytes)")
             return Response(
                 {'error': 'Payload too large'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            )
+
+        # S7B.8: valida Origin/Referer antes da API key — bot externo com
+        # API key vazada ainda precisa spoofar o header (e CORS no browser
+        # impede). Lista vazia = bloqueia tudo (forçar config explícita).
+        allowed_origins = getattr(django_settings, 'WEBSITE_ALLOWED_ORIGINS', []) or []
+        origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+        if not allowed_origins or not any(
+            origin.startswith(o) for o in allowed_origins if o
+        ):
+            logger.warning(
+                f"Website lead origin rejected from {client_ip} "
+                f"(origin={origin[:80] if origin else 'empty'})"
+            )
+            return Response(
+                {'error': 'Origin not allowed'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         # Validação timing-safe da API Key

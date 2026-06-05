@@ -22,10 +22,20 @@ class TicketCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TicketComment
         fields = ['id', 'ticket', 'user', 'user_name', 'content', 'is_internal', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'user_name', 'created_at', 'updated_at']
+        # S7B.5: is_internal é read_only no serializer padrão — só admin/manager
+        # alteram, via método explícito no ViewSet (set_internal). Antes:
+        # operator marcava own comment como internal e escondia do viewer/cliente.
+        read_only_fields = ['id', 'user', 'user_name', 'is_internal', 'created_at', 'updated_at']
 
     def get_user_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
+
+
+class TicketCommentAdminSerializer(TicketCommentSerializer):
+    """S7B.5: variante para admin/manager que permite setar/alterar is_internal."""
+
+    class Meta(TicketCommentSerializer.Meta):
+        read_only_fields = ['id', 'user', 'user_name', 'created_at', 'updated_at']
 
 
 class TicketAttachmentSerializer(serializers.ModelSerializer):
