@@ -55,7 +55,15 @@ class SupportTicketSerializer(serializers.ModelSerializer):
             'created_by', 'created_by_name', 'created_at', 'updated_at',
             'comments_count', 'is_sla_breached',
         ]
-        read_only_fields = ['id', 'number', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        # S7C1: status/resolved_at/closed_at/first_response_at e sla_*_deadline
+        # sao gerenciados pelas actions assign/resolve/close. PATCH direto
+        # burlava transicoes e zerava breach do SLA dashboard (KPIs adulterados).
+        read_only_fields = [
+            'id', 'number', 'created_by', 'created_by_name',
+            'created_at', 'updated_at',
+            'status', 'resolved_at', 'closed_at', 'first_response_at',
+            'sla_response_deadline', 'sla_resolution_deadline',
+        ]
 
     def get_customer_name(self, obj):
         if obj.customer:
