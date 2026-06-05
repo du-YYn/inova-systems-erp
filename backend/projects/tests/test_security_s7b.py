@@ -17,7 +17,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from projects.models import (
-    DeliveryApproval, Milestone, Project, ProjectTask, TimeEntry,
+    DeliveryApproval, Milestone, Project, TimeEntry,
 )
 from sales.models import Customer
 

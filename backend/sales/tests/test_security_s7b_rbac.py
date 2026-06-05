@@ -129,7 +129,7 @@ class TestS7B_2_ProspectReferredByMassAssignment:
             company_name='Existing Co',
             contact_name='Maria',
             contact_email='maria@test.com',
-            source='manual',
+            source='website',
             status='new',
             created_by=admin_user,
         )
@@ -186,7 +186,7 @@ class TestS7B_3_ProposalSelfApproval:
     def _make_proposal(self, customer, created_by, status='sent'):
         return Proposal.objects.create(
             customer=customer,
-            number=f'PROP-{created_by.username[:8]}-{timezone.now().timestamp()}',
+            number=f'P-{created_by.id}-{int(timezone.now().timestamp())%100000}',
             title='Proposta S7B.3',
             proposal_type='software_dev',
             billing_type='fixed',
@@ -247,7 +247,7 @@ class TestS7B_4_ContractSelfApproval:
     def _make_contract(self, customer, created_by):
         return Contract.objects.create(
             customer=customer,
-            number=f'CTR-{created_by.username[:8]}-{int(timezone.now().timestamp())}',
+            number=f'C-{created_by.id}-{int(timezone.now().timestamp())%100000}',
             title='Contrato S7B.4',
             contract_type='software_dev',
             billing_type='monthly',
@@ -318,7 +318,7 @@ class TestS7B_7_NewLeadsPagination:
                 contact_name=f'Joao {i}',
                 contact_email=f'lead{i}@test.com',
                 contact_phone='11999999999',
-                source='manual',
+                source='website',
                 status='new',
                 created_by=admin_user,
             ))
@@ -380,7 +380,6 @@ class TestS7B_8_WebsiteLeadOriginCheck:
             'tamanho': 'Pequena empresa',
             'faturamento': 'R$20 mil a R$100 mil',
             'budget': 'R$10.000 a R$30.000',
-            'status': '',
             'descricao': '',
         }
 
