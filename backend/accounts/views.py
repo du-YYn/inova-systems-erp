@@ -24,6 +24,7 @@ from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     TwoFactorVerifySerializer, PasswordResetRequestSerializer,
     ChangePasswordSerializer, AdminUserSerializer, AdminUserCreateSerializer,
+    LoginResponseSerializer,
 )
 from .permissions import IsAdmin
 from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle
@@ -172,7 +173,8 @@ class LoginView(APIView):
         logger.info(f"Login bem-sucedido: {user.username} (role={user.role})")
         log_audit(user, 'login', 'user', user.id)
         refresh = RefreshToken.for_user(user)
-        response = Response({'user': UserSerializer(user).data})
+        # S7L: resposta minima (id/username/role). PII completa via /accounts/me/.
+        response = Response({'user': LoginResponseSerializer(user).data})
         _set_auth_cookies(response, refresh, user=user)
         return response
 
@@ -214,7 +216,8 @@ class TwoFactorVerifyView(APIView):
 
         logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
-        response = Response({'user': UserSerializer(user).data})
+        # S7L: resposta minima (id/username/role). PII completa via /accounts/me/.
+        response = Response({'user': LoginResponseSerializer(user).data})
         _set_auth_cookies(response, refresh, user=user)
         return response
 

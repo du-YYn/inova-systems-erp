@@ -41,10 +41,13 @@ def health_check(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def system_info(request):
-    return Response({
-        'app_name': 'Inova Systems Solutions ERP',
-        'version': '1.0.0',
-    })
+    # S7L: removida `version` da resposta publica — qualquer autenticado
+    # (mesmo viewer) usava para fingerprintar versao do Django/SimpleJWT e
+    # mapear CVEs. Apenas admin ve a versao agora.
+    payload = {'app_name': 'Inova Systems Solutions ERP'}
+    if request.user.is_authenticated and getattr(request.user, 'role', None) == 'admin':
+        payload['version'] = '1.0.0'
+    return Response(payload)
 
 
 
@@ -52,7 +55,18 @@ def system_info(request):
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def reset_data(request):
-    """Reseta todos os dados de teste. Mantém config do sistema e usuários."""
+    """Reseta todos os dados de teste. Mantém config do sistema e usuários.
+
+    S7L: endpoint destrutivo agora retorna 404 em producao (DEBUG=False).
+    Admin com cookie roubado conseguia limpar TODA a base com 1 POST se
+    soubesse a palavra "RESETAR". Backup diario rotativo cobre, mas perda
+    de ate 24h. Em prod, esse fluxo deve ser feito via management command
+    no servidor (audit trail completo).
+    """
+    if not django_settings.DEBUG:
+        from django.http import Http404
+        raise Http404('Endpoint disponivel apenas em DEBUG')
+
     confirm = request.data.get('confirm', '')
     if confirm != 'RESETAR':
         return Response(

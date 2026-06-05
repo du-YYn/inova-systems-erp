@@ -90,9 +90,15 @@ def log_crm_activity(prospect, activity_type, subject, user, description=''):
 
 
 class DynamicPageSizePagination(PageNumberPagination):
-    """Permite que o cliente controle o tamanho da página via ?page_size=N."""
+    """Permite que o cliente controle o tamanho da página via ?page_size=N.
+
+    S7L: max_page_size reduzido de 500 para 100. Atacante autenticado fazia
+    GET /api/v1/sales/customers/?page_size=500 em loop = DoS do DB +
+    exfiltracao acelerada de PII (LGPD). 100 mantem UX normal e limita o
+    custo por request.
+    """
     page_size_query_param = 'page_size'
-    max_page_size = 500
+    max_page_size = 100
 
 
 @extend_schema(tags=['sales'])
@@ -310,6 +316,14 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        # S7L: operator ve apenas os prospects de que e responsavel (assigned_to
+        # ou created_by). Admin/manager veem todos. Antes operator de qualquer
+        # time via pipeline inteiro com PII (payload de cliente, payment_*).
+        user = self.request.user
+        if user.is_authenticated and getattr(user, 'role', None) == 'operator':
+            queryset = queryset.filter(
+                models.Q(assigned_to=user) | models.Q(created_by=user)
+            )
         prospect_status = self.request.query_params.get('status', None)
         if prospect_status:
             queryset = queryset.filter(status=prospect_status)

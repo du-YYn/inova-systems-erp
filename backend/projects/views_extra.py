@@ -115,6 +115,13 @@ class ProjectEnvironmentViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(project_id=project_id)
         return queryset
 
+    def get_permissions(self):
+        # S7L: deploy restrito a admin/manager (operator pode listar/criar
+        # ambientes mas nao disparar deploy production de projetos alheios).
+        if self.action == 'deploy':
+            return [IsAdminOrManager()]
+        return super().get_permissions()
+
     @action(detail=True, methods=['post'])
     def deploy(self, request, pk=None):
         environment = self.get_object()
@@ -128,6 +135,15 @@ class ProjectEnvironmentViewSet(viewsets.ModelViewSet):
         environment.last_deploy_at = timezone.now()
         environment.last_deploy_by = request.user
         environment.save()
+        # S7L: audit trail explicito para rastreabilidade de deploy production.
+        from core.audit import log_audit
+        log_audit(
+            user=request.user,
+            action='deploy',
+            resource_type='project_environment',
+            resource_id=environment.id,
+            details=f'env={environment.name} version={version} project={environment.project_id}',
+        )
         logger.info(
             f"Deploy no ambiente {environment.id} ({environment.name}) "
             f"versão {version} por {request.user.username}"

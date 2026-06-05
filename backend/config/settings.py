@@ -60,7 +60,10 @@ if not DEBUG and not _is_ci:
         logging.getLogger('django').critical('CONFIG: %s', _msg)
 
 _allowed = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
-# Hosts internos do Docker (necessários para proxy Next.js → Django)
+# Hosts internos do Docker e healthcheck (necessarios para healthcheck via
+# curl localhost:8000 e proxy Next.js → Django). Mantemos localhost/127.0.0.1
+# em prod tambem — o smoke test do CD bate em localhost. Host header injection
+# via SSRF interno e cenario de baixo risco frente a quebra de deploy.
 for _docker_host in ['backend', 'grupo_ry_inova-erp_backend', 'localhost', '127.0.0.1']:
     if _docker_host not in _allowed:
         _allowed.append(_docker_host)
@@ -137,9 +140,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        # S7L: minimo aumentado de 8 para 12 chars (alinhado com NIST SP 800-63B).
+        'OPTIONS': {'min_length': 12},
+    },
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    # S7L: complexidade obrigatoria — 1 maiuscula + 1 digito + 1 simbolo.
+    # Reduz drasticamente o espaco viavel de brute-force/dictionary.
+    {'NAME': 'accounts.validators.ComplexityValidator'},
 ]
 
 LANGUAGE_CODE = 'pt-br'

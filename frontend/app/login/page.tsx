@@ -186,11 +186,12 @@ export default function LoginPage() {
                       onFocus={() => { setIsFocused({ ...isFocused, username: true }); setIsTyping(true); }}
                       onBlur={() => { setIsFocused({ ...isFocused, username: false }); setIsTyping(false); }}
                       className={`w-full pl-12 pr-4 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
-                        isFocused.username 
-                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
+                        isFocused.username
+                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10'
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                       placeholder="seu@email.com"
+                      autoComplete="username"
                       required
                     />
                   </div>
@@ -211,11 +212,12 @@ export default function LoginPage() {
                       onFocus={() => { setIsFocused({ ...isFocused, password: true }); setIsTyping(true); }}
                       onBlur={() => { setIsFocused({ ...isFocused, password: false }); setIsTyping(false); }}
                       className={`w-full pl-12 pr-14 py-3.5 bg-slate-50 border-2 rounded-xl transition-all duration-200 focus:outline-none ${
-                        isFocused.password 
-                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10' 
+                        isFocused.password
+                          ? 'border-accent-gold bg-white dark:bg-gray-800 shadow-lg shadow-accent-gold/10'
                           : 'border-slate-200 hover:border-slate-300'
                       }`}
                       placeholder="••••••••"
+                      autoComplete="current-password"
                       required
                     />
                     <button
@@ -235,6 +237,9 @@ export default function LoginPage() {
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  autoComplete="one-time-code"
                   value={twoFactorCode}
                   onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full px-4 py-3.5 bg-slate-50 border-2 border-accent-gold rounded-xl focus:outline-none focus:shadow-lg focus:shadow-accent-gold/10 font-mono text-center text-2xl tracking-widest"

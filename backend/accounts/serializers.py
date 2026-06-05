@@ -16,6 +16,20 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'role', 'is_2fa_enabled']
 
 
+class LoginResponseSerializer(serializers.ModelSerializer):
+    """S7L: serializer minimo para a resposta de /login/ e /2fa/verify/.
+
+    Antes a resposta vinha com email/phone/avatar/is_active/created_at — PII
+    que vazava em logs (Sentry breadcrumb captura responses), proxies, ou
+    equipamento compartilhado. Frontend usa /accounts/me/ para obter perfil
+    completo apos o login (carrega quando precisa).
+    """
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'role']
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     password_confirm = serializers.CharField(write_only=True)

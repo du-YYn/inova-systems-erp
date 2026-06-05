@@ -24,8 +24,18 @@ function ResetPasswordForm() {
   }, [token]);
 
   const validate = () => {
-    if (!form.new_password || form.new_password.length < 8) {
-      setError('A senha deve ter no mínimo 8 caracteres'); return false;
+    // S7L: alinhado com backend AUTH_PASSWORD_VALIDATORS (min 12 + complexidade).
+    if (!form.new_password || form.new_password.length < 12) {
+      setError('A senha deve ter no mínimo 12 caracteres'); return false;
+    }
+    if (!/[A-Z]/.test(form.new_password)) {
+      setError('A senha deve conter pelo menos 1 letra maiúscula'); return false;
+    }
+    if (!/\d/.test(form.new_password)) {
+      setError('A senha deve conter pelo menos 1 dígito'); return false;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?`~]/.test(form.new_password)) {
+      setError('A senha deve conter pelo menos 1 símbolo (! @ # $ % etc.)'); return false;
     }
     if (form.new_password !== form.confirm) {
       setError('As senhas não conferem'); return false;
@@ -83,7 +93,8 @@ function ResetPasswordForm() {
                       type={showPwd ? 'text' : 'password'}
                       value={form.new_password}
                       onChange={e => setForm(f => ({ ...f, new_password: e.target.value }))}
-                      placeholder="Mínimo 8 caracteres"
+                      placeholder="Mínimo 12 caracteres"
+                      autoComplete="new-password"
                       className="w-full pl-10 pr-10 py-3 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-accent-gold focus:ring-2 focus:ring-accent-gold/20 transition-all"
                       disabled={loading || !token}
                     />
@@ -105,6 +116,7 @@ function ResetPasswordForm() {
                       value={form.confirm}
                       onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
                       placeholder="Repita a nova senha"
+                      autoComplete="new-password"
                       className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-accent-gold focus:ring-2 focus:ring-accent-gold/20 transition-all"
                       disabled={loading || !token}
                     />
