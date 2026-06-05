@@ -1,5 +1,11 @@
 # Inova Systems ERP — docker-compose.yml (standalone)
-# Tráfego HTTPS gerenciado pelo Traefik do Easypanel via rede compartilhada
+# Tráfego HTTPS gerenciado pelo Traefik do Easypanel via rede compartilhada.
+#
+# CAMADA 2 (build no CI): os serviços de aplicação NÃO têm mais `build:`.
+# As imagens são buildadas pelo GitHub Actions e publicadas no GHCR; o servidor
+# apenas faz `docker compose pull && up -d`. A tag a ser usada vem da variável
+# ERP_IMAGE_TAG (definida no .env; o deploy a atualiza para o SHA do commit).
+# celery_worker e celery_beat REUSAM a imagem do backend (mesmo Dockerfile).
 services:
   postgres:
     image: postgres:15
@@ -41,9 +47,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/du-yyn/inova-systems-erp-backend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - .env
@@ -89,23 +93,14 @@ services:
         gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 60
       "
     healthcheck:
-      # Valida o corpo da resposta ({"status":"ok"}), não apenas HTTP 200.
-      # Isso evita falso positivo quando DB/cache estão degraded mas o endpoint
-      # ainda responde 200 com status=degraded.
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/v1/core/health/ | grep -q '\"status\":\"ok\"'"]
       interval: 30s
       timeout: 10s
       retries: 3
-      # start_period aumentado de 40s → 90s para acomodar:
-      # - migrations mais pesadas (ex: seed de catálogo, ALTER TABLE em tabelas grandes)
-      # - collectstatic em deploy cold
-      # - boot do gunicorn com 4 workers
       start_period: 90s
 
   celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/du-yyn/inova-systems-erp-backend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - .env
@@ -139,9 +134,7 @@ services:
     command: celery -A config worker --loglevel=info --concurrency=2
 
   celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/du-yyn/inova-systems-erp-backend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file:
       - .env
@@ -171,18 +164,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    # Aumentado de 30s → 60s. Se uma task agendada estiver rodando quando
-    # o container recebe SIGTERM, ela tem tempo suficiente pra terminar ou
-    # ser reagendada pelo Celery Beat.
     stop_grace_period: 60s
     command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    image: ghcr.io/du-yyn/inova-systems-erp-frontend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
@@ -212,9 +198,7 @@ services:
       retries: 5
 
   apresentacao_backend:
-    build:
-      context: ./apresentacao/backend
-      dockerfile: Dockerfile
+    image: ghcr.io/du-yyn/inova-systems-erp-apresentacao-backend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       - POSTGRES_DB=${APRESENTACAO_DB_NAME:-inova_apresentacao}
@@ -249,11 +233,7 @@ services:
       start_period: 60s
 
   apresentacao_frontend:
-    build:
-      context: ./apresentacao/frontend
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=${APRESENTACAO_VITE_API_URL:-https://apresentacao-api.inovasystemssolutions.com/api}
+    image: ghcr.io/du-yyn/inova-systems-erp-apresentacao-frontend:${ERP_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       apresentacao_backend:

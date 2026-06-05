@@ -1,153 +1,143 @@
-name: CD — Deploy to Production
+name: CD — Build (GHCR) & Deploy
 
 on:
   push:
     branches: [main]
-  # Permite re-disparar o deploy manualmente sem precisar de novo commit.
-  # Útil quando o CD passou (containers Started) mas algum servico nao
-  # ficou listening na porta esperada — caso classico do frontend Next.js
-  # subir mas Easypanel/Traefik nao registrar a rota a tempo.
   workflow_dispatch:
 
-# Princípio do menor privilégio — deploy via SSH não precisa escrever no repo.
+# build precisa publicar no GHCR (packages: write); deploy só lê o repo.
 permissions:
   contents: read
+  packages: write
 
-# CRITICAL: evita que multiplos deploys rodem em paralelo no mesmo servidor —
-# `docker compose up` concorrente causa "Container name already in use" e
-# deixa o servico em estado quebrado (containers parcialmente recriados).
-# Mudancas rapidas em main devem enfileirar; cada push espera o anterior.
-# `cancel-in-progress: false` garante que push mais novo NAO mata deploy em
-# andamento (pode estar no rollback). Se quiser deploy fresco apos serie de
-# merges, use workflow_dispatch.
+# Mantém o serial de deploys (um push espera o anterior).
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
-jobs:
-  deploy:
-    name: Deploy
-    runs-on: ubuntu-latest
-    environment: staging
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/du-yyn/inova-systems-erp
 
+jobs:
+  # ── 1) BUILD: builda as imagens no runner do GitHub e publica no GHCR ────────
+  build:
+    name: Build & Push (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            build_args: ""
+          - name: frontend
+            context: ./frontend
+            build_args: |
+              NEXT_PUBLIC_API_URL=https://erp.inovasystemssolutions.com/api/v1
+          - name: apresentacao-backend
+            context: ./apresentacao/backend
+            build_args: ""
+          - name: apresentacao-frontend
+            context: ./apresentacao/frontend
+            build_args: |
+              VITE_API_URL=https://apresentacao-api.inovasystemssolutions.com/api
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          build-args: ${{ matrix.build_args }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}-${{ matrix.name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 2) DEPLOY: servidor só faz pull + up (SEM build) ────────────────────────
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    steps:
+      - name: Deploy via SSH (pull + up, com rollback por tag)
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # Timeout maior — servidor pode estar lento aceitando SSH apos
-          # docker compose pesado anterior. 60s era curto; 5min cobre cenario
-          # de sobrecarga.
           timeout: 5m
-          command_timeout: 30m
-          # Retry de conexao SSH (nao do command).
+          command_timeout: 20m
           request_pty: false
           script: |
             set -e
             cd /opt/inova-systems-erp
 
-            PREV_COMMIT=$(git rev-parse HEAD)
-            NEW_COMMIT_SHORT=$(git rev-parse --short origin/main 2>/dev/null || echo "pending")
-            echo "Deploy iniciado: $(date) — target=$NEW_COMMIT_SHORT previous=${PREV_COMMIT:0:7}"
-
-            # Atualizar código
+            # Atualiza apenas arquivos versionados (docker-compose.yml, etc.).
+            # NÃO builda nada no servidor — só precisamos do compose novo.
             git fetch origin main
             git reset --hard origin/main
-            # Remove arquivos untracked (ex: migrations criadas manualmente no
-            # servidor com `makemigrations`, .pyc orfaos). Sem isso, um leaf
-            # node de migration que so existe no disco causa CommandError no
-            # entrypoint do backend ("Conflicting migrations detected").
-            # `-d` remove diretorios untracked tambem. `-x` NAO usado pra
-            # preservar .env e arquivos ignorados legitimos.
-            git clean -fd backend/ frontend/ apresentacao/ nginx/ scripts/
 
-            # Rebuild e deploy (migrations rodam automaticamente no entrypoint do backend).
-            # || true evita que set -e aborte o script quando dependências falham a
-            # ficar healthy — o diagnóstico abaixo precisa rodar para capturar o log.
-            docker compose up -d --build --remove-orphans || echo "⚠ docker compose up retornou erro — prosseguindo para diagnóstico"
+            NEW_TAG="${{ github.sha }}"
+            PREV_TAG=$(grep -E '^ERP_IMAGE_TAG=' .env | cut -d= -f2-)
+            echo "Deploy: $(date) — nova tag=${NEW_TAG:0:12} anterior=${PREV_TAG:0:12}"
 
-            # ── Smoke test 1/2: BACKEND ──────────────────────────────────
-            # 18 tentativas × 5s = 90s (comporta migrations mais pesadas).
-            echo "Smoke test backend (até 90s)..."
+            # Grava a tag nova no .env (o compose lê ERP_IMAGE_TAG daqui).
+            if grep -q '^ERP_IMAGE_TAG=' .env; then
+              sed -i "s/^ERP_IMAGE_TAG=.*/ERP_IMAGE_TAG=${NEW_TAG}/" .env
+            else
+              echo "ERP_IMAGE_TAG=${NEW_TAG}" >> .env
+            fi
+
+            # Puxa as imagens prontas do GHCR (servidor precisa de `docker login ghcr.io`).
+            docker compose pull backend frontend apresentacao_backend apresentacao_frontend
+
+            # Sobe (migrations rodam no entrypoint do backend). Recriação é rápida: sem build.
+            docker compose up -d --remove-orphans
+
+            # ── Smoke test backend (até 120s) ──────────────────────────────
             SUCCESS=false
-            for i in $(seq 1 18); do
+            for i in $(seq 1 24); do
               HTTP_STATUS=$(docker compose exec -T backend curl -sf -o /dev/null -w "%{http_code}" http://localhost:8000/api/v1/core/health/ 2>/dev/null || echo "000")
-              if [ "$HTTP_STATUS" = "200" ]; then
-                SUCCESS=true
-                break
-              fi
-              echo "Tentativa $i/18 — HTTP $HTTP_STATUS — aguardando..."
+              if [ "$HTTP_STATUS" = "200" ]; then SUCCESS=true; break; fi
+              echo "Tentativa $i/24 — HTTP $HTTP_STATUS — aguardando..."
               sleep 5
             done
 
-            # ── Smoke test 2/2: FRONTEND ──────────────────────────────────
-            # Anteriormente, frontend caia em crash loop pos-rebuild mas o CD
-            # marcava "success" porque so checava backend. Resultado: subdominio
-            # proposta.* devolvia ERR_CONNECTION_REFUSED em prod por causa do
-            # Traefik nao achando upstream listening. Esta segunda checagem
-            # garante que Next.js esta de fato respondendo na porta 3000 antes
-            # do CD declarar deploy ok.
-            FRONTEND_OK=false
-            if [ "$SUCCESS" = "true" ]; then
-              echo "Smoke test frontend (até 60s)..."
-              for i in $(seq 1 12); do
-                # Imagem Next.js standalone (Alpine slim) nao tem wget/curl.
-                # Checa: (a) container esta em estado "running" e (b) o
-                # processo Node esta escutando na porta 3000 via /proc/net/tcp.
-                # Hex 0BB8 = 3000 em little-endian (porta listening).
-                FE_RUNNING=$(docker compose ps --filter status=running -q frontend 2>/dev/null | wc -l)
-                FE_LISTENING=$(docker compose exec -T frontend sh -c "grep -c ':0BB8 ' /proc/net/tcp 2>/dev/null || echo 0" 2>/dev/null | tr -d '[:space:]')
-                if [ "$FE_RUNNING" = "1" ] && [ "$FE_LISTENING" != "0" ] && [ -n "$FE_LISTENING" ]; then
-                  FRONTEND_OK=true
-                  break
-                fi
-                echo "Tentativa frontend $i/12 — running=$FE_RUNNING listening_count=$FE_LISTENING — aguardando..."
-                sleep 5
-              done
-              if [ "$FRONTEND_OK" != "true" ]; then
-                echo "⚠ Frontend nao respondeu em 60s — marcando deploy como falho."
-                SUCCESS=false
-              fi
+            # Confere que o frontend está rodando (imagem pronta, sem crash loop).
+            FE_RUNNING=$(docker compose ps --status running -q frontend 2>/dev/null | wc -l)
+            if [ "$SUCCESS" = "true" ] && [ "$FE_RUNNING" != "1" ]; then
+              echo "⚠ Frontend não está running."
+              SUCCESS=false
             fi
 
             if [ "$SUCCESS" != "true" ]; then
-              echo ""
-              echo "=============================================="
-              echo "=== SMOKE TEST FALHOU — DIAGNÓSTICO =========="
-              echo "=============================================="
-              echo ""
-              echo "--- Status dos containers ---"
-              docker compose ps --all 2>&1 || true
-              echo ""
-              echo "--- Últimos 200 logs do backend ---"
-              docker compose logs backend --tail 200 2>&1 || true
-              echo ""
-              echo "--- Últimos 50 logs do celery_worker ---"
-              docker compose logs celery_worker --tail 50 2>&1 || true
-              echo ""
-              echo "--- Últimos 30 logs do postgres ---"
-              docker compose logs postgres --tail 30 2>&1 || true
-              echo ""
-              echo "--- Últimos 100 logs do frontend ---"
-              docker compose logs frontend --tail 100 2>&1 || true
-              echo ""
-              echo "--- Health endpoint backend (última tentativa) ---"
-              docker compose exec -T backend curl -v http://localhost:8000/api/v1/core/health/ 2>&1 || true
-              echo ""
-              echo "--- Frontend listener (última tentativa) ---"
-              docker compose exec -T frontend wget -O - http://localhost:3000/ 2>&1 | head -20 || true
-              echo "=============================================="
-              echo ""
+              echo "=== SMOKE FALHOU — diagnóstico ==="
+              docker compose ps --all || true
+              docker compose logs backend --tail 120 || true
+              docker compose logs frontend --tail 60 || true
 
-              echo "Iniciando rollback para ${PREV_COMMIT:0:7}..."
-              git reset --hard "$PREV_COMMIT"
-              docker compose up -d --build --remove-orphans || true
+              if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$NEW_TAG" ]; then
+                echo "Rollback para ${PREV_TAG:0:12} (troca de tag, SEM build — segundos)..."
+                sed -i "s/^ERP_IMAGE_TAG=.*/ERP_IMAGE_TAG=${PREV_TAG}/" .env
+                docker compose up -d --remove-orphans || true
+              else
+                echo "Sem tag anterior para rollback — mantendo estado atual."
+              fi
               exit 1
             fi
 
-            echo "Deploy concluído com sucesso: $(date)"
+            echo "Deploy OK — tag ${NEW_TAG:0:12} ($(date))"
