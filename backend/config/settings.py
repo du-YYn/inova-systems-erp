@@ -157,13 +157,12 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000          # 1 ano
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    # S7C1: SECURE_SSL_REDIRECT default true em prod (forca HTTPS).
-    # CI roda DEBUG=False mas em HTTP — desabilita auto via _is_ci.
-    # Em prod real (sem CI flag), default true.
-    if _is_ci:
-        SECURE_SSL_REDIRECT = False
-    else:
-        SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() == 'true'
+    # S7C1: SECURE_SSL_REDIRECT controlado via env. Default false pois Django
+    # atras de Traefik/proxy ja recebe HTTPS terminado — habilitar redirect
+    # aqui pode causar loop infinito se X-Forwarded-Proto nao chegar correto.
+    # Operador deve setar SECURE_SSL_REDIRECT=true APENAS apos validar que o
+    # proxy envia o header. SECURE_PROXY_SSL_HEADER abaixo trata o caso comum.
+    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() == 'true'
     # S7C1: Django atras de nginx/Traefik com TLS terminado no proxy precisa
     # saber que a request original era HTTPS. Sem isso `request.is_secure()`
     # retorna False, `build_absolute_uri()` gera links http:// em emails de
