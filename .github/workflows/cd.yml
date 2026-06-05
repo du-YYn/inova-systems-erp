@@ -24,7 +24,6 @@ jobs:
   build:
     name: Build & Push (${{ matrix.name }})
     runs-on: ubuntu-latest
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     strategy:
       fail-fast: true
       matrix:
@@ -71,7 +70,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: staging
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
     steps:
       - name: Deploy via SSH (pull + up, com rollback por tag)
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
