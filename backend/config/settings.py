@@ -204,6 +204,12 @@ REST_FRAMEWORK = {
         # 10k requests revela a tabela de taxas. Limite razoavel para
         # uso humano via modal.
         'simulate_payment': '60/minute',
+        # S7H: troca de senha (usuario autenticado). 5/h protege contra
+        # abuso de sessao roubada e brute-force de senha atual.
+        'change_password': '5/hour',
+        # S7H: password reset composto (IP, email). 1/h por combinacao
+        # IP+email — empilha com password_reset (3/h por IP).
+        'password_reset_email': '1/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

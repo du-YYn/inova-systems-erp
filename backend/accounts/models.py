@@ -25,6 +25,18 @@ class User(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True, validators=[validate_image_extension, validate_image_size])
     password_reset_token = models.CharField(max_length=64, blank=True, null=True)
     password_reset_expires = models.DateTimeField(blank=True, null=True)
+    # S7H: soft cap por-email para password reset (1/h independente de IP).
+    # Complementa PasswordResetEmailThrottle (cache IP+email) protegendo
+    # contra rotacao de IPs.
+    password_reset_last_sent = models.DateTimeField(blank=True, null=True)
+    # S7H: lockout por usuario apos 5 tentativas falhas de login.
+    # Backoff exponencial: 15min, 30min, 1h, 2h, 4h, 8h (cap em 8h).
+    failed_attempts = models.IntegerField(default=0)
+    locked_until = models.DateTimeField(blank=True, null=True)
+    # S7H: contador de tentativas falhas de codigo 2FA no fluxo de login.
+    # Apos 5 falhas, temp_2fa_token e invalidado e o usuario precisa logar
+    # novamente — previne brute-force de codigo TOTP dentro da janela TTL.
+    temp_2fa_attempts = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
