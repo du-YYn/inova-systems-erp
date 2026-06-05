@@ -40,8 +40,13 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          timeout: 60s
+          # Timeout maior — servidor pode estar lento aceitando SSH apos
+          # docker compose pesado anterior. 60s era curto; 5min cobre cenario
+          # de sobrecarga.
+          timeout: 5m
           command_timeout: 30m
+          # Retry de conexao SSH (nao do command).
+          request_pty: false
           script: |
             set -e
             cd /opt/inova-systems-erp
