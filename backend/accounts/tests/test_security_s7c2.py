@@ -14,13 +14,9 @@ disparassem com cookie. Esta fase:
 - S7C2.8: Auth via header Authorization Bearer continua isento de CSRF
 - S7C2.9: LogoutView limpa csrftoken cookie
 """
-from datetime import date, timedelta
-from decimal import Decimal
-
 import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.middleware.csrf import get_token
 from rest_framework.test import APIClient
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -114,7 +110,7 @@ class TestCsrfRequiredForUnsafeMethods:
             'name': 'Cliente CSRF Test',
             'email': 'csrf@test.com',
             'document': '12345678000100',
-            'document_type': 'cnpj',
+            'customer_type': 'PJ',
         }, format='json')
         assert resp.status_code == status.HTTP_403_FORBIDDEN, (
             f'POST sem X-CSRFToken deveria ser bloqueado (CSRF Failed). '
@@ -134,7 +130,7 @@ class TestCsrfTokenMustMatch:
         resp = api_client.post(
             '/api/v1/sales/customers/',
             {'name': 'X', 'email': 'x@x.com', 'document': '12345678000100',
-             'document_type': 'cnpj'},
+             'customer_type': 'PJ'},
             format='json',
             HTTP_X_CSRFTOKEN='fake-token-that-does-not-match',
         )
@@ -150,17 +146,18 @@ class TestCsrfTokenMatchPasses:
     """POST com X-CSRFToken == cookie csrftoken deve passar."""
 
     def test_post_with_valid_csrf_token_works(self, api_client, admin_user):
-        _login_via_cookies(api_client, admin_user)
-        # Faz um GET para o servidor enviar o csrftoken cookie
-        api_client.get('/api/v1/accounts/profile/')
-        # Le o cookie csrftoken do client e manda como X-CSRFToken
+        # Login real para receber JWT + csrftoken cookies do backend
+        resp_login = api_client.post('/api/v1/accounts/login/', {
+            'username': 's7c2_admin', 'password': 'pass12345',
+        }, format='json')
+        assert resp_login.status_code == status.HTTP_200_OK
         csrf_token = api_client.cookies.get('csrftoken')
-        assert csrf_token is not None, 'GET deveria ter setado csrftoken cookie'
+        assert csrf_token is not None, 'login deveria ter setado csrftoken cookie'
 
         resp = api_client.post(
             '/api/v1/sales/customers/',
             {'name': 'Cliente Valido', 'email': 'valid@test.com',
-             'document': '98765432000100', 'document_type': 'cnpj'},
+             'document': '98765432000100', 'customer_type': 'PJ'},
             format='json',
             HTTP_X_CSRFTOKEN=csrf_token.value,
         )
@@ -183,7 +180,7 @@ class TestBearerAuthSkipsCsrf:
         resp = api_client.post(
             '/api/v1/sales/customers/',
             {'name': 'Bearer Cliente', 'email': 'bearer@test.com',
-             'document': '11111111000111', 'document_type': 'cnpj'},
+             'document': '11111111000111', 'customer_type': 'PJ'},
             format='json',
             HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}',
         )
@@ -199,8 +196,11 @@ class TestLogoutClearsCsrfCookie:
     """LogoutView deve limpar csrftoken (junto com access/refresh)."""
 
     def test_logout_clears_csrftoken(self, api_client, admin_user):
-        _login_via_cookies(api_client, admin_user)
-        api_client.get('/api/v1/accounts/profile/')
+        # Login real para obter csrftoken cookie
+        resp_login = api_client.post('/api/v1/accounts/login/', {
+            'username': 's7c2_admin', 'password': 'pass12345',
+        }, format='json')
+        assert resp_login.status_code == status.HTTP_200_OK
         csrf = api_client.cookies.get('csrftoken').value
 
         resp = api_client.post(
