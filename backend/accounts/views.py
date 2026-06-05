@@ -26,7 +26,10 @@ from .serializers import (
     ChangePasswordSerializer, AdminUserSerializer, AdminUserCreateSerializer,
 )
 from .permissions import IsAdmin
-from .throttles import LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle
+from .throttles import (
+    LoginRateThrottle, PasswordResetThrottle, TwoFactorRateThrottle,
+    ChangePasswordThrottle, PasswordResetEmailThrottle,
+)
 from .tasks import send_password_reset_email
 from core.logging_utils import mask_email
 
@@ -143,6 +146,17 @@ class LoginView(APIView):
     authentication_classes = []
     throttle_classes = [LoginRateThrottle]
 
+    # S7H: lockout exponencial — janelas em minutos para failed_attempts >= 5.
+    # 5° fail = 15min, 6° = 30min, 7° = 1h, 8° = 2h, 9° = 4h, 10°+ = 8h (cap).
+    LOCKOUT_THRESHOLD = 5
+    LOCKOUT_BASE_MINUTES = 15
+
+    def _compute_lockout(self, failed_attempts: int):
+        """Retorna timedelta de lockout para o n-esimo fail (n >= THRESHOLD)."""
+        # 15 * 2^min(n-5, 5) = 15, 30, 60, 120, 240, 480
+        exp = min(failed_attempts - self.LOCKOUT_THRESHOLD, 5)
+        return timedelta(minutes=self.LOCKOUT_BASE_MINUTES * (2 ** exp))
+
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -150,26 +164,56 @@ class LoginView(APIView):
         login_input = serializer.validated_data['username']
         password = serializer.validated_data['password']
 
-        # Aceitar email ou username no campo de login
+        # S7H: lookup do user ANTES de authenticate() — necessario para:
+        # 1) checar lockout antes de queimar PBKDF2;
+        # 2) incrementar failed_attempts em falha;
+        # 3) timing-safe: se user nao existe, ainda queimamos PBKDF2 com
+        #    authenticate(dummy) para equalizar latencia (account enum).
         User = get_user_model()
         username = login_input
+        found_user = None
         if '@' in login_input:
             try:
                 found_user = User.objects.get(email=login_input)
                 username = found_user.username
-                logger.info(f"Login: email {mask_email(login_input)} resolvido para username '{username}' (active={found_user.is_active})")
             except User.DoesNotExist:
-                logger.warning(f"Login: email {mask_email(login_input)} não encontrado no banco")
+                pass
+        else:
+            try:
+                found_user = User.objects.get(username=login_input)
+            except User.DoesNotExist:
+                pass
 
-        user = authenticate(username=username, password=password)
+        # S7H: lockout — bloquear ANTES de authenticate() (nao queimamos
+        # PBKDF2 nem revelamos diferenca de tempo entre bloqueado/destrancado).
+        if found_user and found_user.locked_until and found_user.locked_until > timezone.now():
+            # Resposta generica (mesma 401 de credencial invalida) para nao
+            # facilitar enumeracao. Mensagem dedicada apenas se quisermos
+            # UX explicita — mantemos generica por seguranca.
+            logger.warning("Login bloqueado: usuario sob lockout")
+            return Response(
+                {'error': 'Credenciais inválidas'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if found_user:
+            user = authenticate(username=username, password=password)
+        else:
+            # S7H: timing-safe — queima PBKDF2 mesmo sem user, para
+            # equalizar latencia com fluxo normal (~200ms).
+            authenticate(username='__s7h_timing_safe_dummy__', password=password)
+            user = None
 
         if not user:
-            # Diagnóstico: verificar se user existe
-            try:
-                db_user = User.objects.get(username=username)
-                logger.warning(f"Login falhou: user '{username}' existe (active={db_user.is_active}) mas senha incorreta")
-            except User.DoesNotExist:
-                logger.warning(f"Login falhou: user '{username}' não encontrado")
+            # S7H: incrementa failed_attempts se user existe; aplica lockout
+            # apos THRESHOLD. Se nao existe, nao criamos ghost record.
+            if found_user:
+                found_user.failed_attempts = (found_user.failed_attempts or 0) + 1
+                if found_user.failed_attempts >= self.LOCKOUT_THRESHOLD:
+                    found_user.locked_until = timezone.now() + self._compute_lockout(found_user.failed_attempts)
+                found_user.save(update_fields=['failed_attempts', 'locked_until'])
+            # S7H: log sem revelar existencia do usuario.
+            logger.warning("Login falhou para tentativa")
             return Response(
                 {'error': 'Credenciais inválidas'},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -181,6 +225,14 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        # S7H: sucesso de autenticacao — zerar contadores de falha.
+        # Feito antes de gerar JWT para que mesmo se a geracao falhar o
+        # contador nao fique inflado.
+        if user.failed_attempts or user.locked_until:
+            user.failed_attempts = 0
+            user.locked_until = None
+            user.save(update_fields=['failed_attempts', 'locked_until'])
+
         if user.is_2fa_enabled:
             import hashlib
             temp_token = secrets.token_urlsafe(32)
@@ -190,7 +242,9 @@ class LoginView(APIView):
             # código TOTP. Combinado com o rate limit de 5/min do endpoint,
             # o espaço de busca efetivo fica << 1M combinações.
             user.temp_2fa_expires = timezone.now() + timedelta(minutes=3)
-            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
+            # S7H: zerar tentativas de TOTP — comeca fresh em cada login.
+            user.temp_2fa_attempts = 0
+            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires', 'temp_2fa_attempts'])
             return Response({
                 'requires_2fa': True,
                 'temp_token': temp_token,
@@ -226,21 +280,45 @@ class TwoFactorVerifyView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Token inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # S7H: bloqueia 2FA para usuario desativado entre login e verify.
+        if not user.is_active:
+            return Response(
+                {'error': 'Usuário inativo'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
         if user.temp_2fa_expires and user.temp_2fa_expires < timezone.now():
             user.temp_2fa_token = None
             user.temp_2fa_expires = None
-            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
+            user.temp_2fa_attempts = 0
+            user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires', 'temp_2fa_attempts'])
             return Response({'error': 'Token expirado, faça login novamente'}, status=status.HTTP_401_UNAUTHORIZED)
 
         # F3b: get_totp_secret() decifra (com fail-safe para legado plain-text)
         totp = pyotp.TOTP(user.get_totp_secret())
         if not totp.verify(code):
+            # S7H: incrementa contador; apos 5 falhas, invalida temp_token
+            # forcando novo login (e novo temp_token).
+            user.temp_2fa_attempts = (user.temp_2fa_attempts or 0) + 1
+            if user.temp_2fa_attempts >= 5:
+                user.temp_2fa_token = None
+                user.temp_2fa_expires = None
+                user.temp_2fa_attempts = 0
+                user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires', 'temp_2fa_attempts'])
+                logger.warning(f"2FA: 5 falhas — temp_token invalidado para {user.username}")
+                return Response(
+                    {'error': 'Muitas tentativas inválidas. Faça login novamente.'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            user.save(update_fields=['temp_2fa_attempts'])
             logger.warning("Código 2FA inválido")
             return Response({'error': 'Código 2FA inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # S7H: zerar contadores em sucesso.
         user.temp_2fa_token = None
         user.temp_2fa_expires = None
-        user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires'])
+        user.temp_2fa_attempts = 0
+        user.save(update_fields=['temp_2fa_token', 'temp_2fa_expires', 'temp_2fa_attempts'])
 
         logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
@@ -320,6 +398,9 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 @extend_schema(tags=['auth'], summary='Alterar senha do usuário autenticado')
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    # S7H: 5 trocas de senha por hora — protege contra abuso (sessao roubada
+    # tentando rotar senha rapido, brute-force de senha atual).
+    throttle_classes = [ChangePasswordThrottle]
 
     def post(self, request):
         serializer = ChangePasswordSerializer(data=request.data)
@@ -328,6 +409,24 @@ class ChangePasswordView(APIView):
         user = request.user
         if not user.check_password(serializer.validated_data['old_password']):
             return Response({'error': 'Senha atual incorreta'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # S7H: se 2FA esta ativo, exigir codigo TOTP como segundo fator.
+        # Protege contra sessao sequestrada (cookie roubado nao basta —
+        # atacante tambem precisa do segredo TOTP do dispositivo).
+        if user.is_2fa_enabled:
+            totp_code = request.data.get('totp_code', '')
+            if not totp_code:
+                return Response(
+                    {'error': 'Código 2FA é obrigatório para alterar a senha'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            totp = pyotp.TOTP(user.get_totp_secret())
+            if not totp.verify(totp_code):
+                logger.warning(f"ChangePassword: codigo 2FA invalido para {user.username}")
+                return Response(
+                    {'error': 'Código 2FA inválido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         try:
             validate_password(serializer.validated_data['new_password'], user=user)
@@ -346,11 +445,18 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # S7H: aceitar apenas cookie httpOnly (nao request.data) — refresh
+        # via body permite que JS comprometido por XSS reproduza logout
+        # com tokens arbitrarios. Cookie httpOnly nao e legivel por JS.
+        refresh_token = request.COOKIES.get('refresh_token')
+        if not refresh_token:
+            return Response(
+                {'error': 'Refresh token não encontrado'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
         try:
-            refresh_token = request.COOKIES.get('refresh_token') or request.data.get('refresh')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
+            token = RefreshToken(refresh_token)
+            token.blacklist()
         except (KeyError, ValueError, TypeError, TokenError):
             pass
         logger.info(f"Logout: {request.user.username}")
@@ -364,7 +470,10 @@ class LogoutView(APIView):
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []  # S7C2
-    throttle_classes = [PasswordResetThrottle]
+    # S7H: throttle empilhado — PasswordResetThrottle limita IP (3/h, anti-abuso
+    # generico); PasswordResetEmailThrottle limita IP+email (1/h, anti-flood
+    # por destinatario). Soft-cap por-email no save protege contra rotacao de IPs.
+    throttle_classes = [PasswordResetThrottle, PasswordResetEmailThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -379,11 +488,24 @@ class PasswordResetRequestView(APIView):
         except User.DoesNotExist:
             return safe_response
 
+        # S7H: soft-cap por-email (1 reset/hora por usuario, independente de IP).
+        # Protege contra atacante com pool de IPs floodando o mailbox da vitima.
+        # Mantemos safe_response (anti-enumeracao) — atacante nao distingue
+        # "rate-limited" de "email nao existe".
+        if user.password_reset_last_sent and (
+            timezone.now() - user.password_reset_last_sent < timedelta(hours=1)
+        ):
+            logger.info(f"Password reset suprimido (soft-cap 1h): {mask_email(email)}")
+            return safe_response
+
         import hashlib
         token = secrets.token_urlsafe(32)
         user.password_reset_token = hashlib.sha256(token.encode()).hexdigest()
         user.password_reset_expires = timezone.now() + timedelta(hours=24)
-        user.save(update_fields=['password_reset_token', 'password_reset_expires'])
+        user.password_reset_last_sent = timezone.now()
+        user.save(update_fields=[
+            'password_reset_token', 'password_reset_expires', 'password_reset_last_sent',
+        ])
 
         send_password_reset_email.delay(user.id, token)
         logger.info(f"Task de reset de senha enfileirada para: {mask_email(email)}")
