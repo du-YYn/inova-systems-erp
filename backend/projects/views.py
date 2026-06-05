@@ -333,3 +333,21 @@ class ProjectCommentViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        # S7L: operator so deleta o proprio comentario. Admin/manager deletam
+        # qualquer um (moderacao). Antes operator deletava comentarios alheios.
+        user = self.request.user
+        if instance.user_id != user.id and getattr(user, 'role', None) not in ('admin', 'manager'):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Voce so pode deletar os proprios comentarios.')
+        instance.delete()
+
+    def perform_update(self, serializer):
+        # S7L: idem destroy — operator so edita o proprio comentario.
+        user = self.request.user
+        instance = serializer.instance
+        if instance.user_id != user.id and getattr(user, 'role', None) not in ('admin', 'manager'):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Voce so pode editar os proprios comentarios.')
+        serializer.save()

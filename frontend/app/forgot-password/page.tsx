@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import api from '@/lib/api';
+import api, { ApiError } from '@/lib/api';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -18,11 +18,22 @@ export default function ForgotPasswordPage() {
     setError('');
     try {
       await api.post('/accounts/password-reset/', { email });
-      // Sempre mostra sucesso (por segurança o backend não revela se o email existe)
+      // Sempre mostra sucesso quando 200/2xx (por segurança o backend
+      // não revela se o email existe).
       setSent(true);
-    } catch {
-      // Ainda mostra sucesso — o backend pode retornar 404 mas não revelamos
-      setSent(true);
+    } catch (err) {
+      // S7L: distingue 429 (rate limit — usuário precisa esperar e tentar
+      // de novo) de 5xx (erro do servidor). Antes engolíamos tudo como
+      // sucesso, mascarando problemas operacionais (SMTP down, queue cheia).
+      if (err instanceof ApiError && err.status === 429) {
+        setError('Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+      } else if (err instanceof ApiError && err.status >= 500) {
+        setError('Erro temporário no servidor. Tente novamente em instantes.');
+      } else {
+        // 4xx genérico (ex: email mal-formado) ou rede — mostra sucesso
+        // anti-enumeração (mesmo padrão do backend).
+        setSent(true);
+      }
     } finally {
       setLoading(false);
     }
