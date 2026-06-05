@@ -41,8 +41,26 @@ _SAMESITE = getattr(django_settings, 'JWT_COOKIE_SAMESITE', 'Lax')
 _COOKIE_DOMAIN = getattr(django_settings, 'JWT_COOKIE_DOMAIN', None)  # .inovasystemssolutions.com
 
 
-def _set_auth_cookies(response: Response, refresh: RefreshToken, user=None) -> None:
-    """Define os cookies httpOnly de access e refresh token na resposta."""
+def _set_csrf_cookie(response: Response, request) -> None:
+    """S7C2: garante que o cookie `csrftoken` esta na resposta.
+
+    Usa get_token(request) do Django que gera token se nao existe e marca o
+    request para o CsrfViewMiddleware emitir o Set-Cookie no response. Como
+    JWTCookieAuthentication isenta o login do check (Bearer/AllowAny), o
+    middleware nao reseta o token entre requests legitimas.
+    """
+    from django.middleware.csrf import get_token
+    # Forca a geracao + flag de envio do cookie pelo CsrfViewMiddleware
+    get_token(request)
+
+
+def _set_auth_cookies(response: Response, refresh: RefreshToken, user=None, request=None) -> None:
+    """Define os cookies httpOnly de access e refresh token na resposta.
+
+    S7C2: chamadores devem passar `request` para que o CSRF cookie seja
+    emitido junto. Sem request, mantemos compatibilidade mas o token CSRF
+    nao e setado (chamadores antigos / fluxos de teste).
+    """
     common = dict(
         secure=_SECURE,
         samesite=_SAMESITE,
@@ -86,6 +104,10 @@ def _set_auth_cookies(response: Response, refresh: RefreshToken, user=None) -> N
             **common,
         )
 
+    # S7C2: csrftoken cookie (NAO httpOnly — JS le e manda em X-CSRFToken).
+    if request is not None:
+        _set_csrf_cookie(response, request)
+
 
 def _clear_auth_cookies(response: Response) -> None:
     """Remove todos os cookies de autenticação."""
@@ -94,6 +116,9 @@ def _clear_auth_cookies(response: Response) -> None:
         kwargs['domain'] = _COOKIE_DOMAIN
     for name in ('access_token', 'refresh_token', 'inova_session', 'inova_role'):
         response.delete_cookie(name, **kwargs)
+    # S7C2: csrftoken usa configuracao do Django (CSRF_COOKIE_NAME default
+    # 'csrftoken'). Passamos os mesmos kwargs do CsrfViewMiddleware.
+    response.delete_cookie('csrftoken', **kwargs)
 
 
 @extend_schema(tags=['auth'])
@@ -116,6 +141,9 @@ class RegisterView(generics.CreateAPIView):
 @extend_schema(tags=['auth'], summary='Login com username/senha')
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    # S7C2: isenta JWTCookieAuthentication para evitar CSRF check no proprio
+    # login (user com cookie stale nao consegue relogar sem header X-CSRFToken).
+    authentication_classes = []
     throttle_classes = [LoginRateThrottle]
 
     # S7H: lockout exponencial — janelas em minutos para failed_attempts >= 5.
@@ -227,13 +255,15 @@ class LoginView(APIView):
         log_audit(user, 'login', 'user', user.id)
         refresh = RefreshToken.for_user(user)
         response = Response({'user': UserSerializer(user).data})
-        _set_auth_cookies(response, refresh, user=user)
+        _set_auth_cookies(response, refresh, user=user, request=request)
         return response
 
 
 @extend_schema(tags=['auth'], summary='Verificar código TOTP (2FA)')
 class TwoFactorVerifyView(APIView):
     permission_classes = [AllowAny]
+    # S7C2: isenta JWTCookieAuthentication (mesmo motivo do LoginView)
+    authentication_classes = []
     throttle_classes = [TwoFactorRateThrottle]
 
     def post(self, request):
@@ -293,7 +323,7 @@ class TwoFactorVerifyView(APIView):
         logger.info(f"2FA OK: {user.username}")
         refresh = RefreshToken.for_user(user)
         response = Response({'user': UserSerializer(user).data})
-        _set_auth_cookies(response, refresh, user=user)
+        _set_auth_cookies(response, refresh, user=user, request=request)
         return response
 
 
@@ -439,6 +469,7 @@ class LogoutView(APIView):
 @extend_schema(tags=['auth'], summary='Solicitar link de redefinição de senha por email')
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # S7C2
     # S7H: throttle empilhado — PasswordResetThrottle limita IP (3/h, anti-abuso
     # generico); PasswordResetEmailThrottle limita IP+email (1/h, anti-flood
     # por destinatario). Soft-cap por-email no save protege contra rotacao de IPs.
@@ -485,6 +516,7 @@ class PasswordResetRequestView(APIView):
 @extend_schema(tags=['auth'], summary='Confirmar redefinição de senha com token')
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # S7C2
 
     def post(self, request):
         import hashlib
@@ -570,6 +602,7 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
 @extend_schema(tags=['auth'], summary='Renovar access token via cookie de refresh')
 class CookieTokenRefreshView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes = []  # S7C2
 
     def post(self, request):
         refresh_token = request.COOKIES.get('refresh_token')
@@ -604,4 +637,6 @@ class CookieTokenRefreshView(APIView):
                 max_age=int(django_settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
                 httponly=True, secure=_SECURE, samesite=_SAMESITE, path='/',
             )
+        # S7C2: revalida csrftoken para nao expirar enquanto o usuario esta ativo.
+        _set_csrf_cookie(response, request)
         return response

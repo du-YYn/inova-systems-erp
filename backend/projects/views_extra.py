@@ -156,10 +156,21 @@ class DeliveryApprovalViewSet(viewsets.ModelViewSet):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
-    def respond(self, request, pk=None):
-        """Rota pública — cliente responde via token."""
-        token = request.data.get('token') or pk
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny],
+            url_path='respond', authentication_classes=[])
+    def respond(self, request):
+        """S7B.6: Rota pública — cliente responde via token.
+
+        Antes: `token = request.data.get('token') or pk` aceitava PK numérico
+        como token, abrindo enumeração trivial (POST /respond/1/, 2/, ...).
+        Fix: endpoint detail=False sem pk na URL + exige token explícito no body.
+        """
+        token = request.data.get('token')
+        if not token or not isinstance(token, str) or len(token) < 16:
+            return Response(
+                {'error': 'Token de aprovação é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
             approval = DeliveryApproval.objects.get(token=token)
         except DeliveryApproval.DoesNotExist:

@@ -2,14 +2,16 @@ import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, SAFE_METHODS
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 
-from accounts.permissions import IsAdminOrManagerOrOperator
+from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
 from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, KnowledgeBaseArticle
 from .serializers import (
     SLAPolicySerializer, SupportCategorySerializer, SupportTicketSerializer,
-    TicketCommentSerializer, KnowledgeBaseArticleSerializer,
+    TicketCommentSerializer, TicketCommentAdminSerializer,
+    KnowledgeBaseArticleSerializer,
 )
 
 logger = logging.getLogger('support')
@@ -42,16 +44,29 @@ def _calculate_sla_deadlines(ticket):
 
 @extend_schema(tags=['support'])
 class SLAPolicyViewSet(viewsets.ModelViewSet):
+    """S7B.10: config compartilhada — leitura para todos autenticados,
+    escrita só admin/manager (antes IsAdminOrManagerOrOperator permitia
+    operator alterar política de SLA do tenant inteiro).
+    """
     queryset = SLAPolicy.objects.all()
     serializer_class = SLAPolicySerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAdminOrManager()]
 
 
 @extend_schema(tags=['support'])
 class SupportCategoryViewSet(viewsets.ModelViewSet):
+    """S7B.10: config compartilhada — escrita só admin/manager."""
     queryset = SupportCategory.objects.all()
     serializer_class = SupportCategorySerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAdminOrManager()]
 
 
 @extend_schema(tags=['support'])
@@ -149,22 +164,56 @@ class TicketCommentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrManagerOrOperator]
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
+    def get_serializer_class(self):
+        """S7B.5: admin/manager usam serializer com is_internal writable."""
+        user = getattr(self.request, 'user', None)
+        if user and getattr(user, 'role', None) in ('admin', 'manager'):
+            return TicketCommentAdminSerializer
+        return TicketCommentSerializer
+
     def get_queryset(self):
+        """S7B.5: viewer SEMPRE filtrado em is_internal=False — antes só
+        filtrava em LIST mas retrieve(pk) sequencial entregava o comment
+        interno (drift LIST vs DETAIL = vetor de enumeração trivial).
+        """
         qs = super().get_queryset()
         if ticket_id := self.request.query_params.get('ticket'):
             qs = qs.filter(ticket_id=ticket_id)
-        # Viewers só veem comentários não-internos
-        if self.request.user.role == 'viewer':
+        user = getattr(self.request, 'user', None)
+        if user and getattr(user, 'role', None) == 'viewer':
             qs = qs.filter(is_internal=False)
         return qs
 
     def perform_create(self, serializer):
+        # S7B.5: operator não escolhe is_internal (read_only no serializer
+        # padrão). Default fica do model — comment público.
         comment = serializer.save(user=self.request.user)
         # Marca primeira resposta do ticket
         ticket = comment.ticket
         if not ticket.first_response_at and self.request.user != ticket.created_by:
             ticket.first_response_at = timezone.now()
             ticket.save(update_fields=['first_response_at'])
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminOrManager])
+    def set_internal(self, request, pk=None):
+        """S7B.5: admin/manager marca/desmarca comment como interno.
+
+        Endpoint dedicado em vez de aceitar no PATCH genérico — força audit
+        trail e separa intenção (mudar conteúdo vs mudar visibilidade).
+        Permission class `IsAdminOrManager` já barra operator/viewer.
+        """
+        comment = self.get_object()
+        value = request.data.get('is_internal')
+        if value is None:
+            return Response(
+                {'error': 'is_internal é obrigatório (true/false).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if isinstance(value, str):
+            value = value.lower() in ('true', '1', 'yes')
+        comment.is_internal = bool(value)
+        comment.save(update_fields=['is_internal', 'updated_at'])
+        return Response(TicketCommentAdminSerializer(comment).data)
 
 
 @extend_schema(tags=['support'])
