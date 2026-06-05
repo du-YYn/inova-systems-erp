@@ -123,6 +123,7 @@ class TestMilestoneMassAssignment:
             value=Decimal('5000'),
             total=Decimal('5000'),
             status='pending',
+            created_by=operator_user,
         )
         url = f'/api/v1/projects/milestones/{milestone.id}/'
         resp = operator_client.patch(url, {'invoice': invoice.id}, format='json')
