@@ -75,6 +75,8 @@ jobs:
     environment: staging
     steps:
       - name: Deploy via SSH (pull + up, com rollback por tag)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262 # v1.0.3
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -83,14 +85,21 @@ jobs:
           timeout: 5m
           command_timeout: 20m
           request_pty: false
+          envs: GHCR_TOKEN
           script: |
             set -e
+            # Autentica no GHCR para o pull funcionar independentemente de qual
+            # usuario SSH o deploy usa (o deploy antigo buildava local e nao
+            # precisava; o novo puxa imagem do GHCR).
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u du-yyn --password-stdin
             cd /opt/inova-systems-erp
 
             # Atualiza apenas arquivos versionados (docker-compose.yml, etc.).
             # NÃO builda nada no servidor — só precisamos do compose novo.
+            # FETCH_HEAD = exatamente o que acabou de ser baixado (mais robusto
+            # que origin/main, que pode nao atualizar em alguns ambientes).
             git fetch origin main
-            git reset --hard origin/main
+            git reset --hard FETCH_HEAD
 
             NEW_TAG="${{ github.sha }}"
             PREV_TAG=$(grep -E '^ERP_IMAGE_TAG=' .env | cut -d= -f2-)
