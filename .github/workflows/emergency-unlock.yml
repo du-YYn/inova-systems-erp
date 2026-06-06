@@ -3,14 +3,12 @@ name: 🚨 Emergency Unlock User
 # WORKFLOW TEMPORARIO — emergencia de perda de acesso.
 # Permite resetar senha + zerar lockout via SSH (usa mesma credencial do CD).
 # DEVE SER REMOVIDO do repo apos uso (audit trail fica no GitHub Actions).
-# Quem dispara: somente quem tem permissao write no repo. Acoes logadas
-# automaticamente em Actions > Workflow runs.
 
 on:
   workflow_dispatch:
     inputs:
       identifier:
-        description: 'Email OU username do usuario a desbloquear (ex: john.lauriuti@inovasystemssolutions.com)'
+        description: 'Email OU username do usuario (ex: john.lauriuti@inovasystemssolutions.com)'
         required: true
         type: string
 
@@ -34,7 +32,7 @@ jobs:
           # upper + digit + symbol). 8 bytes hex = 16 chars random; total ~25.
           PWD="Temp$(openssl rand -hex 4)#Acesso2026!"
           echo "password=$PWD" >> "$GITHUB_OUTPUT"
-          echo "Senha temporaria gerada (visivel na proxima etapa)."
+          echo "Senha temporaria gerada (visivel na etapa final)."
 
       - name: Reset password via SSH
         uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
@@ -44,45 +42,32 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           timeout: 5m
           command_timeout: 5m
-          # Passa as variaveis com seguranca como env (sem interpolacao no shell)
-          envs: USER_IDENTIFIER,NEW_PASSWORD
-          script_stop: true
+          # NAO usar script_stop: true — quebra heredocs/multilinhas no shell
+          # (injeta DRONE_SSH_PREV_COMMAND_EXIT_CODE entre cada linha).
+          # Usamos `set -e` no script pra mesmo efeito.
           script: |
             set -e
             cd /opt/inova-systems-erp
-            echo "Identificador recebido: $USER_IDENTIFIER"
-            echo "Executando reset via Django shell..."
 
-            # Heredoc com aspas simples ('PYEOF') = nao expande $vars no shell.
-            # Python le os valores reais via os.environ (passados pelo docker exec -e).
+            # Valores inline via templating do GitHub Actions (substituidos ANTES
+            # do SSH). Evita problemas de propagacao de env vars do action para
+            # SSH para Docker (em uma execucao anterior, USER_IDENTIFIER chegou
+            # vazio porque env: no step nao foi propagado pelo action container).
+            IDENT="${{ inputs.identifier }}"
+            PWD='${{ steps.gen.outputs.password }}'
+
+            echo "Reset solicitado para identificador: $IDENT"
+            echo "Executando reset via container backend..."
+
+            # Codigo Python passado como argumento ao manage.py shell -c (uma linha,
+            # sem heredoc). Valores chegam via env vars do docker compose exec.
+            # Single line evita quebra por wrappers de SSH action.
             docker compose exec -T \
-              -e USER_IDENTIFIER \
-              -e NEW_PASSWORD \
-              backend python manage.py shell << 'PYEOF'
-            import os
-            from django.db.models import Q
-            from accounts.models import User
+              -e "USER_IDENT=$IDENT" \
+              -e "USER_PWD=$PWD" \
+              backend python manage.py shell -c "import os, sys; from django.db.models import Q; from accounts.models import User; ident = os.environ['USER_IDENT'].strip(); pwd = os.environ['USER_PWD']; user = User.objects.filter(Q(username=ident) | Q(email=ident)).first(); print(f'ERROR: usuario nao encontrado para {ident}') if user is None else None; sys.exit(1) if user is None else None; user.set_password(pwd); user.failed_attempts = 0; user.locked_until = None; user.temp_2fa_attempts = 0; user.save(); print(f'SUCCESS|username={user.username}|email={user.email}|role={user.role}')"
 
-            ident = os.environ['USER_IDENTIFIER'].strip()
-            pwd = os.environ['NEW_PASSWORD']
-
-            try:
-                u = User.objects.get(Q(username=ident) | Q(email=ident))
-            except User.DoesNotExist:
-                print(f'ERROR: Usuario nao encontrado para identificador: {ident}')
-                raise SystemExit(1)
-
-            u.set_password(pwd)
-            u.failed_attempts = 0
-            u.locked_until = None
-            u.temp_2fa_attempts = 0
-            u.save()
-            print(f'SUCCESS')
-            print(f'username={u.username}')
-            print(f'email={u.email}')
-            print(f'role={u.role}')
-            PYEOF
-
+            echo ""
             echo "Reset concluido com sucesso."
 
       - name: Instrucoes de recuperacao
@@ -108,7 +93,7 @@ jobs:
             4) Avisa o time pra:
                - DELETAR este workflow (.github/workflows/emergency-unlock.yml)
                - Corrigir o servico de email (Resend) que esta quebrado
-               - Revogar tokens/senhas expostas em chats/issues
+               - Revogar qualquer credencial exposta em chats
 
           ═══════════════════════════════════════════════════════════════
           EOF
@@ -116,8 +101,8 @@ jobs:
       - name: Falha do reset
         if: failure()
         run: |
-          echo "::error::Reset falhou. Verifique:"
-          echo "  - Se o identificador esta correto"
-          echo "  - Se o servidor esta acessivel via SSH"
-          echo "  - Se o container 'backend' esta rodando"
-          echo "  - Logs do step anterior para detalhe"
+          echo "::error::Reset falhou. Possiveis causas:"
+          echo "  - Identificador (email/username) nao existe no sistema"
+          echo "  - Servidor inacessivel via SSH"
+          echo "  - Container 'backend' nao esta rodando"
+          echo "  Verifique o log do step 'Reset password via SSH'."
