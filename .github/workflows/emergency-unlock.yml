@@ -1,0 +1,123 @@
+name: 🚨 Emergency Unlock User
+
+# WORKFLOW TEMPORARIO — emergencia de perda de acesso.
+# Permite resetar senha + zerar lockout via SSH (usa mesma credencial do CD).
+# DEVE SER REMOVIDO do repo apos uso (audit trail fica no GitHub Actions).
+# Quem dispara: somente quem tem permissao write no repo. Acoes logadas
+# automaticamente em Actions > Workflow runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      identifier:
+        description: 'Email OU username do usuario a desbloquear (ex: john.lauriuti@inovasystemssolutions.com)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  unlock:
+    name: Reset password and unlock
+    runs-on: ubuntu-latest
+    environment: staging
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gerar senha temporaria forte
+        id: gen
+        run: |
+          # Senha forte aleatoria que atende ComplexityValidator (12+ chars,
+          # upper + digit + symbol). 8 bytes hex = 16 chars random; total ~25.
+          PWD="Temp$(openssl rand -hex 4)#Acesso2026!"
+          echo "password=$PWD" >> "$GITHUB_OUTPUT"
+          echo "Senha temporaria gerada (visivel na proxima etapa)."
+
+      - name: Reset password via SSH
+        uses: appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          timeout: 5m
+          command_timeout: 5m
+          # Passa as variaveis com seguranca como env (sem interpolacao no shell)
+          envs: USER_IDENTIFIER,NEW_PASSWORD
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/inova-systems-erp
+            echo "Identificador recebido: $USER_IDENTIFIER"
+            echo "Executando reset via Django shell..."
+
+            # Heredoc com aspas simples ('PYEOF') = nao expande $vars no shell.
+            # Python le os valores reais via os.environ (passados pelo docker exec -e).
+            docker compose exec -T \
+              -e USER_IDENTIFIER \
+              -e NEW_PASSWORD \
+              backend python manage.py shell << 'PYEOF'
+            import os
+            from django.db.models import Q
+            from accounts.models import User
+
+            ident = os.environ['USER_IDENTIFIER'].strip()
+            pwd = os.environ['NEW_PASSWORD']
+
+            try:
+                u = User.objects.get(Q(username=ident) | Q(email=ident))
+            except User.DoesNotExist:
+                print(f'ERROR: Usuario nao encontrado para identificador: {ident}')
+                raise SystemExit(1)
+
+            u.set_password(pwd)
+            u.failed_attempts = 0
+            u.locked_until = None
+            u.temp_2fa_attempts = 0
+            u.save()
+            print(f'SUCCESS')
+            print(f'username={u.username}')
+            print(f'email={u.email}')
+            print(f'role={u.role}')
+            PYEOF
+
+            echo "Reset concluido com sucesso."
+
+      - name: Instrucoes de recuperacao
+        if: success()
+        run: |
+          cat << 'EOF'
+
+          ═══════════════════════════════════════════════════════════════
+                            ACESSO RECUPERADO COM SUCESSO
+          ═══════════════════════════════════════════════════════════════
+
+          IDENTIFICADOR: ${{ inputs.identifier }}
+
+          SENHA TEMPORARIA: ${{ steps.gen.outputs.password }}
+
+          ═══════════════════════════════════════════════════════════════
+
+          PROXIMOS PASSOS OBRIGATORIOS:
+
+            1) Acesse: https://erp.inovasystemssolutions.com/login
+            2) Loga com a senha temporaria acima
+            3) Vai em /perfil/ e MUDA a senha IMEDIATAMENTE pra uma sua
+            4) Avisa o time pra:
+               - DELETAR este workflow (.github/workflows/emergency-unlock.yml)
+               - Corrigir o servico de email (Resend) que esta quebrado
+               - Revogar tokens/senhas expostas em chats/issues
+
+          ═══════════════════════════════════════════════════════════════
+          EOF
+
+      - name: Falha do reset
+        if: failure()
+        run: |
+          echo "::error::Reset falhou. Verifique:"
+          echo "  - Se o identificador esta correto"
+          echo "  - Se o servidor esta acessivel via SSH"
+          echo "  - Se o container 'backend' esta rodando"
+          echo "  - Logs do step anterior para detalhe"
