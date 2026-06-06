@@ -61,4 +61,13 @@ class SecurityHeadersMiddleware:
             response['Permissions-Policy'] = _PERMISSIONS_POLICY
         if 'Cross-Origin-Opener-Policy' not in response:
             response['Cross-Origin-Opener-Policy'] = 'same-origin'
+        # Remove headers de fingerprinting de stack (LOW finding da auditoria
+        # 2026-06-05). Gunicorn/wsgi adiciona `Server: gunicorn/X.Y.Z` por
+        # default; suprimimos aqui pos-response. Atacante perde sinal claro
+        # da versao do servidor, dificultando mapping de CVEs especificos.
+        # Defesa em profundidade — nao bloqueia ataque, dificulta reconnaissance.
+        if 'Server' in response:
+            del response['Server']
+        if 'X-Powered-By' in response:
+            del response['X-Powered-By']
         return response
