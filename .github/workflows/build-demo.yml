@@ -1,0 +1,52 @@
+name: Build Demo Frontend (GHCR)
+
+# Builda APENAS a imagem do frontend de demonstração (auto-login, API isolada
+# erp-demo) e publica no GHCR. NÃO faz deploy. Dispara no push da branch demo/erp.
+
+on:
+  push:
+    branches: [demo/erp]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/build-demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/du-yyn/inova-systems-erp
+
+jobs:
+  build-demo-frontend:
+    name: Build & Push (frontend demo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push (demo)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://erp-demo.inovasystemssolutions.com/api/v1
+            NEXT_PUBLIC_DEMO_MODE=1
+            NEXT_PUBLIC_DEMO_USER=demo_admin
+            NEXT_PUBLIC_DEMO_PASS=Demo12345!
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-frontend:demo-erp
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

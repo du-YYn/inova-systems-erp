@@ -1,9 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
 import api, { ApiError } from '@/lib/api';
 import AnimatedCharacters from '@/components/ui/AnimatedCharacters';
+
+// Build de demonstração: ativa auto-login com credenciais embutidas via build-arg.
+// Inerte em produção, onde NEXT_PUBLIC_DEMO_MODE não é "1".
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === '1';
+const DEMO_USER = process.env.NEXT_PUBLIC_DEMO_USER || 'demo_admin';
+const DEMO_PASS = process.env.NEXT_PUBLIC_DEMO_PASS || '';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({ username: '', password: '' });
@@ -16,6 +22,40 @@ export default function LoginPage() {
   const [isFocused, setIsFocused] = useState({ username: false, password: false });
   const [isTyping, setIsTyping] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
+  const [demoError, setDemoError] = useState('');
+
+  // Auto-login de demonstração: ao montar, autentica o usuário demo e segue
+  // direto para o dashboard, sem exibir o formulário de login.
+  useEffect(() => {
+    if (!DEMO_MODE) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.post<{ user?: { id: number; username: string; first_name: string; last_name: string } }>(
+          '/accounts/login/',
+          { username: DEMO_USER, password: DEMO_PASS },
+        );
+        if (cancelled) return;
+        if (data.user) {
+          const { id, username, first_name, last_name } = data.user;
+          localStorage.setItem('user', JSON.stringify({ id, username, first_name, last_name }));
+        }
+        window.location.replace('/dashboard');
+      } catch {
+        if (!cancelled) setDemoError('Não foi possível iniciar a demonstração. Recarregue a página.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (DEMO_MODE) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-white">
+        <Loader2 className="h-10 w-10 animate-spin text-[#A6864A]" />
+        <p className="text-sm text-gray-500">{demoError || 'Carregando demonstração…'}</p>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
