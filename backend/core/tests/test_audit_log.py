@@ -65,10 +65,14 @@ class TestAuditLog:
         with pytest.raises(RuntimeError, match='append-only'):
             entry.delete()
 
-    def test_queryset_delete_still_works_but_not_recommended(self, admin_user):
-        """QuerySet.delete() contorna o override — documentando limitacao.
-        Em producao, o admin do Django eh configurado como read-only para
-        evitar isso. Testes podem continuar limpando fixtures."""
+    def test_queryset_delete_blocked_by_db_trigger(self, admin_user):
+        """v32 F3: a limitacao documentada na F3a (QuerySet.delete()
+        contornava o override de Model.delete()) foi fechada pelo trigger
+        Postgres de imutabilidade (core.0002). Cobertura completa em
+        core/tests/test_auditlog_immutability.py."""
+        from django.db import DatabaseError, transaction
         log_audit(admin_user, 'test', 'test', 1)
-        # QuerySet.delete bypassa Model.delete() — nao bloqueia
-        AuditLog.objects.filter(action='test').delete()
+        with pytest.raises(DatabaseError, match='append-only'):
+            with transaction.atomic():
+                AuditLog.objects.filter(action='test').delete()
+        assert AuditLog.objects.filter(action='test').exists()
