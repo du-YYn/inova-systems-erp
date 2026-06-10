@@ -694,7 +694,8 @@ class TestProspectActions:
         response = admin_client.post(f'/api/v1/sales/prospects/{p.id}/mark_attended/')
         assert response.status_code == status.HTTP_200_OK
         p.refresh_from_db()
-        assert p.status == 'meeting_done'
+        # v32 F2: mark_attended passa a gravar meeting_1_done (rename de meeting_done)
+        assert p.status == 'meeting_1_done'
 
     def test_prospect_messages_endpoint(self, admin_client, prospect):
         response = admin_client.get(f'/api/v1/sales/prospects/{prospect.id}/messages/')

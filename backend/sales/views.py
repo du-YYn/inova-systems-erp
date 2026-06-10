@@ -308,6 +308,34 @@ class ProspectViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrManagerOrOperatorStrict]
     pagination_class = DynamicPageSizePagination
 
+    # ── Transições v32 (F2) ─────────────────────────────────────────────────
+    # Os 4 status NOVOS só podem ser alcançados a partir dos status abaixo
+    # (caminho principal do doc processo-v32/01-comercial §3). Transições para
+    # status pré-existentes seguem permissivas (fluxos vivos em produção);
+    # sair de um status novo também é livre (escape hatch operacional).
+    V32_TRANSITIONS_INTO_NEW = {
+        # qualified ──[SDR envia convite]──► meeting_invite
+        # follow_up(nao_agendou) pode ser reativado com novo convite
+        'meeting_invite': {'qualified', 'follow_up'},
+        # meeting_1_done ──[closer aciona Dev]──► tech_analysis
+        # meeting_done (legado) aceito durante a convivência de 1 release
+        'tech_analysis': {'meeting_1_done', 'meeting_done'},
+        # tech_analysis ──[Dev define escopo/prazo/valor]──► meeting_2_done
+        'meeting_2_done': {'tech_analysis'},
+        # won ──[dispara abertura]──► data_collection
+        'data_collection': {'won'},
+    }
+
+    # Subject da ProspectActivity automática criada ao entrar num status novo.
+    # O activity_type é o próprio código do status (ver ACTIVITY_TYPE_CHOICES).
+    V32_STATUS_ACTIVITY_SUBJECT = {
+        'meeting_invite': 'Convite para Reunião enviado',
+        'meeting_1_done': 'Reunião 1 realizada',
+        'tech_analysis': 'Análise técnica e proposta iniciada',
+        'meeting_2_done': 'Reunião 2 realizada',
+        'data_collection': 'Coleta de dados iniciada',
+    }
+
     def get_queryset(self):
         queryset = super().get_queryset()
         prospect_status = self.request.query_params.get('status', None)
@@ -318,6 +346,33 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         prospect = serializer.save(created_by=self.request.user)
         log_crm_activity(prospect, 'lead_created', f'Lead recebido — {prospect.company_name}', self.request.user)
+
+    def _audit_status_change(self, prospect, old_status, new_status, origin='ui'):
+        """Trilha de auditoria de TODA transição de status (v32 §7.1)."""
+        log_audit(
+            self.request.user,
+            action='prospect_status_change',
+            resource_type='prospect',
+            resource_id=prospect.id,
+            details=f'{old_status} -> {new_status} (origin={origin})',
+            old_value={'status': old_status},
+            new_value={'status': new_status},
+            request=self.request,
+        )
+
+    def _log_status_activity(self, prospect, old_status, new_status):
+        """ProspectActivity automática: tipo específico para status novos v32,
+        genérica (status_changed) para os demais."""
+        if new_status in self.V32_STATUS_ACTIVITY_SUBJECT:
+            log_crm_activity(
+                prospect, new_status,
+                self.V32_STATUS_ACTIVITY_SUBJECT[new_status],
+                self.request.user,
+            )
+        else:
+            from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
+            to_label = dict(Prospect.STATUS_CHOICES).get(new_status, new_status)
+            log_crm_activity(prospect, 'status_changed', f'{from_label} → {to_label}', self.request.user)
 
     def perform_update(self, serializer):
         from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -340,13 +395,30 @@ class ProspectViewSet(viewsets.ModelViewSet):
                     )
                 })
 
+        # v32 F2: transição inválida para status novo retorna 400 sem mudar estado
+        if (
+            new_status != old_status
+            and new_status in self.V32_TRANSITIONS_INTO_NEW
+            and old_status not in self.V32_TRANSITIONS_INTO_NEW[new_status]
+        ):
+            allowed = ', '.join(sorted(self.V32_TRANSITIONS_INTO_NEW[new_status]))
+            raise DRFValidationError({
+                'status': (
+                    f'Transição inválida: {old_status} → {new_status}. '
+                    f'"{new_status}" só pode ser alcançado a partir de: {allowed}.'
+                )
+            })
+
         instance = serializer.save()
-        # Log status change
+        # Log status change (atividade CRM + trilha de auditoria)
         if old_status and old_status != instance.status:
-            from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
-            to_label = dict(Prospect.STATUS_CHOICES).get(instance.status, instance.status)
-            log_crm_activity(instance, 'status_changed', f'{from_label} → {to_label}', self.request.user)
-        hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won', 'production')
+            self._log_status_activity(instance, old_status, instance.status)
+            self._audit_status_change(instance, old_status, instance.status)
+        hot_statuses = (
+            'scheduled', 'pre_meeting', 'meeting_done', 'meeting_1_done',
+            'tech_analysis', 'meeting_2_done', 'proposal', 'won',
+            'data_collection', 'production',
+        )
         if instance.status in hot_statuses and instance.temperature != 'hot':
             instance.temperature = 'hot'
             instance.save(update_fields=['temperature'])
@@ -601,6 +673,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
                 customer.save(update_fields=['is_active'])
 
         # Mover para concluído
+        old_status = prospect.status
         prospect.status = 'concluded'
         prospect.save(update_fields=['status'])
         log_crm_activity(
@@ -608,6 +681,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
             f'Projeto concluído — {prospect.company_name}',
             request.user,
         )
+        self._audit_status_change(prospect, old_status, 'concluded', origin='action:conclude')
         return Response(ProspectSerializer(prospect).data)
 
     @action(detail=True, methods=['get'], url_path='pending-invoices')
@@ -624,10 +698,14 @@ class ProspectViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
-            'new', 'qualifying', 'qualified', 'disqualified',
-            'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
-            'proposal', 'won', 'production', 'concluded',
-            'not_closed', 'lost', 'follow_up',
+            # caminho principal v32 (12 etapas)
+            'new', 'qualifying', 'qualified', 'meeting_invite',
+            'scheduled', 'pre_meeting', 'meeting_1_done', 'tech_analysis',
+            'meeting_2_done', 'proposal', 'won', 'data_collection',
+            # ramos
+            'disqualified', 'no_show', 'follow_up',
+            # legados
+            'meeting_done', 'production', 'concluded', 'not_closed', 'lost',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),
@@ -653,6 +731,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
             bool(has_operation), bool(has_budget),
             bool(is_decision_maker), bool(has_urgency),
         ])
+        old_status = prospect.status
         prospect.has_operation    = has_operation
         prospect.has_budget       = has_budget
         prospect.is_decision_maker = is_decision_maker
@@ -662,6 +741,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.save()
         act_type = 'qualified' if score >= 3 else 'disqualified'
         log_crm_activity(prospect, act_type, f'Score {score}/4', request.user)
+        if old_status != prospect.status:
+            self._audit_status_change(prospect, old_status, prospect.status, origin='action:qualify')
         logger.info(f"Prospect {prospect.id} qualificado (score {score}/4) por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -674,6 +755,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         meeting_link = request.data.get('meeting_link', '')
         if not meeting_scheduled_at:
             return Response({'error': 'meeting_scheduled_at é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        old_status = prospect.status
         prospect.closer_name = closer_name
         prospect.meeting_scheduled_at = meeting_scheduled_at
         prospect.meeting_link = meeting_link
@@ -681,6 +763,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.temperature = 'hot'
         prospect.save()
         log_crm_activity(prospect, 'meeting_scheduled', f'Reunião agendada — {meeting_scheduled_at}', request.user)
+        if old_status != 'scheduled':
+            self._audit_status_change(prospect, old_status, 'scheduled', origin='action:schedule_meeting')
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -688,22 +772,28 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def mark_no_show(self, request, pk=None):
         """Lead não compareceu à reunião."""
         prospect = self.get_object()
+        old_status = prospect.status
         prospect.meeting_attended = False
         prospect.status = 'no_show'
         prospect.follow_up_reason = 'nao_compareceu'
         prospect.save()
         log_crm_activity(prospect, 'no_show', 'Não compareceu à reunião', request.user)
+        if old_status != 'no_show':
+            self._audit_status_change(prospect, old_status, 'no_show', origin='action:mark_no_show')
         logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
     @action(detail=True, methods=['post'])
     def mark_attended(self, request, pk=None):
-        """Lead compareceu à reunião."""
+        """Lead compareceu à reunião (v32: Reunião 1 → meeting_1_done)."""
         prospect = self.get_object()
+        old_status = prospect.status
         prospect.meeting_attended = True
-        prospect.status = 'meeting_done'
+        prospect.status = 'meeting_1_done'
         prospect.save()
-        log_crm_activity(prospect, 'meeting_done', 'Reunião realizada', request.user)
+        log_crm_activity(prospect, 'meeting_1_done', 'Reunião 1 realizada', request.user)
+        if old_status != 'meeting_1_done':
+            self._audit_status_change(prospect, old_status, 'meeting_1_done', origin='action:mark_attended')
         logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -734,9 +824,11 @@ class ProspectViewSet(viewsets.ModelViewSet):
         from django.db import IntegrityError
 
         prospect = self.get_object()
-        if prospect.status not in ('won', 'production'):
+        # v32: data_collection é a etapa onde o ClientOnboarding é enviado;
+        # production permanece aceito durante a convivência (legado).
+        if prospect.status not in ('won', 'data_collection', 'production'):
             return Response(
-                {'error': 'Cadastro só pode ser criado para leads fechados (won/production).'},
+                {'error': 'Cadastro só pode ser criado para leads fechados (won/data_collection/production).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Retorna existente se já criado
@@ -838,9 +930,10 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.sent_at = timezone.now()
         proposal.save()
         # Mover lead para "Proposta Enviada" ao enviar
+        # v32: data_collection vem DEPOIS de won — não rebaixar para proposal
         if proposal.prospect_id:
             Prospect.objects.filter(pk=proposal.prospect_id).exclude(
-                status__in=['won', 'lost', 'not_closed'],
+                status__in=['won', 'data_collection', 'lost', 'not_closed'],
             ).update(status='proposal')
         if proposal.prospect:
             log_crm_activity(proposal.prospect, 'proposal_sent', f'Proposta #{proposal.number} enviada', request.user)

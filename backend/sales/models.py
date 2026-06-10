@@ -84,22 +84,34 @@ class Prospect(models.Model):
     ]
 
     STATUS_CHOICES = [
-        ('new',           'Lead Recebido'),        # quiz preenchido, aguardando abordagem SDR
-        ('qualifying',    'Em Qualificação'),      # SDR iniciou conversa
-        ('qualified',     'Qualificado'),          # passou ≥3/4 critérios de qualificação
-        ('disqualified',  'Não Qualificado'),      # não atende critérios mínimos
-        ('scheduled',     'Agendado'),             # reunião marcada via Calendly/Google
-        ('pre_meeting',   'Pré-Reunião'),          # sequência de comprometimento em andamento
-        ('no_show',       'Não Compareceu'),       # lead não apareceu na reunião
-        ('meeting_done',  'Reunião Realizada'),    # reunião aconteceu com o Closer
-        ('proposal',      'Proposta Enviada'),     # proposta comercial enviada
-        ('won',           'Fechado'),              # projeto contratado
-        ('production',    'Em Produção'),          # cliente pagou, projeto em execução
-        ('concluded',     'Concluído'),            # projeto entregue, faturas resolvidas
-        ('not_closed',    'Não Fechou'),           # reunião realizada mas sem fechamento
-        ('lost',          'Perdido'),              # deal perdido (analytics)
-        ('follow_up',     'Em Follow-up'),         # sequência de reativação
+        # ── Caminho principal v32 (12 etapas, doc processo-v32/01-comercial) ──
+        ('new',             'Lead Recebido'),          # quiz preenchido, aguardando abordagem SDR
+        ('qualifying',      'Em Qualificação'),        # SDR iniciou conversa
+        ('qualified',       'Qualificado'),            # passou ≥3/4 critérios de qualificação
+        ('meeting_invite',  'Convite para Reunião'),   # v32: SDR enviou convite de agendamento
+        ('scheduled',       'Agendado'),               # reunião marcada via Calendly/Google
+        ('pre_meeting',     'Pré-Reunião'),            # sequência de comprometimento em andamento
+        ('meeting_1_done',  'Reunião 1 Realizada'),    # v32: renomeia meeting_done (data migration 0033)
+        ('tech_analysis',   'Análise Técnica e Proposta'),  # v32: Dev define escopo/prazo/valor
+        ('meeting_2_done',  'Reunião 2 Realizada'),    # v32: reunião de apresentação da proposta
+        ('proposal',        'Proposta Enviada'),       # proposta comercial enviada
+        ('won',             'Projeto Fechado'),        # projeto contratado
+        ('data_collection', 'Coleta de Dados'),        # v32: ClientOnboarding enviado ao cliente
+        # ── Ramos e terminais ────────────────────────────────────────────────
+        ('disqualified',    'Não Qualificado'),        # não atende critérios mínimos (terminal)
+        ('no_show',         'Não Compareceu'),         # lead não apareceu na reunião
+        ('follow_up',       'Em Follow-up'),           # sequência de reativação
+        # ── Legados (deprecados na v32; permanecem para registros antigos) ───
+        ('meeting_done',    'Reunião Realizada'),      # legado: substituído por meeting_1_done
+        ('production',      'Em Produção'),            # legado: cliente pagou, projeto em execução
+        ('concluded',       'Concluído'),              # legado: projeto entregue, faturas resolvidas
+        ('not_closed',      'Não Fechou'),             # legado: agora vira follow_up(nao_fechou)
+        ('lost',            'Perdido'),                # legado: deal perdido (analytics)
     ]
+
+    # Status deprecados na v32 — permanecem no enum para registros antigos em
+    # produção, mas somem do funil novo (a UI agrupa numa coluna "Legados").
+    LEGACY_STATUSES = ['meeting_done', 'production', 'concluded', 'not_closed', 'lost']
 
     FOLLOW_UP_REASON_CHOICES = [
         ('nao_agendou',     'Não Agendou'),        # qualificado mas não agendou reunião
@@ -211,6 +223,26 @@ class Prospect(models.Model):
     # ── Pós-agendamento ───────────────────────────────────────────────────────
     ebook_sent_at = models.DateTimeField(null=True, blank=True)
     meeting_transcript = models.TextField(blank=True, help_text='Transcrição processada da reunião comercial')
+
+    # ── Reunião 2 + Análise Técnica (v32 F2) ─────────────────────────────────
+    # A Reunião 1 reusa meeting_scheduled_at / meeting_link / meeting_attended
+    # (decisão do doc 01: não renomear colunas em produção).
+    PROJECT_TYPE_CHOICES = [
+        ('fechado',    'Fechado'),
+        ('recorrente', 'Recorrente'),
+    ]
+    project_type = models.CharField(
+        max_length=20, choices=PROJECT_TYPE_CHOICES, blank=True,
+        help_text='Tipo do projeto definido na Análise Técnica (fechado/recorrente)'
+    )
+    meeting_2_scheduled_at = models.DateTimeField(null=True, blank=True)
+    meeting_2_link = models.URLField(blank=True, help_text='Link da Reunião 2 (apresentação da proposta)')
+    meeting_2_attended = models.BooleanField(null=True, blank=True, help_text='Lead compareceu à Reunião 2?')
+    tech_analysis_notes = models.TextField(blank=True, help_text='Escopo macro + estrutura definidos pelo Dev')
+    estimated_deadline_days = models.IntegerField(
+        null=True, blank=True,
+        help_text='Prazo estimado em dias — alimenta o Game Plan (motor de cronograma)'
+    )
 
     # ── Follow-up ────────────────────────────────────────────────────────────
     follow_up_reason = models.CharField(
@@ -451,6 +483,12 @@ class ProspectActivity(models.Model):
         ('meeting_scheduled', 'Reunião Agendada'),
         ('no_show', 'Não Compareceu'),
         ('meeting_done', 'Reunião Realizada'),
+        # Tipos automáticos v32 (F2) — status novos do caminho principal
+        ('meeting_invite', 'Convite para Reunião'),
+        ('meeting_1_done', 'Reunião 1 Realizada'),
+        ('tech_analysis', 'Análise Técnica e Proposta'),
+        ('meeting_2_done', 'Reunião 2 Realizada'),
+        ('data_collection', 'Coleta de Dados'),
         ('proposal_created', 'Proposta Criada'),
         ('proposal_sent', 'Proposta Enviada'),
         ('proposal_approved', 'Proposta Aprovada'),
