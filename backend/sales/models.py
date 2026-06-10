@@ -60,6 +60,13 @@ class Customer(models.Model):
     billing_frequency = models.CharField(max_length=20, choices=BILLING_FREQUENCY_CHOICES, default='monthly', blank=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
+    # v32 F6 (doc 05 §9): token do canal público de chamados — cliente abre
+    # chamado sem login via POST /support/public/tickets/{public_token}/.
+    # UUID4 (anti-enumeration, STRIDE Info disclosure doc 08 §8.1).
+    public_token = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False,
+        help_text='Token do canal público de abertura de chamados',
+    )
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='customers')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

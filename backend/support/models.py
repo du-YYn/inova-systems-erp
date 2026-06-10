@@ -1,6 +1,9 @@
 from django.db import models
 from django.conf import settings
-from core.validators import validate_file_extension, validate_file_size, validate_tags_list
+from core.validators import (
+    validate_file_extension, validate_file_magic_bytes, validate_file_size,
+    validate_tags_list,
+)
 
 
 class SLAPolicy(models.Model):
@@ -53,21 +56,57 @@ class SupportTicket(models.Model):
         ('critical', 'Crítica'),
     ]
 
+    # ── v32 F6 (doc 05 §2): fluxo novo aberto → triagem → analise → correcao
+    # → resolvido → fechado. Valores legados (open/in_progress/pending_client/
+    # resolved/closed) PERMANECEM no enum (expand-only; remoção só na F8) —
+    # a data migration 0003 realinha os registros existentes.
     STATUS_CHOICES = [
-        ('open', 'Aberto'),
-        ('in_progress', 'Em Atendimento'),
-        ('pending_client', 'Aguardando Cliente'),
-        ('resolved', 'Resolvido'),
-        ('closed', 'Fechado'),
+        # ── Fluxo v32 ────────────────────────────────────────────────────────
+        ('aberto', 'Aberto'),
+        ('triagem', 'Triagem'),
+        ('analise', 'Análise'),
+        ('correcao', 'Correção'),
+        ('resolvido', 'Resolvido'),
+        ('fechado', 'Fechado'),
+        # ── Legados (deprecados na v32; mantidos para convivência de release) ─
+        ('open', 'Aberto (legado)'),
+        ('in_progress', 'Em Atendimento (legado)'),
+        ('pending_client', 'Aguardando Cliente (legado)'),
+        ('resolved', 'Resolvido (legado)'),
+        ('closed', 'Fechado (legado)'),
     ]
 
+    # Ordem canônica do fluxo novo (board do Suporte usa como colunas).
+    STATUS_FLOW = ['aberto', 'triagem', 'analise', 'correcao', 'resolvido', 'fechado']
+    LEGACY_STATUSES = ['open', 'in_progress', 'pending_client', 'resolved', 'closed']
+
+    # ── v32 F6 (doc 05 §1): triagem classifica em bug | duvida | mudanca.
+    # Valores legados permanecem (data migration 0003 mapeia: question→duvida,
+    # feature→mudanca, performance/integration/other→bug).
     TYPE_CHOICES = [
         ('bug', 'Bug'),
-        ('feature', 'Solicitação de Feature'),
-        ('question', 'Dúvida'),
-        ('performance', 'Performance'),
-        ('integration', 'Integração'),
-        ('other', 'Outro'),
+        ('duvida', 'Dúvida'),
+        ('mudanca', 'Mudança'),
+        # ── Legados (deprecados na v32) ──────────────────────────────────────
+        ('feature', 'Solicitação de Feature (legado)'),
+        ('question', 'Dúvida (legado)'),
+        ('performance', 'Performance (legado)'),
+        ('integration', 'Integração (legado)'),
+        ('other', 'Outro (legado)'),
+    ]
+
+    # ── v32 F6 (doc 05 §3): conclusão da Análise ─────────────────────────────
+    CONCLUSAO_CHOICES = [
+        ('garantia', 'Garantia'),                      # defeito de produção → corrige sem custo
+        ('orcamento', 'Orçamento'),                    # fora de escopo → vira orçamento
+        ('inconclusivo', 'Inconclusivo'),              # escala para a Diretoria
+        ('recorrente_corrige', 'Recorrente — Corrige'),  # contrato mensal → sempre corrige
+    ]
+
+    # ── v32 F6 (doc 05 §5): contexto da triagem (2 velocidades) ──────────────
+    CONTEXTO_CHOICES = [
+        ('homologacao', 'Homologação'),  # projeto em homologação → lote no prazo
+        ('suporte', 'Suporte'),          # projeto entregue/recorrente → SLA do plano
     ]
 
     number = models.CharField(max_length=20, unique=True)  # TKT-00001
@@ -97,7 +136,24 @@ class SupportTicket(models.Model):
 
     ticket_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='bug')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='open')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='aberto')
+
+    # ── v32 F6 (doc 05 §3/§4): conclusão da Análise por tipo de projeto ─────
+    conclusao = models.CharField(
+        max_length=20, choices=CONCLUSAO_CHOICES, blank=True, default='',
+        help_text='Resultado da Análise: garantia, orçamento, inconclusivo ou recorrente corrige',
+    )
+    # ── v32 F6 (doc 05 §5): velocidade do atendimento ────────────────────────
+    contexto = models.CharField(
+        max_length=15, choices=CONTEXTO_CHOICES, default='suporte',
+        help_text='Homologação (lote no prazo) ou Suporte (SLA do plano)',
+    )
+    # ── v32 F6 (doc 05 §4): conclusão=orcamento gera Proposal no Comercial ──
+    originating_proposal = models.ForeignKey(
+        'sales.Proposal', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='originated_from_tickets',
+        help_text='Proposta criada a partir deste chamado (conclusão=orçamento)',
+    )
 
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -117,9 +173,13 @@ class SupportTicket(models.Model):
 
     tags = models.JSONField(default=list, validators=[validate_tags_list])
 
+    # v32 F6: nullable para o canal público (chamado aberto pelo cliente via
+    # token, sem usuário interno — doc 05 §9). Expand-only: DROP NOT NULL.
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
-        related_name='created_tickets'
+        null=True, blank=True,
+        related_name='created_tickets',
+        help_text='Null quando aberto pelo cliente via canal público',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -154,10 +214,20 @@ class TicketAttachment(models.Model):
         TicketComment, on_delete=models.CASCADE, null=True, blank=True,
         related_name='attachments'
     )
-    file = models.FileField(upload_to='ticket_attachments/%Y/%m/', validators=[validate_file_extension, validate_file_size])
+    # v32 F6 (doc 05 §9 + doc 08 item 7): além de extensão+tamanho, valida
+    # magic bytes (anti-spoofing de tipo) — inclui áudio (.mp3/.ogg/.m4a/.wav).
+    file = models.FileField(
+        upload_to='ticket_attachments/%Y/%m/',
+        validators=[validate_file_extension, validate_file_size, validate_file_magic_bytes],
+    )
     filename = models.CharField(max_length=255)
     file_size = models.IntegerField(default=0)
-    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # v32 F6: nullable para anexos do canal público (sem usuário interno).
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        null=True, blank=True,
+        help_text='Null quando enviado pelo cliente via canal público',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -217,3 +287,50 @@ class KnowledgeBaseArticle(models.Model):
             import uuid
             self.slug = slugify(self.title)[:250] + '-' + str(uuid.uuid4())[:8]
         super().save(*args, **kwargs)
+
+
+class PedidoUpdate(models.Model):
+    """Ponte Suporte → Comercial (v32 F6, doc 05 §6).
+
+    Triagem classifica o chamado como `mudanca` → cria PedidoUpdate. Ao
+    promover (flag AUTOMATION_SUP_PEDIDO_UPDATE), abre Prospect novo direto
+    em `tech_analysis` (cliente existente pula Lead/qualificação/Reunião 1).
+    """
+
+    STATUS_CHOICES = [
+        ('opened', 'Aberto'),
+        ('promoted', 'Promovido'),
+        ('declined', 'Recusado'),
+    ]
+
+    originating_ticket = models.ForeignKey(
+        SupportTicket, on_delete=models.PROTECT, related_name='pedidos_update',
+    )
+    customer = models.ForeignKey(
+        'sales.Customer', on_delete=models.PROTECT, related_name='pedidos_update',
+    )
+    description = models.TextField()
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='opened')
+    prospect = models.ForeignKey(
+        'sales.Prospect', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='pedidos_update',
+        help_text='Prospect criado ao promover (entra em tech_analysis)',
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    promoted_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='created_pedidos_update',
+    )
+
+    class Meta:
+        db_table = 'support_pedidos_update'
+        ordering = ['-requested_at']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['customer', 'status']),
+        ]
+
+    def __str__(self):
+        return f'PedidoUpdate #{self.id} — {self.customer} ({self.get_status_display()})'
