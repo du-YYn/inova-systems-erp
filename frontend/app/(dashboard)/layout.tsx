@@ -23,6 +23,7 @@ import {
   Package,
   Landmark,
   Scale,
+  Crown,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -86,6 +87,13 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    // v32 F6: visível só para admin ou setor diretoria (filtro no render)
+    title: 'DIRETORIA',
+    items: [
+      { href: '/diretoria',  label: 'Diretoria',   icon: Crown       },
+    ],
+  },
+  {
     title: 'ADMINISTRAÇÃO',
     items: [
       { href: '/usuarios',    label: 'Usuários',      icon: ShieldCheck },
@@ -104,7 +112,7 @@ const allNavItems = navSections.flatMap((s) => s.items);
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<{ username: string; email: string; is_staff?: boolean; role?: string } | null>(null);
+  const [user, setUser] = useState<{ username: string; email: string; is_staff?: boolean; role?: string; sectors?: string[] } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notif[]>([]);
@@ -126,7 +134,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Email is no longer persisted in localStorage; fetch it from the
     // authenticated profile endpoint so it never lives in the browser store.
     api
-      .get<{ email?: string; username?: string; role?: string; is_staff?: boolean }>(
+      .get<{ email?: string; username?: string; role?: string; is_staff?: boolean; sectors?: string[] }>(
         '/accounts/profile/',
       )
       .then((profile) => {
@@ -136,6 +144,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           email: profile.email ?? prev?.email ?? '',
           is_staff: profile.is_staff ?? prev?.is_staff,
           role: profile.role ?? prev?.role,
+          sectors: profile.sectors ?? prev?.sectors,
         }));
       })
       .catch(() => {
@@ -238,6 +247,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathSegments = pathname.split('/').filter(Boolean);
   const isNestedPage = pathSegments.length > 1;
 
+  // v32 F6: seção DIRETORIA só para admin ou usuário do setor diretoria
+  const visibleSections = navSections.filter((section) => {
+    if (section.title !== 'DIRETORIA') return true;
+    return user?.role === 'admin' || (user?.sectors || []).includes('diretoria');
+  });
+
   const SidebarContent = () => (
     <>
       {/* Logo */}
@@ -262,7 +277,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {navSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title}>
             <p className="px-3 mb-2 mt-1 text-[9px] font-bold text-slate-600/80 tracking-[0.2em] uppercase">
               {section.title}
