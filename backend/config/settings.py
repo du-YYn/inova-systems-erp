@@ -291,6 +291,19 @@ def _automation_flag(name: str, default: str = 'dry_run') -> str:
 # F3: ClientOnboarding submitted -> cria LegalCase(contrato, source=comercial)
 AUTOMATION_JURIDICO_CONTRATO = _automation_flag('AUTOMATION_JURIDICO_CONTRATO')
 
+# F4: ClientOnboarding submitted -> pré-cadastra Invoice(pending) do
+# ProposalPaymentPlan (paralelo ao Jurídico)
+AUTOMATION_FIN_PRECADASTRO = _automation_flag('AUTOMATION_FIN_PRECADASTRO')
+
+# F4: LegalCase(contrato) assinado -> libera cobrança das invoices pendentes
+AUTOMATION_FIN_LIBERA_COBRANCA = _automation_flag('AUTOMATION_FIN_LIBERA_COBRANCA')
+
+# F4: Invoice da entrada paga -> evento interno entrada_paga (Dia 0 Produção)
+AUTOMATION_FIN_ENTRADA_PAGA = _automation_flag('AUTOMATION_FIN_ENTRADA_PAGA')
+
+# F4: régua de cobrança (lembretes a vencer 3d / vencida 1d e 7d)
+AUTOMATION_FIN_REGUA = _automation_flag('AUTOMATION_FIN_REGUA')
+
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
 # Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)
@@ -550,6 +563,12 @@ CELERY_BEAT_SCHEDULE = {
     'check-sla-warnings': {
         'task': 'notifications.tasks.check_sla_warnings',
         'schedule': crontab(minute=0),  # a cada hora cheia
+    },
+    # v32 F4: régua de cobrança (a vencer 3d / vencida 1d e 7d) — diário 08:30
+    # Atrás da flag AUTOMATION_FIN_REGUA (default dry_run).
+    'dunning-reminders': {
+        'task': 'finance.tasks.dunning_reminders',
+        'schedule': crontab(hour=8, minute=30),
     },
 }
 

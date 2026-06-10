@@ -174,6 +174,44 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         )
         return Response(InvoiceSerializer(invoice).data)
 
+    @action(detail=True, methods=['post'])
+    def mark_sent(self, request, pk=None):
+        """Marca a fatura como enviada ao cliente (pending -> sent).
+
+        v32 F4 (filtro no envio, doc 03 §3.02): invoice pré-cadastrada só é
+        enviável após a liberação de cobrança (contrato assinado). Sem
+        liberação, retorna 400 sem mudar estado.
+        """
+        invoice = self.get_object()
+        if invoice.status != 'pending':
+            return Response(
+                {'error': 'Apenas faturas pendentes podem ser enviadas.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if invoice.precadastro_origem_id and not invoice.cobranca_liberada:
+            return Response(
+                {'error': (
+                    'Cobrança ainda não liberada — aguardando assinatura '
+                    'do contrato (pré-cadastro F4).'
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        invoice.status = 'sent'
+        invoice.save(update_fields=['status', 'updated_at'])
+        logger.info(
+            'Fatura %s marcada como enviada por %s',
+            invoice.number, request.user.username,
+        )
+        log_audit(
+            request.user, 'invoice_mark_sent', 'invoice', invoice.id,
+            details=f'number={invoice.number} total={invoice.total}',
+            old_value={'status': 'pending'},
+            new_value={'status': 'sent',
+                       'cobranca_liberada': invoice.cobranca_liberada},
+            request=request,
+        )
+        return Response(InvoiceSerializer(invoice).data)
+
     @extend_schema(tags=['finance'])
     @action(detail=False, methods=['get'], url_path='aging')
     def aging(self, request):
