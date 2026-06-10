@@ -91,6 +91,17 @@ class ProjectSerializer(serializers.ModelSerializer):
     total_logged = serializers.SerializerMethodField()
     team_names = serializers.SerializerMethodField()
 
+    # v32 F5: parâmetros do Game Plan com as faixas do motor (doc 07 §2) —
+    # serializer é a porta de entrada única (doc 08 §8.3).
+    prazo_total = serializers.IntegerField(min_value=5, max_value=400, required=False)
+    pct_doc = serializers.IntegerField(min_value=0, max_value=40, required=False)
+    pct_dev = serializers.IntegerField(min_value=20, max_value=80, required=False)
+    pct_aud = serializers.IntegerField(min_value=0, max_value=30, required=False)
+    peso_val = serializers.IntegerField(min_value=1, max_value=60, required=False)
+    peso_hom = serializers.IntegerField(min_value=1, max_value=60, required=False)
+    peso_ent = serializers.IntegerField(min_value=1, max_value=60, required=False)
+    reupd_fds = serializers.IntegerField(min_value=0, max_value=8, required=False)
+
     class Meta:
         model = Project
         fields = ['id', 'name', 'description', 'project_type', 'customer', 'customer_name',
@@ -100,8 +111,24 @@ class ProjectSerializer(serializers.ModelSerializer):
                   'team', 'team_names', 'manager', 'manager_name',
                   'github_repo', 'figma_url', 'docs_url', 'notes',
                   'phases', 'milestones', 'total_hours', 'total_logged',
+                  # v32 F5 — processo de Produção (doc 04 §2)
+                  'tipo', 'etapa_atual', 'recorrencia_tipo', 'situacao',
+                  'contrato_assinado_at', 'entrada_paga_at',
+                  'onboarding_realizado_at', 'dia_zero',
+                  # v32 F5 — parâmetros do Game Plan (doc 07 §2)
+                  'prazo_total', 'modo', 'pct_doc', 'pct_dev', 'pct_aud',
+                  'peso_val', 'peso_hom', 'peso_ent', 'reupd_fds',
+                  'considerar_carnaval', 'considerar_corpus',
+                  'data_reuniao_validacao', 'data_reuniao_apresentacao',
+                  'data_reuniao_graduacao',
                   'created_by', 'created_by_name', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+        # F5: etapa/situação/recorrência e os 4 campos do gate do Dia 0 só
+        # mudam por endpoint de ação (transitions.py) ou automação — PATCH
+        # direto não pode forjar critério do gate (STRIDE Tampering).
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at',
+                            'etapa_atual', 'recorrencia_tipo', 'situacao',
+                            'contrato_assinado_at', 'entrada_paga_at',
+                            'onboarding_realizado_at', 'dia_zero']
 
     def get_total_hours(self, obj):
         return float(obj.budget_hours or 0)
