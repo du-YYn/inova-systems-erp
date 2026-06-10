@@ -142,9 +142,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    # F0: 8 → 12. ERP financeiro com dados reais; 12+complexidade torna
+    # brute-force offline impraticavel. So afeta senhas novas/trocadas.
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 12},
+    },
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    # F0: exige maiuscula + numero + simbolo (accounts/validators.py).
+    {'NAME': 'accounts.validators.PasswordComplexityValidator'},
 ]
 
 LANGUAGE_CODE = 'pt-br'
@@ -224,6 +231,9 @@ REST_FRAMEWORK = {
         # S7H: password reset composto (IP, email). 1/h por combinacao
         # IP+email — empilha com password_reset (3/h por IP).
         'password_reset_email': '1/hour',
+        # F0: health era throttle_classes=[] (sem limite). 60/min por IP
+        # cobre o smoke do CD (24 req/2min) e monitores externos.
+        'health': '60/minute',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -231,12 +241,30 @@ REST_FRAMEWORK = {
 # ─── JWT ───────────────────────────────────────────────────────────────────────
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    # F0: 60 → 30min. O frontend ja faz auto-refresh single-flight em 401,
+    # entao a unica mudanca percebida e a janela menor de um token vazado.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# ─── F0: FLAGS DE SEGURANCA OPERACIONAL ───────────────────────────────────────
+# Enforcement de 2FA para admins: em producao default ON. Fase 1 do
+# enforcement: o login de admin sem 2FA retorna must_setup_2fa=True e o
+# frontend forca a tela de setup (bloqueio hard no backend fica para F2,
+# evitando lockout do unico admin durante a transicao).
+ENFORCE_ADMIN_2FA = os.environ.get(
+    'ENFORCE_ADMIN_2FA', 'false' if DEBUG else 'true'
+).lower() == 'true'
+
+# reset-data apaga TODA a base de negocio. Fora de DEBUG o endpoint
+# responde 404 a menos que o operador ligue explicitamente (e desligue
+# depois). Nunca deixar ligado em producao.
+RESET_DATA_ENABLED = DEBUG or os.environ.get(
+    'RESET_DATA_ENABLED', 'false'
+).lower() == 'true'
 
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
