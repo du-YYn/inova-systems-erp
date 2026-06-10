@@ -10,10 +10,10 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
-                  'role', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
-        # role e is_2fa_enabled não podem ser alterados diretamente via PATCH /profile/
-        # use endpoints dedicados: /2fa/setup/ e admin /users/{id}/
-        read_only_fields = ['id', 'created_at', 'role', 'is_2fa_enabled']
+                  'role', 'sectors', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
+        # role, sectors e is_2fa_enabled não podem ser alterados diretamente via
+        # PATCH /profile/ — use endpoints dedicados: /2fa/setup/ e admin /users/{id}/
+        read_only_fields = ['id', 'created_at', 'role', 'sectors', 'is_2fa_enabled']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -38,14 +38,27 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class AdminUserSerializer(serializers.ModelSerializer):
-    """UserSerializer com role editável — usado apenas por admins."""
+    """UserSerializer com role/sectors editáveis — usado apenas por admins."""
     full_name = serializers.ReadOnlyField()
 
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
-                  'role', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
+                  'role', 'sectors', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at', 'is_2fa_enabled']
+
+    def validate_sectors(self, value):
+        """v32 F3: sectors deve ser lista de slugs válidos (SECTOR_CHOICES)."""
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Setores deve ser uma lista.')
+        valid = {c[0] for c in User.SECTOR_CHOICES}
+        invalid = [s for s in value if s not in valid]
+        if invalid:
+            raise serializers.ValidationError(
+                f'Setores inválidos: {", ".join(map(str, invalid))}. '
+                f'Válidos: {", ".join(sorted(valid))}'
+            )
+        return value
 
 
 class AdminUserCreateSerializer(serializers.ModelSerializer):
