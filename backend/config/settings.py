@@ -382,6 +382,15 @@ if not DEBUG:
         if _o.startswith('https://') and '*' not in _o and _o not in _csrf_trusted:
             _csrf_trusted.append(_o)
     CSRF_TRUSTED_ORIGINS = _csrf_trusted
+else:
+    # F0/DX: em dev o frontend (localhost:3000) chama a API direto em outra
+    # porta; POST cross-origin exige a origin aqui, senao todo unsafe method
+    # morre com "CSRF Failed: Origin checking failed". SO em DEBUG — em
+    # producao vale o bloco acima (enumerado, sem wildcard, https only).
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
 
