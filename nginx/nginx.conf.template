@@ -45,10 +45,11 @@ limit_req_zone $binary_remote_addr zone=admin_cap:10m rate=1r/h;
 #   2) Listar IPs do escritorio/VPN como `IP_AQUI 1;`
 #   3) Reload nginx (`docker compose exec nginx nginx -s reload`)
 #
-# Default atual (1 = allow all) mantem comportamento atual para nao
-# quebrar deploy. Apos popular IPs, trocar default para 0.
+# F0: default 0 (deny). Este template esta INATIVO no compose atual
+# (Traefik faz o proxy); se for reativado, /admin/ nasce FECHADO e o
+# operador precisa listar os IPs autorizados antes (fail-closed).
 geo $admin_allowed {
-    default 1;
+    default 0;
     # Exemplos (descomentar e ajustar):
     # 203.0.113.42  1;   # Escritorio
     # 198.51.100.0/24 1; # VPN corporativa
@@ -114,10 +115,12 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
+    # F0: /media/ NAO pode ser publico — contem anexos de tickets e PDFs de
+    # propostas (dados pessoais/LGPD). O acesso correto e via endpoint
+    # Django autenticado (X-Accel-Redirect entra na F6). Se este nginx for
+    # reativado, media fica bloqueado ate isso existir (fail-closed).
     location /media/ {
-        alias /app/media/;
-        expires 1M;
-        add_header Cache-Control "public";
+        deny all;
     }
 
     # ── Auth API (rate limited) ────────────────────────────────────────────

@@ -148,9 +148,9 @@ jobs:
         run: npm ci
 
       - name: npm audit — verifica CVEs nas dependências npm
-        # Falha apenas em vulnerabilidades críticas;
-        # as 'high' restantes são dev-deps (eslint) ou mitigadas por config
-        run: npm audit --audit-level=critical
+        # F0: critical → high, restrito a deps de producao (--omit=dev).
+        # Dev-deps (eslint etc.) nao rodam em producao e nao bloqueiam.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Type check
         run: npx tsc --noEmit
@@ -162,6 +162,36 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+
+  # ─── F0: MIGRATIONS EXPAND-ONLY ─────────────────────────────────────────────
+  # Migration nova nao pode conter operacao destrutiva (RemoveField/
+  # DeleteModel/Rename*). Remocoes so na fase contract (F8), marcadas
+  # explicitamente com '# contract-approved' na propria migration.
+  migration-guard:
+    name: Migrations aditivas (expand-only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bloqueia operacoes destrutivas em migrations novas
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=100
+          FILES=$(git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}...HEAD" -- 'backend/*/migrations/*.py' || true)
+          if [ -z "$FILES" ]; then
+            echo "Sem migrations novas neste PR."
+            exit 0
+          fi
+          BAD=0
+          for f in $FILES; do
+            if grep -qE 'RemoveField|DeleteModel|RenameField|RenameModel' "$f" && ! grep -q 'contract-approved' "$f"; then
+              echo "::error file=$f::Operacao destrutiva em migration (regra expand-only). Remocoes so na F8 com '# contract-approved'."
+              grep -nE 'RemoveField|DeleteModel|RenameField|RenameModel' "$f"
+              BAD=1
+            fi
+          done
+          exit $BAD
 
   # ─── SECRET SCANNING ────────────────────────────────────────────────────────
   secret-scan:

@@ -254,7 +254,20 @@ class LoginView(APIView):
         logger.info(f"Login bem-sucedido: {user.username} (role={user.role})")
         log_audit(user, 'login', 'user', user.id)
         refresh = RefreshToken.for_user(user)
-        response = Response({'user': UserSerializer(user).data})
+        response_data = {'user': UserSerializer(user).data}
+        # F0: enforcement de 2FA para admins (fase 1). Login segue valido
+        # (bloquear aqui poderia trancar o unico admin fora do sistema),
+        # mas o frontend recebe a flag e forca a tela de setup antes de
+        # liberar navegacao. Hard-block no backend entra na F2.
+        if (
+            getattr(django_settings, 'ENFORCE_ADMIN_2FA', False)
+            and user.role == 'admin'
+            and not user.is_2fa_enabled
+        ):
+            response_data['must_setup_2fa'] = True
+            logger.warning(f"Admin sem 2FA logou: {user.username} (setup obrigatorio)")
+            log_audit(user, '2fa_setup_required', 'user', user.id)
+        response = Response(response_data)
         _set_auth_cookies(response, refresh, user=user, request=request)
         return response
 
