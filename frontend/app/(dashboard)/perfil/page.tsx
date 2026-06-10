@@ -250,12 +250,26 @@ export default function PerfilPage() {
     { key: 'employee' as Tab, label: 'Perfil Profissional', icon: <Briefcase className="w-4 h-4" /> },
   ];
 
+  const setup2faRequired = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('setup2fa') === 'obrigatorio'
+    && !profile?.is_2fa_enabled;
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Meu Perfil</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">Gerencie suas informações pessoais e segurança</p>
       </div>
+
+      {/* F0: enforcement de 2FA para admins — banner bloqueante até ativar */}
+      {setup2faRequired && (
+        <div className="mb-6 rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-900/30 dark:border-amber-600 p-4" role="alert">
+          <p className="font-semibold text-amber-800 dark:text-amber-200">Autenticação em 2 fatores obrigatória</p>
+          <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+            Contas de administrador precisam de 2FA. Ative na seção <b>Segurança</b> abaixo antes de continuar usando o sistema.
+          </p>
+        </div>
+      )}
 
       {/* Profile header card */}
       {!loading && profile && (

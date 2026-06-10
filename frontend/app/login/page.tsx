@@ -46,12 +46,24 @@ export default function LoginPage() {
       }
 
       try {
-        const data = await api.post<{ requires_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/login/', formData);
+        const data = await api.post<{ requires_2fa?: boolean; must_setup_2fa?: boolean; temp_token?: string; user?: { id: number; username: string; email: string; first_name: string; last_name: string; role: string } }>('/accounts/login/', formData);
 
         if (data.requires_2fa) {
           setRequires2FA(true);
           setTempToken(data.temp_token || '');
           setLoading(false);
+          return;
+        }
+
+        // F0: enforcement de 2FA para admins. O backend sinaliza
+        // must_setup_2fa quando um admin sem 2FA loga; forçamos a tela de
+        // configuração antes de liberar a navegação normal.
+        if (data.must_setup_2fa) {
+          if (data.user && typeof data.user.username === 'string') {
+            const { id, username, first_name, last_name } = data.user;
+            localStorage.setItem('user', JSON.stringify({ id, username, first_name, last_name }));
+          }
+          window.location.replace('/perfil?setup2fa=obrigatorio');
           return;
         }
 
