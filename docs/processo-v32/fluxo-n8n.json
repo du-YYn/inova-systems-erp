@@ -1,0 +1,1847 @@
+{
+  "name": "Inova · Processo Completo (v32) — Empresa Rodando",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## CRM COMERCIAL",
+        "height": 200,
+        "width": 3340,
+        "color": 3
+      },
+      "id": "sticky_comercial",
+      "name": "__lane_comercial",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        10
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n1",
+      "name": "⛳ Lead recebido",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        70
+      ],
+      "notes": "[trigger] Prospect.status=new — Lead entra no funil",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n2",
+      "name": "🔹 Em qualificação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        70
+      ],
+      "notes": "[action] Prospect.status=qualifying — SDR qualifica",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n3",
+      "name": "🔹 Qualificado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        70
+      ],
+      "notes": "[action] Prospect.status=qualified — Lead validado",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n4",
+      "name": "🔹 Convite para Reunião",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        70
+      ],
+      "notes": "[action] Prospect.status=meeting_invite — Envia convite",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n5",
+      "name": "🔹 Agendado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        70
+      ],
+      "notes": "[action] Prospect.status=scheduled — Reunião marcada",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n6",
+      "name": "🔹 Pré-Reunião",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        70
+      ],
+      "notes": "[action] Prospect.status=pre_meeting — Sequência de preparação",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n7",
+      "name": "🔹 Reunião 1 realizada",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        70
+      ],
+      "notes": "[action] Prospect.status=meeting_1_done — Descoberta",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n8",
+      "name": "🔹 Análise técnica e proposta",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2110,
+        70
+      ],
+      "notes": "[action] Prospect.status=tech_analysis — Dev define escopo/prazo/valor + tipo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n9",
+      "name": "🔹 Reunião 2 realizada",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        70
+      ],
+      "notes": "[action] Prospect.status=meeting_2_done — Apresenta proposta",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n10",
+      "name": "🔀 Proposta enviada",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2610,
+        70
+      ],
+      "notes": "[decision] Prospect.status=proposal · Proposal — Aceita ou não fecha",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n11",
+      "name": "🔹 Projeto Fechado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        70
+      ],
+      "notes": "[action] Prospect.status=won — Dispara abertura + ClientOnboarding",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n12",
+      "name": "⚡ Coleta de dados",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3110,
+        70
+      ],
+      "notes": "[automation] ClientOnboarding.status=submitted — Dispara Jurídico + Financeiro em paralelo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## CRM JURÍDICO",
+        "height": 590,
+        "width": 2090,
+        "color": 5
+      },
+      "id": "sticky_juridico",
+      "name": "__lane_juridico",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        570
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n13",
+      "name": "⛳ Entrada contrato (Coleta)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        630
+      ],
+      "notes": "[trigger] LegalCase(contrato).source=comercial — Cria caso de contrato",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n14",
+      "name": "🔹 Contrato · Preparação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        630
+      ],
+      "notes": "[action] LegalCase(contrato).status=preparacao — Elabora contrato",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n15",
+      "name": "🔹 Contrato · Envio (Autentique)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        630
+      ],
+      "notes": "[action] status=envio_assinatura — Sobe no Autentique",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n16",
+      "name": "🔹 Contrato · Aguardando",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        630
+      ],
+      "notes": "[action] status=aguardando_assinatura — Aguarda assinatura",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n17",
+      "name": "🔀 Contrato · Assinado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        630
+      ],
+      "notes": "[decision] status=assinado — Formalizado",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n18",
+      "name": "⚡ Disparo: libera cobrança",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        630
+      ],
+      "notes": "[automation] LegalCase(contrato).assinado — Ativa cobrança no Financeiro",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n19",
+      "name": "⛳ Entrada validação (Etapa 6)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        760
+      ],
+      "notes": "[trigger] LegalCase(validacao_documento).source=producao — Cria caso de validação",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n20",
+      "name": "🔹 Validação · Anexar termo + Autentique",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        760
+      ],
+      "notes": "[action] status=preparacao — Anexa e sobe",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n21",
+      "name": "🔹 Validação · Envio",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        760
+      ],
+      "notes": "[action] status=envio_assinatura — Envia ao cliente",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n22",
+      "name": "🔹 Validação · Aguardando",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        760
+      ],
+      "notes": "[action] status=aguardando_assinatura — Aguarda",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n23",
+      "name": "🔀 Validação · Assinado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        760
+      ],
+      "notes": "[decision] status=assinado — Baseline",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n24",
+      "name": "⚡ Disparo: libera Etapa 7",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        760
+      ],
+      "notes": "[automation] LegalCase(validacao).assinado — Libera Desenvolvimento",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n25",
+      "name": "⛳ Entrada aditivo (mudança)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        890
+      ],
+      "notes": "[trigger] LegalCase(aditivo).source=producao — Mudança de escopo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n26",
+      "name": "🔹 Aditivo · Preparação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        890
+      ],
+      "notes": "[action] status=preparacao — Elabora aditivo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n27",
+      "name": "🔹 Aditivo · Envio (Autentique)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        890
+      ],
+      "notes": "[action] status=envio_assinatura — Sobe e envia",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n28",
+      "name": "🔹 Aditivo · Aguardando",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        890
+      ],
+      "notes": "[action] status=aguardando_assinatura — Aguarda",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n29",
+      "name": "🔀 Aditivo · Assinado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        890
+      ],
+      "notes": "[decision] status=assinado — Formalizado",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n30",
+      "name": "⚡ Disparo: nova fase",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        890
+      ],
+      "notes": "[automation] LegalCase(aditivo).assinado — Abre nova fase na Produção",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n31",
+      "name": "⚡ Disparo: ajuste de valor",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        890
+      ],
+      "notes": "[automation] LegalCase(aditivo).assinado — Ajusta cobrança",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n32",
+      "name": "⛳ Entrada encerramento (cliente)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        1020
+      ],
+      "notes": "[trigger] LegalCase(encerramento).source=cliente — Cliente solicita",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n33",
+      "name": "🔹 Encerramento · Pendências + distrato",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        1020
+      ],
+      "notes": "[action] status=preparacao — Analisa e elabora distrato",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n34",
+      "name": "🔹 Encerramento · Envio (Autentique)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        1020
+      ],
+      "notes": "[action] status=envio_assinatura — Sobe e envia",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n35",
+      "name": "🔹 Encerramento · Aguardando",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        1020
+      ],
+      "notes": "[action] status=aguardando_assinatura — Aguarda",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n36",
+      "name": "🔀 Encerramento · Assinado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        1020
+      ],
+      "notes": "[decision] status=assinado — Distrato formalizado",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n37",
+      "name": "⚡ Disparo: acerto final",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        1020
+      ],
+      "notes": "[automation] LegalCase(encerramento).assinado — Acerto final no Financeiro",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## CRM FINANCEIRO",
+        "height": 200,
+        "width": 2590,
+        "color": 4
+      },
+      "id": "sticky_financeiro",
+      "name": "__lane_financeiro",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        1130
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n38",
+      "name": "⛳ Pré-cadastra fatura pendente",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        1190
+      ],
+      "notes": "[trigger] Invoice.status=pending (ProposalPaymentPlan) — Em paralelo com o Jurídico",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n39",
+      "name": "🔀 Aguarda contrato assinado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        1190
+      ],
+      "notes": "[decision] LegalCase(contrato).status=assinado — Espera o gatilho do Jurídico",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n40",
+      "name": "🔹 Libera cobrança ativa",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        1190
+      ],
+      "notes": "[action] Invoice enviável/cobrável — Regra de ouro: só após assinatura",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n41",
+      "name": "⚡ Régua de cobrança",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        1190
+      ],
+      "notes": "[automation] check_invoice_overdue — Dunning (entra agora)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n42",
+      "name": "⚡ Entrada paga",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        1190
+      ],
+      "notes": "[automation] Invoice.status=paid — Libera a Produção (Dia 0)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n43",
+      "name": "🔹 Contas a pagar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        1190
+      ],
+      "notes": "[action] RecurringExpense, TaxEntry, Transaction — Informativo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n44",
+      "name": "🔹 Faturamento e fiscal",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        1190
+      ],
+      "notes": "[action] Invoice NFS-e, TaxConfig — Informativo · emissão real fase posterior",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n45",
+      "name": "🔹 Cobrança e inadimplência",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2110,
+        1190
+      ],
+      "notes": "[action] Invoice(overdue) — Informativo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n46",
+      "name": "🔹 Fluxo de caixa e gestão",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        1190
+      ],
+      "notes": "[action] Transaction, DRE, MRR/churn — Informativo · MRR/conciliação fase posterior",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## CRM DE PRODUÇÃO",
+        "height": 200,
+        "width": 3590,
+        "color": 6
+      },
+      "id": "sticky_producao",
+      "name": "__lane_producao",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        1690
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n47",
+      "name": "⛳ E3 · Preparação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        1750
+      ],
+      "notes": "[trigger] Project.etapa_atual=etapa_3 — Entra com a entrada paga; não conta no prazo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n48",
+      "name": "🔹 E4 · Onboarding (Dia 0)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        1750
+      ],
+      "notes": "[action] etapa_4 · OnboardingMappingForm — Seta dia_zero e dispara o Motor de Cronograma",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n49",
+      "name": "🔹 E5 · Documentação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        1750
+      ],
+      "notes": "[action] etapa_5 · ProjectDocument — 12 seções viram baseline",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n50",
+      "name": "🔹 E6 · Validação da doc",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        1750
+      ],
+      "notes": "[action] etapa_6 · ProjectDocument — Segue p/ assinatura no Jurídico",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n51",
+      "name": "🔹 E7 · Desenvolvimento",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        1750
+      ],
+      "notes": "[action] etapa_7 — Só com doc assinada; paralelo ao WeeklyUpdate",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n52",
+      "name": "🔹 E8 · Auditoria interna",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        1750
+      ],
+      "notes": "[action] etapa_8 · ProjectAudit — Aprovada destrava a Etapa 9",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n53",
+      "name": "🔹 E9 · Apresentação/liberação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        1750
+      ],
+      "notes": "[action] etapa_9 · DeliveryApproval — Link admin único",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n54",
+      "name": "🔹 Homologação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2110,
+        1750
+      ],
+      "notes": "[action] homologacao · ReUpdateCycle — Janela de teste + re-update",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n55",
+      "name": "🔹 Registro da versão",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        1750
+      ],
+      "notes": "[action] ProjectEnvironment — Cliente aprovou",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n56",
+      "name": "🔀 Bifurcação por tipo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2610,
+        1750
+      ],
+      "notes": "[decision] Project.tipo — Fechado → graduação; Recorrente → implementação",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n57",
+      "name": "🔹 E10 · Graduação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2860,
+        1750
+      ],
+      "notes": "[action] etapa_10_graduacao — Cria RecurrenceContract(suporte_basico)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n58",
+      "name": "🔹 Implementação",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3110,
+        1750
+      ],
+      "notes": "[action] implementacao — Cria RecurrenceContract(operacao_continua)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n59",
+      "name": "⚡ Recorrência",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        1750
+      ],
+      "notes": "[automation] recorrencia · RecurrenceContract — Todo entregue entra em recorrência + Suporte",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## CRM DE SUPORTE",
+        "height": 200,
+        "width": 2590,
+        "color": 2
+      },
+      "id": "sticky_suporte",
+      "name": "__lane_suporte",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        2250
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n60",
+      "name": "⛳ Chamado aberto",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        2310
+      ],
+      "notes": "[trigger] SupportTicket.status=aberto — Canal único, token assinado",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n61",
+      "name": "🔀 Triagem",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        2310
+      ],
+      "notes": "[decision] status=triagem — bug→análise · dúvida→resolve · mudança→update",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n62",
+      "name": "🔹 Resolve direto",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        2310
+      ],
+      "notes": "[action] status=resolvido — Dúvida respondida na hora",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n63",
+      "name": "⚡ Pedido de update",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        2310
+      ],
+      "notes": "[automation] PedidoUpdate.status=opened — Mudança vira Prospect (tech_analysis)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n64",
+      "name": "🔀 Análise",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        2310
+      ],
+      "notes": "[decision] status=analise · conclusao — garantia/orçamento/recorrente/inconclusivo",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n65",
+      "name": "🔹 Correção / Orçamento",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1610,
+        2310
+      ],
+      "notes": "[action] status=correcao — Garantia, recorrente ou orçamento",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n66",
+      "name": "⚡ Escala Diretoria",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1860,
+        2310
+      ],
+      "notes": "[automation] conclusao=inconclusivo — Cria DirectorEscalation",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n67",
+      "name": "🔹 Resolvido",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2110,
+        2310
+      ],
+      "notes": "[action] status=resolvido — Aguarda retorno do cliente",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n68",
+      "name": "🔹 Fechado",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2360,
+        2310
+      ],
+      "notes": "[action] status=fechado — Auto-fecha após 5 dias (configurável)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "content": "## DIRETORIA",
+        "height": 200,
+        "width": 1590,
+        "color": 7
+      },
+      "id": "sticky_diretoria",
+      "name": "__lane_diretoria",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        20,
+        2810
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "n69",
+      "name": "⛳ Escalação recebida",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        360,
+        2870
+      ],
+      "notes": "[trigger] DirectorEscalation — Do Suporte (inconclusivo)",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n70",
+      "name": "🔹 Análise (resumo + evidência)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        610,
+        2870
+      ],
+      "notes": "[action] DirectorEscalation — Recebe o caso",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n71",
+      "name": "🔀 Decisão",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        860,
+        2870
+      ],
+      "notes": "[decision] decision — absorver/cobrar/negociar",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n72",
+      "name": "⚡ Devolve decisão ao fluxo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1110,
+        2870
+      ],
+      "notes": "[automation] DirectorEscalation.resolved — Atualiza o ticket",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {},
+      "id": "n73",
+      "name": "⚡ Reunião semanal de Diretoria",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        2870
+      ],
+      "notes": "[automation] DirectoryMeeting — Cadência semanal · agrega KPIs",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "⛳ Lead recebido": {
+      "main": [
+        [
+          {
+            "node": "🔹 Em qualificação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Em qualificação": {
+      "main": [
+        [
+          {
+            "node": "🔹 Qualificado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Qualificado": {
+      "main": [
+        [
+          {
+            "node": "🔹 Convite para Reunião",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Convite para Reunião": {
+      "main": [
+        [
+          {
+            "node": "🔹 Agendado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Agendado": {
+      "main": [
+        [
+          {
+            "node": "🔹 Pré-Reunião",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Pré-Reunião": {
+      "main": [
+        [
+          {
+            "node": "🔹 Reunião 1 realizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Reunião 1 realizada": {
+      "main": [
+        [
+          {
+            "node": "🔹 Análise técnica e proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Análise técnica e proposta": {
+      "main": [
+        [
+          {
+            "node": "🔹 Reunião 2 realizada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Reunião 2 realizada": {
+      "main": [
+        [
+          {
+            "node": "🔀 Proposta enviada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Proposta enviada": {
+      "main": [
+        [
+          {
+            "node": "🔹 Projeto Fechado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Projeto Fechado": {
+      "main": [
+        [
+          {
+            "node": "⚡ Coleta de dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Entrada contrato (Coleta)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Contrato · Preparação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Contrato · Preparação": {
+      "main": [
+        [
+          {
+            "node": "🔹 Contrato · Envio (Autentique)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Contrato · Envio (Autentique)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Contrato · Aguardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Contrato · Aguardando": {
+      "main": [
+        [
+          {
+            "node": "🔀 Contrato · Assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Contrato · Assinado": {
+      "main": [
+        [
+          {
+            "node": "⚡ Disparo: libera cobrança",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Entrada validação (Etapa 6)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Validação · Anexar termo + Autentique",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Validação · Anexar termo + Autentique": {
+      "main": [
+        [
+          {
+            "node": "🔹 Validação · Envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Validação · Envio": {
+      "main": [
+        [
+          {
+            "node": "🔹 Validação · Aguardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Validação · Aguardando": {
+      "main": [
+        [
+          {
+            "node": "🔀 Validação · Assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Validação · Assinado": {
+      "main": [
+        [
+          {
+            "node": "⚡ Disparo: libera Etapa 7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Entrada aditivo (mudança)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Aditivo · Preparação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Aditivo · Preparação": {
+      "main": [
+        [
+          {
+            "node": "🔹 Aditivo · Envio (Autentique)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Aditivo · Envio (Autentique)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Aditivo · Aguardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Aditivo · Aguardando": {
+      "main": [
+        [
+          {
+            "node": "🔀 Aditivo · Assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Aditivo · Assinado": {
+      "main": [
+        [
+          {
+            "node": "⚡ Disparo: nova fase",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⚡ Disparo: ajuste de valor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Entrada encerramento (cliente)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Encerramento · Pendências + distrato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Encerramento · Pendências + distrato": {
+      "main": [
+        [
+          {
+            "node": "🔹 Encerramento · Envio (Autentique)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Encerramento · Envio (Autentique)": {
+      "main": [
+        [
+          {
+            "node": "🔹 Encerramento · Aguardando",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Encerramento · Aguardando": {
+      "main": [
+        [
+          {
+            "node": "🔀 Encerramento · Assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Encerramento · Assinado": {
+      "main": [
+        [
+          {
+            "node": "⚡ Disparo: acerto final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Pré-cadastra fatura pendente": {
+      "main": [
+        [
+          {
+            "node": "🔀 Aguarda contrato assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Aguarda contrato assinado": {
+      "main": [
+        [
+          {
+            "node": "🔹 Libera cobrança ativa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Libera cobrança ativa": {
+      "main": [
+        [
+          {
+            "node": "⚡ Régua de cobrança",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⚡ Entrada paga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Régua de cobrança": {
+      "main": [
+        [
+          {
+            "node": "⚡ Entrada paga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ E3 · Preparação": {
+      "main": [
+        [
+          {
+            "node": "🔹 E4 · Onboarding (Dia 0)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E4 · Onboarding (Dia 0)": {
+      "main": [
+        [
+          {
+            "node": "🔹 E5 · Documentação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E5 · Documentação": {
+      "main": [
+        [
+          {
+            "node": "🔹 E6 · Validação da doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E6 · Validação da doc": {
+      "main": [
+        [
+          {
+            "node": "🔹 E7 · Desenvolvimento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⛳ Entrada validação (Etapa 6)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E7 · Desenvolvimento": {
+      "main": [
+        [
+          {
+            "node": "🔹 E8 · Auditoria interna",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E8 · Auditoria interna": {
+      "main": [
+        [
+          {
+            "node": "🔹 E9 · Apresentação/liberação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E9 · Apresentação/liberação": {
+      "main": [
+        [
+          {
+            "node": "🔹 Homologação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Homologação": {
+      "main": [
+        [
+          {
+            "node": "🔹 Registro da versão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Registro da versão": {
+      "main": [
+        [
+          {
+            "node": "🔀 Bifurcação por tipo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Bifurcação por tipo": {
+      "main": [
+        [
+          {
+            "node": "🔹 E10 · Graduação",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🔹 Implementação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 E10 · Graduação": {
+      "main": [
+        [
+          {
+            "node": "⚡ Recorrência",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⛳ Chamado aberto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Implementação": {
+      "main": [
+        [
+          {
+            "node": "⚡ Recorrência",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⛳ Chamado aberto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Chamado aberto": {
+      "main": [
+        [
+          {
+            "node": "🔀 Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Triagem": {
+      "main": [
+        [
+          {
+            "node": "🔀 Análise",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🔹 Resolve direto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⚡ Pedido de update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Resolve direto": {
+      "main": [
+        [
+          {
+            "node": "🔹 Fechado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Pedido de update": {
+      "main": [
+        [
+          {
+            "node": "🔹 Resolvido",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "🔹 Análise técnica e proposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Análise": {
+      "main": [
+        [
+          {
+            "node": "🔹 Correção / Orçamento",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⚡ Escala Diretoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Correção / Orçamento": {
+      "main": [
+        [
+          {
+            "node": "🔹 Resolvido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Escala Diretoria": {
+      "main": [
+        [
+          {
+            "node": "🔹 Resolvido",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⛳ Escalação recebida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Resolvido": {
+      "main": [
+        [
+          {
+            "node": "🔹 Fechado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⛳ Escalação recebida": {
+      "main": [
+        [
+          {
+            "node": "🔹 Análise (resumo + evidência)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔹 Análise (resumo + evidência)": {
+      "main": [
+        [
+          {
+            "node": "🔀 Decisão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🔀 Decisão": {
+      "main": [
+        [
+          {
+            "node": "⚡ Devolve decisão ao fluxo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Coleta de dados": {
+      "main": [
+        [
+          {
+            "node": "⛳ Entrada contrato (Coleta)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "⛳ Pré-cadastra fatura pendente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Disparo: libera cobrança": {
+      "main": [
+        [
+          {
+            "node": "🔀 Aguarda contrato assinado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Entrada paga": {
+      "main": [
+        [
+          {
+            "node": "⛳ E3 · Preparação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Disparo: libera Etapa 7": {
+      "main": [
+        [
+          {
+            "node": "🔹 E7 · Desenvolvimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Disparo: nova fase": {
+      "main": [
+        [
+          {
+            "node": "🔹 E7 · Desenvolvimento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Disparo: ajuste de valor": {
+      "main": [
+        [
+          {
+            "node": "🔹 Cobrança e inadimplência",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Disparo: acerto final": {
+      "main": [
+        [
+          {
+            "node": "🔹 Cobrança e inadimplência",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "⚡ Devolve decisão ao fluxo": {
+      "main": [
+        [
+          {
+            "node": "🔀 Análise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "inova-processo-v32"
+  },
+  "tags": []
+}
