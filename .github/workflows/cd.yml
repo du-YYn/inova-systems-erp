@@ -109,16 +109,18 @@ jobs:
             # O entrypoint do backend roda `migrate` no up; este dump e a
             # garantia de restauracao de DADOS (rollback de imagem nao desfaz
             # migration). Deploy aborta se o dump falhar ou vier vazio.
-            mkdir -p /opt/backups/pre-deploy
-            BK_FILE="/opt/backups/pre-deploy/pre_${NEW_TAG:0:12}_$(date +%Y%m%d_%H%M%S).dump"
-            if ! docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > "$BK_FILE" || [ ! -s "$BK_FILE" ]; then
+            # Usa o mesmo container/volume do backup diario (db-backup +
+            # volume db_backups): zero dependencia de permissao no host.
+            BK_NAME="pre_${NEW_TAG:0:12}_$(date +%Y%m%d_%H%M%S).dump"
+            if ! docker compose run --rm --no-deps db-backup sh -c \
+              "pg_dump --format=custom -f /backups/$BK_NAME && [ -s /backups/$BK_NAME ] && echo \"Backup pre-deploy OK: $BK_NAME (\$(du -h /backups/$BK_NAME | cut -f1))\""; then
               echo "✖ Backup pre-deploy FALHOU — deploy abortado (nada foi alterado)."
-              rm -f "$BK_FILE"
+              docker compose run --rm --no-deps db-backup sh -c "rm -f /backups/$BK_NAME" || true
               exit 1
             fi
-            echo "Backup pre-deploy OK: $BK_FILE ($(du -h "$BK_FILE" | cut -f1))"
             # Retencao: mantem os 10 dumps pre-deploy mais recentes.
-            ls -1t /opt/backups/pre-deploy/*.dump 2>/dev/null | tail -n +11 | xargs -r rm -f
+            docker compose run --rm --no-deps db-backup sh -c \
+              "ls -1t /backups/pre_*.dump 2>/dev/null | tail -n +11 | xargs -r rm -f" || true
 
             # Grava a tag nova no .env (o compose lê ERP_IMAGE_TAG daqui).
             if grep -q '^ERP_IMAGE_TAG=' .env; then
