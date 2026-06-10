@@ -121,6 +121,24 @@ class Invoice(models.Model):
     recurring_pattern = models.CharField(max_length=50, blank=True)  # monthly, weekly
     parent_invoice = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='recurring_invoices')
 
+    # ── v32 F4: ciclo de pré-cadastro / liberação de cobrança (doc 03 §2/§3) ──
+    # Pré-cadastro: invoices criadas automaticamente quando a Coleta de Dados
+    # (ClientOnboarding) é submetida, a partir do ProposalPaymentPlan da
+    # proposta aprovada. O FK marca a origem e garante idempotência (1 lote
+    # de pré-cadastro por prospect).
+    precadastro_origem = models.ForeignKey(
+        'sales.Prospect', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='precadastro_invoices',
+        help_text='Prospect que originou o pré-cadastro automático (F4)',
+    )
+    # Regra de ouro (doc 03 §2): invoice pré-cadastrada só vira cobrança
+    # ATIVA (enviável) quando o LegalCase(contrato) do cliente é assinado.
+    # Invoices sem precadastro_origem não passam por esse gate.
+    cobranca_liberada = models.BooleanField(
+        default=False,
+        help_text='Cobrança liberada após assinatura do contrato (F4)',
+    )
+
     NFSE_STATUS_CHOICES = [
         ('pending', 'Pendente'),
         ('issued', 'Emitida'),
