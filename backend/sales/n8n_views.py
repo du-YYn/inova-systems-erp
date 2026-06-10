@@ -138,7 +138,14 @@ class LeadUpdateView(N8NBaseView):
         'scheduled': 'scheduled',
         'pre_meeting': 'pre_meeting',
         'no_show': 'no_show',
-        'meeting_done': 'meeting_done',
+        # v32 F2: payload legado do n8n ('meeting_done') passa a gravar o
+        # status novo — convivência sem reintroduzir o valor deprecado
+        'meeting_done': 'meeting_1_done',
+        'meeting_invite': 'meeting_invite',
+        'meeting_1_done': 'meeting_1_done',
+        'tech_analysis': 'tech_analysis',
+        'meeting_2_done': 'meeting_2_done',
+        'data_collection': 'data_collection',
         'proposal_sent': 'proposal',
         'closed': 'won',
         'not_closed': 'not_closed',

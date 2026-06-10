@@ -106,6 +106,9 @@ class ProspectSerializer(serializers.ModelSerializer):
         'payment_method', 'payment_type', 'payment_split_pct',
         'payment_installments', 'payment_monthly_value', 'payment_due_day',
         'payment_duration_months', 'payment_first_due',
+        # v32 F2: escopo/estrutura definidos pelo Dev — conteúdo livre que
+        # pode conter detalhes comerciais sensíveis (mesma lógica do transcript)
+        'tech_analysis_notes',
     )
 
     def to_representation(self, instance):
@@ -191,6 +194,13 @@ class ProspectSerializer(serializers.ModelSerializer):
             # pós-agendamento
             "ebook_sent_at",
             "meeting_transcript",
+            # reunião 2 + análise técnica (v32 F2)
+            "project_type",
+            "meeting_2_scheduled_at",
+            "meeting_2_link",
+            "meeting_2_attended",
+            "tech_analysis_notes",
+            "estimated_deadline_days",
             # follow-up
             "follow_up_reason",
             "follow_up_count",

@@ -45,11 +45,16 @@ class PartnerLeadListSerializer(serializers.ModelSerializer):
         'new': 'Em análise',
         'qualifying': 'Em análise',
         'qualified': 'Em análise',
+        'meeting_invite': 'Em negociação',
         'scheduled': 'Em negociação',
         'pre_meeting': 'Em negociação',
         'meeting_done': 'Em negociação',
+        'meeting_1_done': 'Em negociação',
+        'tech_analysis': 'Em negociação',
+        'meeting_2_done': 'Em negociação',
         'proposal': 'Em negociação',
         'won': 'Fechado',
+        'data_collection': 'Fechado',
         'production': 'Fechado',
         'concluded': 'Concluído',
         'lost': 'Não fechou',
@@ -322,7 +327,7 @@ def partner_dashboard(request):
     leads = Prospect.objects.filter(referred_by=request.user)
     commissions = PartnerCommission.objects.filter(partner=request.user)
 
-    won_statuses = ('won', 'production', 'concluded')
+    won_statuses = ('won', 'data_collection', 'production', 'concluded')
     stats = leads.aggregate(
         total_leads=Count('id'),
         leads_fechados=Count('id', filter=Q(status__in=won_statuses)),
