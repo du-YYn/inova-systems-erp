@@ -14,7 +14,11 @@ from .serializers import (
     ProjectTemplateSerializer, ProjectSerializer, ProjectPhaseSerializer,
     MilestoneSerializer, ProjectTaskSerializer, TimeEntrySerializer, ProjectCommentSerializer
 )
-from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
+from . import transitions
+from accounts.permissions import (
+    IsAdminOrManagerOrOperator, IsAdminOrManager, HasSectorAccess,
+)
+from core.audit import log_audit
 from rest_framework.permissions import BasePermission
 
 logger = logging.getLogger('projects')
@@ -114,6 +118,156 @@ class ProjectViewSet(viewsets.ModelViewSet):
             'total_budget': float(total_budget),
             'by_status': list(by_status)
         })
+
+    # ─── v32 F5: transições de etapa + gate Dia 0 (doc 04 §1/§6) ─────────────
+
+    @action(detail=True, methods=['post'], url_path='set-etapa',
+            permission_classes=[HasSectorAccess('producao')])
+    def set_etapa(self, request, pk=None):
+        """Transição de etapa (valida ordem + REGRA OURO da Etapa 7)."""
+        project = self.get_object()
+        nova = str(request.data.get('etapa') or '')
+        transitions.set_etapa(project, nova, user=request.user, request=request)
+        return Response(ProjectSerializer(project).data)
+
+    @action(detail=True, methods=['post'], url_path='set-situacao',
+            permission_classes=[HasSectorAccess('producao')])
+    def set_situacao(self, request, pk=None):
+        """Situação ortogonal: ativo | em_espera | cancelado."""
+        project = self.get_object()
+        nova = str(request.data.get('situacao') or '')
+        transitions.set_situacao(project, nova, user=request.user, request=request)
+        return Response(ProjectSerializer(project).data)
+
+    @action(detail=True, methods=['post'], url_path='marcar-onboarding-realizado',
+            permission_classes=[HasSectorAccess('producao')])
+    def marcar_onboarding_realizado(self, request, pk=None):
+        """Etapa 4 realizada — seta onboarding_realizado_at (+ Dia 0 se ok)."""
+        project = self.get_object()
+        data_raw = request.data.get('data')
+        data = None
+        if data_raw:
+            data = parse_date(str(data_raw))
+            if not data:
+                return Response(
+                    {'error': 'Formato de data inválido. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        transitions.marcar_onboarding_realizado(
+            project, user=request.user, data=data, request=request)
+        return Response(ProjectSerializer(project).data)
+
+    # ─── v32 F5: Game Plan persistente (doc 07 §10) ──────────────────────────
+
+    @action(detail=True, methods=['get', 'post'], url_path='cronograma',
+            permission_classes=[HasSectorAccess('producao')])
+    def cronograma(self, request, pk=None):
+        """GET: histórico de ScheduleVersion. POST: gera e persiste."""
+        from .serializers_v32 import ScheduleVersionSerializer
+        project = self.get_object()
+        if request.method == 'GET':
+            versions = project.schedule_versions.select_related('created_by')
+            return Response(
+                ScheduleVersionSerializer(versions, many=True).data)
+        return self._generate_cronograma(project, request)
+
+    def _generate_cronograma(self, project, request):
+        """Gera o Game Plan dos params do Project, salva ScheduleVersion e
+        cria/atualiza os 6 ProjectPhase datados (doc 04 §7)."""
+        from .models import ScheduleVersion
+        from .scheduling import gerar_game_plan
+        from .serializers_scheduling import (
+            CronogramaParamsSerializer, serialize_game_plan,
+        )
+        from .serializers_v32 import ScheduleVersionSerializer
+
+        data_onboarding = request.data.get('data_onboarding') or project.dia_zero
+        if not data_onboarding:
+            return Response(
+                {'error': (
+                    'Cronograma exige o Dia 0 definido (Etapa 4) ou '
+                    'data_onboarding informada no corpo.'
+                )},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        params_serializer = CronogramaParamsSerializer(data={
+            'prazo_total': project.prazo_total,
+            'modo': project.modo,
+            'data_onboarding': data_onboarding,
+            'pct_doc': project.pct_doc,
+            'pct_dev': project.pct_dev,
+            'pct_aud': project.pct_aud,
+            'peso_val': project.peso_val,
+            'peso_hom': project.peso_hom,
+            'peso_ent': project.peso_ent,
+            'reupd_fds': project.reupd_fds,
+            'considerar_carnaval': project.considerar_carnaval,
+            'considerar_corpus': project.considerar_corpus,
+            'data_reuniao_validacao': project.data_reuniao_validacao,
+            'data_reuniao_apresentacao': project.data_reuniao_apresentacao,
+            'data_reuniao_graduacao': project.data_reuniao_graduacao,
+        })
+        params_serializer.is_valid(raise_exception=True)
+        try:
+            plan = gerar_game_plan(params_serializer.to_params())
+        except ValueError as exc:
+            return Response({'error': str(exc)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        game_plan = serialize_game_plan(plan)
+        params_json = {
+            key: (value.isoformat() if hasattr(value, 'isoformat') else value)
+            for key, value in params_serializer.validated_data.items()
+        }
+
+        version = ScheduleVersion.objects.create(
+            project=project,
+            params=params_json,
+            game_plan=game_plan,
+            created_by=request.user,
+        )
+
+        # 6 fases datadas (name/order/start/end) — upsert por nome canônico
+        phases = []
+        for order, fase in enumerate(plan.fases, start=1):
+            phase, _created = ProjectPhase.objects.update_or_create(
+                project=project,
+                name=fase.label,
+                defaults={
+                    'order': order,
+                    'start_date': fase.inicio,
+                    'end_date': fase.fim,
+                },
+            )
+            phases.append(phase)
+
+        log_audit(
+            request.user, 'project_cronograma_generate', 'project', project.id,
+            details=(
+                f'Game Plan gerado (ScheduleVersion {version.id}): '
+                f'entrega {game_plan["entrega"]} '
+                f'({plan.params.prazo_total} dias, modo {plan.params.modo}).'
+            ),
+            new_value={
+                'schedule_version': version.id,
+                'params': params_json,
+                'entrega': game_plan['entrega'],
+                'entrega_base': game_plan['entrega_base'],
+            },
+            request=request,
+        )
+        logger.info(
+            'Project %s: Game Plan gerado (version %s) por %s.',
+            project.id, version.id, request.user.username,
+        )
+        return Response(
+            {
+                'schedule_version': ScheduleVersionSerializer(version).data,
+                'phases': ProjectPhaseSerializer(phases, many=True).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=['get'], url_path='profitability')
     def profitability(self, request, pk=None):

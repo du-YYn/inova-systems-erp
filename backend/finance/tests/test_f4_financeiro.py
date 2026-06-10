@@ -426,7 +426,9 @@ class TestEntradaPagaEvent:
         assert entry is not None
         assert entry.old_value['status'] == 'pending'
         assert entry.new_value['prospect'] == prospect.id
-        assert entry.new_value['hook_called'] is False  # hook nasce na F5
+        # F5: o hook projects.receivers.entrada_paga existe agora (era False
+        # na F4); com AUTOMATION_PROD_ENTRADA default dry_run não há efeito.
+        assert entry.new_value['hook_called'] is True
 
     def test_dry_run_audits_without_hook(
         self, settings, admin_user, customer, prospect,

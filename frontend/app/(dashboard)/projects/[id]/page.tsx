@@ -6,7 +6,8 @@ import {
   ArrowLeft, BarChart2, Clock, CheckCircle2, AlertTriangle,
   Plus, Edit2, Trash2, Timer, GitBranch, Layers, RefreshCw,
   Circle, PlayCircle, Eye, ChevronRight, X, Users, Calendar,
-  DollarSign, TrendingUp, Server, Zap
+  DollarSign, TrendingUp, Server, Zap, CalendarDays, ClipboardList,
+  MessageSquare
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -25,6 +26,21 @@ interface Project {
   manager_name: string | null; team_names: string[]; github_repo: string;
   figma_url: string; docs_url: string; notes: string; total_hours: string;
   total_logged: string;
+  // v32 F5
+  etapa_atual: string; situacao: string; tipo: string; dia_zero: string | null;
+}
+
+interface OnboardingForm {
+  id: number; project: number;
+  contexto_negocio: string; processos_atuais: string; dores_objetivos: string;
+  sistemas_integracoes: string; usuarios_acessos: string; dados_migracao: string;
+  criterios_sucesso: string;
+}
+
+interface WeeklyUpdateItem {
+  id: number; project: number; week_start: string; summary: string;
+  pending_client_items: string; sent_at: string | null; sent_via: string;
+  created_by_name: string | null;
 }
 
 interface Task {
@@ -99,6 +115,48 @@ const taskTypeColors: Record<string, string> = {
   meeting: 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600',
 };
 
+// v32 F5 (doc 04 §1): rótulos das etapas do processo de Produção
+const etapaLabels: Record<string, string> = {
+  etapa_3_preparacao: 'Etapa 3 · Preparação',
+  etapa_4_onboarding: 'Etapa 4 · Onboarding',
+  etapa_5_documentacao: 'Etapa 5 · Documentação',
+  etapa_6_validacao_doc: 'Etapa 6 · Validação doc',
+  etapa_7_desenvolvimento: 'Etapa 7 · Desenvolvimento',
+  etapa_8_auditoria: 'Etapa 8 · Auditoria',
+  etapa_9_apresentacao: 'Etapa 9 · Apresentação',
+  homologacao: 'Homologação',
+  registro_entrega: 'Registro da entrega',
+  etapa_10_graduacao: 'Etapa 10 · Graduação',
+  implementacao: 'Implementação',
+  recorrencia: 'Recorrência',
+};
+
+const situacaoBadges: Record<string, { label: string; cls: string }> = {
+  em_espera: { label: 'Em espera', cls: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' },
+  cancelado: { label: 'Cancelado', cls: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300' },
+};
+
+// Blocos do roteiro de mapeamento do onboarding (doc 04 §3)
+const onboardingBlocks: { key: keyof Omit<OnboardingForm, 'id' | 'project'>; label: string; hint: string }[] = [
+  { key: 'contexto_negocio', label: '1 · Contexto do negócio', hint: 'O que a empresa faz, mercado, tamanho' },
+  { key: 'processos_atuais', label: '2 · Processos atuais', hint: 'Como a operação funciona hoje' },
+  { key: 'dores_objetivos', label: '3 · Dores e objetivos', hint: 'O que dói e o que o projeto precisa resolver' },
+  { key: 'sistemas_integracoes', label: '4 · Sistemas e integrações', hint: 'Ferramentas em uso e integrações necessárias' },
+  { key: 'usuarios_acessos', label: '5 · Usuários e acessos', hint: 'Quem usa, papéis e permissões' },
+  { key: 'dados_migracao', label: '6 · Dados e migração', hint: 'Dados existentes, planilhas, importação' },
+  { key: 'criterios_sucesso', label: '7 · Critérios de sucesso', hint: 'Como o cliente mede se deu certo' },
+];
+
+const sentViaLabels: Record<string, string> = {
+  email: 'E-mail', whatsapp: 'WhatsApp', reuniao: 'Reunião', outro: 'Outro',
+};
+
+const EMPTY_ONBOARDING: Omit<OnboardingForm, 'id' | 'project'> = {
+  contexto_negocio: '', processos_atuais: '', dores_objetivos: '',
+  sistemas_integracoes: '', usuarios_acessos: '', dados_migracao: '',
+  criterios_sucesso: '',
+};
+
 const formatCurrency = (v: number | string) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(v));
 
@@ -142,13 +200,23 @@ export default function ProjectDetailPage() {
   const [showCRModal, setShowCRModal] = useState(false);
   const [crForm, setCrForm] = useState({ title: '', description: '', impact_hours: '', impact_value: '' });
 
+  // v32 F5: roteiro de onboarding + updates semanais
+  const [onboardingForm, setOnboardingForm] = useState<OnboardingForm | null>(null);
+  const [onboardingDraft, setOnboardingDraft] = useState({ ...EMPTY_ONBOARDING });
+  const [savingOnboarding, setSavingOnboarding] = useState(false);
+  const [weeklyUpdates, setWeeklyUpdates] = useState<WeeklyUpdateItem[]>([]);
+  const [showWeeklyForm, setShowWeeklyForm] = useState(false);
+  const [weeklyForm, setWeeklyForm] = useState({
+    week_start: '', summary: '', pending_client_items: '', sent_via: '',
+  });
+
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; taskId: number | null }>({ open: false, taskId: null });
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
       const pid = projectId;
-      const [projData, tasksData, entriesData, phasesData, milestonesData, sprintsData, crData, envData] = await Promise.all([
+      const [projData, tasksData, entriesData, phasesData, milestonesData, sprintsData, crData, envData, onbData, weeklyData] = await Promise.all([
         api.get<Project>(`/projects/projects/${pid}/`).catch(() => null),
         api.get<{ results?: Task[] }>('/projects/tasks/', { project: pid, page_size: '200' }).catch(() => ({ results: [] })),
         api.get<{ results?: TimeEntry[] }>('/projects/time-entries/', { project: pid, page_size: '100' }).catch(() => ({ results: [] })),
@@ -157,6 +225,8 @@ export default function ProjectDetailPage() {
         api.get<{ results?: Sprint[] }>('/projects/sprints/', { project: pid }).catch(() => ({ results: [] })),
         api.get<{ results?: ChangeRequest[] }>('/projects/change-requests/', { project: pid }).catch(() => ({ results: [] })),
         api.get<{ results?: Environment[] }>('/projects/environments/', { project: pid }).catch(() => ({ results: [] })),
+        api.get<{ results?: OnboardingForm[] }>('/projects/onboarding-forms/', { project: pid }).catch(() => ({ results: [] })),
+        api.get<{ results?: WeeklyUpdateItem[] }>('/projects/weekly-updates/', { project: pid }).catch(() => ({ results: [] })),
       ]);
 
       if (projData) setProject(projData);
@@ -167,6 +237,16 @@ export default function ProjectDetailPage() {
       setSprints((sprintsData.results || sprintsData) as Sprint[]);
       setChangeRequests((crData.results || crData) as ChangeRequest[]);
       setEnvironments((envData.results || envData) as Environment[]);
+      const onbList = (onbData.results || onbData) as OnboardingForm[];
+      const onb = Array.isArray(onbList) && onbList.length > 0 ? onbList[0] : null;
+      setOnboardingForm(onb);
+      setOnboardingDraft(onb ? {
+        contexto_negocio: onb.contexto_negocio, processos_atuais: onb.processos_atuais,
+        dores_objetivos: onb.dores_objetivos, sistemas_integracoes: onb.sistemas_integracoes,
+        usuarios_acessos: onb.usuarios_acessos, dados_migracao: onb.dados_migracao,
+        criterios_sucesso: onb.criterios_sucesso,
+      } : { ...EMPTY_ONBOARDING });
+      setWeeklyUpdates((weeklyData.results || weeklyData) as WeeklyUpdateItem[]);
     } catch {
       toast.error('Erro ao carregar dados do projeto');
     } finally {
@@ -254,6 +334,47 @@ export default function ProjectDetailPage() {
     fetchAll();
   };
 
+  // v32 F5: roteiro de onboarding (cria no primeiro save, depois atualiza)
+  const saveOnboardingForm = async () => {
+    setSavingOnboarding(true);
+    try {
+      if (onboardingForm) {
+        await api.patch(`/projects/onboarding-forms/${onboardingForm.id}/`, onboardingDraft);
+      } else {
+        await api.post('/projects/onboarding-forms/', { project: Number(projectId), ...onboardingDraft });
+      }
+      toast.success('Roteiro de onboarding salvo!');
+      fetchAll();
+    } catch {
+      toast.error('Erro ao salvar o roteiro de onboarding.');
+    } finally {
+      setSavingOnboarding(false);
+    }
+  };
+
+  // v32 F5: update semanal
+  const saveWeeklyUpdate = async () => {
+    if (!weeklyForm.week_start || !weeklyForm.summary.trim()) {
+      toast.error('Informe a semana e o resumo.');
+      return;
+    }
+    try {
+      await api.post('/projects/weekly-updates/', {
+        project: Number(projectId),
+        week_start: weeklyForm.week_start,
+        summary: weeklyForm.summary,
+        pending_client_items: weeklyForm.pending_client_items,
+        sent_via: weeklyForm.sent_via,
+      });
+      toast.success('Update semanal registrado!');
+      setShowWeeklyForm(false);
+      setWeeklyForm({ week_start: '', summary: '', pending_client_items: '', sent_via: '' });
+      fetchAll();
+    } catch {
+      toast.error('Erro ao registrar o update semanal.');
+    }
+  };
+
   if (loading) return (
     <div className="space-y-4">
       <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-64 animate-pulse" />
@@ -281,6 +402,8 @@ export default function ProjectDetailPage() {
     { key: 'sprints', label: `Sprints (${sprints.length})`, icon: Zap },
     { key: 'changes', label: `Mudanças (${changeRequests.length})`, icon: GitBranch },
     { key: 'environments', label: `Ambientes (${environments.length})`, icon: Server },
+    { key: 'onboarding', label: 'Onboarding', icon: ClipboardList },
+    { key: 'updates', label: `Updates (${weeklyUpdates.length})`, icon: MessageSquare },
   ];
 
   const kanbanCols = [
@@ -300,12 +423,27 @@ export default function ProjectDetailPage() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100"><Sensitive>{project.name}</Sensitive></h1>
+            <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-accent-gold/10 text-accent-gold border border-accent-gold/30">
+              {etapaLabels[project.etapa_atual] || project.etapa_atual}
+            </span>
+            {situacaoBadges[project.situacao] && (
+              <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${situacaoBadges[project.situacao].cls}`}>
+                {situacaoBadges[project.situacao].label}
+              </span>
+            )}
             <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusColors[project.status] || 'bg-gray-100 dark:bg-gray-700 text-gray-700'}`}>
               {project.status}
             </span>
           </div>
           {project.customer_name && <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5"><Sensitive>{project.customer_name}</Sensitive></p>}
         </div>
+        <button
+          onClick={() => router.push(`/projects/${project.id}/cronograma`)}
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors shrink-0"
+        >
+          <CalendarDays className="w-4 h-4" aria-hidden />
+          Game Plan
+        </button>
       </div>
 
       {/* Progress bar */}
@@ -658,6 +796,154 @@ export default function ProjectDetailPage() {
             </div>
           ))}
           {environments.length === 0 && <div className="col-span-3 text-center py-12 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-xl">Nenhum ambiente cadastrado.</div>}
+        </div>
+      )}
+
+      {/* Tab: Onboarding (v32 F5 — roteiro de mapeamento, doc 04 §3) */}
+      {activeTab === 'onboarding' && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 space-y-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100">Roteiro de mapeamento (Etapa 4)</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                7 blocos preenchidos na reunião de onboarding — base da documentação da Etapa 5.
+              </p>
+            </div>
+            <button
+              onClick={saveOnboardingForm}
+              disabled={savingOnboarding}
+              className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
+            >
+              {savingOnboarding ? 'Salvando…' : onboardingForm ? 'Salvar alterações' : 'Criar roteiro'}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {onboardingBlocks.map(block => (
+              <div key={block.key}>
+                <label htmlFor={`onb-${block.key}`} className="text-xs font-medium text-gray-600 dark:text-gray-300 block">
+                  {block.label}
+                </label>
+                <p className="text-[11px] text-gray-400 mb-1">{block.hint}</p>
+                <textarea
+                  id={`onb-${block.key}`}
+                  rows={4}
+                  className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`}
+                  value={onboardingDraft[block.key]}
+                  onChange={e => setOnboardingDraft(d => ({ ...d, [block.key]: e.target.value }))}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Updates semanais (v32 F5 — doc 04 §3) */}
+      {activeTab === 'updates' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Atualização semanal ao cliente — paralela ao desenvolvimento.
+            </p>
+            <button
+              onClick={() => setShowWeeklyForm(v => !v)}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark transition-colors"
+            >
+              <Plus className="w-4 h-4" aria-hidden />
+              Novo update
+            </button>
+          </div>
+
+          {showWeeklyForm && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="wk-start" className="text-xs font-medium text-gray-600 dark:text-gray-300">Semana (segunda-feira) *</label>
+                  <input
+                    id="wk-start" type="date" className="input-field mt-1"
+                    value={weeklyForm.week_start}
+                    onChange={e => setWeeklyForm(f => ({ ...f, week_start: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="wk-via" className="text-xs font-medium text-gray-600 dark:text-gray-300">Canal de envio</label>
+                  <select
+                    id="wk-via" className="input-field mt-1"
+                    value={weeklyForm.sent_via}
+                    onChange={e => setWeeklyForm(f => ({ ...f, sent_via: e.target.value }))}
+                  >
+                    <option value="">Não enviado ainda</option>
+                    <option value="email">E-mail</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="reuniao">Reunião</option>
+                    <option value="outro">Outro</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="wk-summary" className="text-xs font-medium text-gray-600 dark:text-gray-300">Resumo da semana *</label>
+                <textarea
+                  id="wk-summary" rows={3} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`}
+                  value={weeklyForm.summary}
+                  onChange={e => setWeeklyForm(f => ({ ...f, summary: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label htmlFor="wk-pending" className="text-xs font-medium text-gray-600 dark:text-gray-300">Pendências do cliente</label>
+                <textarea
+                  id="wk-pending" rows={2} className={`input-field mt-1 ${isDemoMode ? 'sensitive-blur' : ''}`}
+                  value={weeklyForm.pending_client_items}
+                  onChange={e => setWeeklyForm(f => ({ ...f, pending_client_items: e.target.value }))}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowWeeklyForm(false)}
+                  className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveWeeklyUpdate}
+                  className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark"
+                >
+                  Registrar update
+                </button>
+              </div>
+            </div>
+          )}
+
+          {weeklyUpdates.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 dark:text-gray-500 bg-white dark:bg-gray-800 rounded-xl">
+              Nenhum update semanal registrado.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {weeklyUpdates.map(update => (
+                <div key={update.id} className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                      Semana de {formatDate(update.week_start)}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-gray-400">
+                      {update.sent_via && (
+                        <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                          {sentViaLabels[update.sent_via] || update.sent_via}
+                        </span>
+                      )}
+                      {update.created_by_name && <span>por {update.created_by_name}</span>}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap"><Sensitive>{update.summary}</Sensitive></p>
+                  {update.pending_client_items && (
+                    <div className="mt-3 text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 rounded-lg p-3">
+                      <b>Pendências do cliente:</b>{' '}
+                      <Sensitive>{update.pending_client_items}</Sensitive>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

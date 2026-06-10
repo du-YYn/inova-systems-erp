@@ -304,6 +304,19 @@ AUTOMATION_FIN_ENTRADA_PAGA = _automation_flag('AUTOMATION_FIN_ENTRADA_PAGA')
 # F4: régua de cobrança (lembretes a vencer 3d / vencida 1d e 7d)
 AUTOMATION_FIN_REGUA = _automation_flag('AUTOMATION_FIN_REGUA')
 
+# F5: evento entrada_paga (Financeiro) -> seta Project.entrada_paga_at
+AUTOMATION_PROD_ENTRADA = _automation_flag('AUTOMATION_PROD_ENTRADA')
+
+# F5: LegalCase(contrato) assinado -> seta Project.contrato_assinado_at
+AUTOMATION_PROD_CONTRATO_ASSINADO = _automation_flag(
+    'AUTOMATION_PROD_CONTRATO_ASSINADO')
+
+# F5: LegalCase(validacao_documento) assinado -> ProjectDocument signed+baseline
+AUTOMATION_PROD_DOC_ASSINADA = _automation_flag('AUTOMATION_PROD_DOC_ASSINADA')
+
+# F5: bifurcação (graduação/implementação) -> cria RecurrenceContract
+AUTOMATION_PROD_RECORRENCIA = _automation_flag('AUTOMATION_PROD_RECORRENCIA')
+
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
 # Em produção (not DEBUG), cookies devem ser sempre Secure (HTTPS)

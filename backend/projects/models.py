@@ -41,6 +41,49 @@ class Project(models.Model):
         ('cancelled', 'Cancelado'),
     ]
 
+    # ── v32 F5 (doc 04 §1): etapa_atual substitui `status` (que vira legado;
+    # remoção só na F8). Ordem canônica do fluxo de Produção, com bifurcação
+    # por tipo após registro_entrega (fechado → graduação; recorrente →
+    # implementação) e convergência em recorrência.
+    ETAPA_CHOICES = [
+        ('etapa_3_preparacao', 'Etapa 3 · Preparação'),
+        ('etapa_4_onboarding', 'Etapa 4 · Onboarding (Dia 0)'),
+        ('etapa_5_documentacao', 'Etapa 5 · Documentação'),
+        ('etapa_6_validacao_doc', 'Etapa 6 · Validação da doc'),
+        ('etapa_7_desenvolvimento', 'Etapa 7 · Desenvolvimento'),
+        ('etapa_8_auditoria', 'Etapa 8 · Auditoria interna'),
+        ('etapa_9_apresentacao', 'Etapa 9 · Apresentação/liberação'),
+        ('homologacao', 'Homologação'),
+        ('registro_entrega', 'Registro da entrega'),
+        ('etapa_10_graduacao', 'Etapa 10 · Graduação'),
+        ('implementacao', 'Implementação'),
+        ('recorrencia', 'Recorrência'),
+    ]
+
+    # Trilho linear até a bifurcação (transitions.py usa p/ validar a ordem).
+    ETAPA_ORDER = [choice[0] for choice in ETAPA_CHOICES]
+
+    TIPO_CHOICES = [
+        ('fechado', 'Fechado'),
+        ('recorrente', 'Recorrente'),
+    ]
+
+    RECORRENCIA_TIPO_CHOICES = [
+        ('suporte_basico', 'Suporte Básico'),
+        ('operacao_continua', 'Operação Contínua'),
+    ]
+
+    SITUACAO_CHOICES = [
+        ('ativo', 'Ativo'),
+        ('em_espera', 'Em Espera'),
+        ('cancelado', 'Cancelado'),
+    ]
+
+    MODO_CHOICES = [
+        ('uteis', 'Dias úteis'),
+        ('corridos', 'Dias corridos'),
+    ]
+
     BILLING_TYPE_CHOICES = [
         ('hourly', 'Por Hora'),
         ('fixed', 'Preço Fixo'),
@@ -78,6 +121,50 @@ class Project(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='planning')
     billing_type = models.CharField(max_length=20, choices=BILLING_TYPE_CHOICES, default='hourly')
+
+    # ── v32 F5 (doc 04 §1/§2): processo de Produção — tudo aditivo ──────────
+    tipo = models.CharField(
+        max_length=12, choices=TIPO_CHOICES, blank=True, default='',
+        help_text='Fechado ou Recorrente — vem do Comercial (doc 01)',
+    )
+    etapa_atual = models.CharField(
+        max_length=30, choices=ETAPA_CHOICES, default='etapa_3_preparacao',
+    )
+    recorrencia_tipo = models.CharField(
+        max_length=20, choices=RECORRENCIA_TIPO_CHOICES, blank=True, default='',
+        help_text='Sub-campo da etapa recorrência (doc 04 §1 item 11)',
+    )
+    situacao = models.CharField(
+        max_length=12, choices=SITUACAO_CHOICES, default='ativo',
+        help_text='Estado ortogonal — projeto em espera não perde a etapa',
+    )
+
+    # Gatilho do Dia 0 (3 critérios — doc 04 §2)
+    contrato_assinado_at = models.DateTimeField(
+        null=True, blank=True, help_text='Do LegalCase(contrato) assinado')
+    entrada_paga_at = models.DateTimeField(
+        null=True, blank=True, help_text='Do Invoice da entrada (Financeiro)')
+    onboarding_realizado_at = models.DateTimeField(
+        null=True, blank=True, help_text='Da Etapa 4')
+    dia_zero = models.DateField(
+        null=True, blank=True,
+        help_text='Data do onboarding — só quando os 3 critérios ok')
+
+    # Parâmetros do Game Plan (Motor — doc 07 §2)
+    prazo_total = models.IntegerField(default=45)
+    modo = models.CharField(max_length=10, choices=MODO_CHOICES, default='uteis')
+    pct_doc = models.IntegerField(default=15)
+    pct_dev = models.IntegerField(default=50)
+    pct_aud = models.IntegerField(default=8)
+    peso_val = models.IntegerField(default=5)
+    peso_hom = models.IntegerField(default=17)
+    peso_ent = models.IntegerField(default=5)
+    reupd_fds = models.IntegerField(default=0)
+    considerar_carnaval = models.BooleanField(default=True)
+    considerar_corpus = models.BooleanField(default=True)
+    data_reuniao_validacao = models.DateField(null=True, blank=True)
+    data_reuniao_apresentacao = models.DateField(null=True, blank=True)
+    data_reuniao_graduacao = models.DateField(null=True, blank=True)
 
     start_date = models.DateField()
     end_date = models.DateField(null=True, blank=True)
@@ -388,3 +475,18 @@ class DeliveryApproval(models.Model):
 
     def __str__(self):
         return f"{self.project.name} - {self.milestone.name} ({self.status})"
+
+
+# v32 F5: entidades novas do processo de Produção (import p/ descoberta do
+# Django — definidas em models_v32.py para não inchar este arquivo).
+from .models_v32 import (  # noqa: E402,F401
+    ONBOARDING_FORM_BLOCKS,
+    PROJECT_DOCUMENT_SECTIONS,
+    OnboardingMappingForm,
+    ProjectAudit,
+    ProjectDocument,
+    RecurrenceContract,
+    ReUpdateCycle,
+    ScheduleVersion,
+    WeeklyUpdate,
+)
