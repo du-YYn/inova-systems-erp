@@ -22,6 +22,7 @@ import {
   Mail,
   Package,
   Landmark,
+  Scale,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -63,6 +64,12 @@ const navSections: NavSection[] = [
     items: [
       { href: '/crm',       label: 'CRM',        icon: Target        },
       { href: '/parceiros', label: 'Parceiros',  icon: Users2     },
+    ],
+  },
+  {
+    title: 'JURÍDICO',
+    items: [
+      { href: '/juridico',  label: 'Jurídico',   icon: Scale         },
     ],
   },
   {

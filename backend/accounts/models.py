@@ -13,7 +13,22 @@ class User(AbstractUser):
         ('partner', 'Parceiro'),
     ]
 
+    # v32 F3 (doc 08 §7.2): setores válidos para User.sectors.
+    SECTOR_CHOICES = [
+        ('comercial', 'Comercial'),
+        ('juridico', 'Jurídico'),
+        ('financeiro', 'Financeiro'),
+        ('producao', 'Produção'),
+        ('suporte', 'Suporte'),
+        ('diretoria', 'Diretoria'),
+    ]
+
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='operator')
+    # v32 F3: RBAC por setor SOBRE o role global (doc 08 §7.2).
+    # Lista de slugs (ex: ['comercial', 'juridico']). manager/operator
+    # precisam do setor na lista para ESCRITA no recurso do setor;
+    # admin ignora a matriz; viewer é leitura global.
+    sectors = models.JSONField(default=list, blank=True)
     is_2fa_enabled = models.BooleanField(default=False)
     # F3b: totp_secret agora cifrado com Fernet (ciphertext ~100 chars).
     # Use set_totp_secret()/get_totp_secret() ao inves de acessar direto.
