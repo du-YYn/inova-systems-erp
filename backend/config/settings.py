@@ -234,6 +234,10 @@ REST_FRAMEWORK = {
         # F0: health era throttle_classes=[] (sem limite). 60/min por IP
         # cobre o smoke do CD (24 req/2min) e monitores externos.
         'health': '60/minute',
+        # F1: simulação do cronograma é cálculo puro autenticado; 60/min
+        # por usuário cobre uso humano (sliders na mini-tela) sem permitir
+        # flood (STRIDE DoS, doc 08 §8.1).
+        'cronograma_simulate': '60/minute',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }

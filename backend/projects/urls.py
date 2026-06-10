@@ -8,6 +8,7 @@ from .views_extra import (
     SprintViewSet, ChangeRequestViewSet,
     ProjectEnvironmentViewSet, DeliveryApprovalViewSet,
 )
+from .views_scheduling import CronogramaSimularView
 
 router = DefaultRouter()
 router.register(r'templates', ProjectTemplateViewSet)
@@ -23,5 +24,8 @@ router.register(r'environments', ProjectEnvironmentViewSet)
 router.register(r'delivery-approvals', DeliveryApprovalViewSet)
 
 urlpatterns = [
+    # F1: simulação stateless do Game Plan (antes do router p/ não colidir)
+    path('cronograma/simular/', CronogramaSimularView.as_view(),
+         name='cronograma-simular'),
     path('', include(router.urls)),
 ]
