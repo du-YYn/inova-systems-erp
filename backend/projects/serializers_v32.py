@@ -48,10 +48,16 @@ class ProjectDocumentSerializer(serializers.ModelSerializer):
         ]
         # Assinatura/baseline só via receiver do Jurídico ou ação dedicada —
         # PATCH direto não pode forjar doc assinada (gate da Etapa 7).
+        # `version` é atribuída pelo sistema (auto-incremento por projeto).
         read_only_fields = [
-            'id', 'status', 'autentique_id', 'signed_at',
+            'id', 'version', 'status', 'autentique_id', 'signed_at',
             'is_current_baseline', 'created_by', 'created_at', 'updated_at',
         ]
+        # `version` é read-only mas tem default no model, o que faria o
+        # UniqueTogetherValidator de (project, version) validar sempre com
+        # version=1. A versão real é atribuída em perform_create; a unicidade
+        # é garantida pela constraint do banco.
+        validators = []
 
     def get_sections(self, obj):
         """As 12 seções canônicas (chaves esperadas em `content`)."""
