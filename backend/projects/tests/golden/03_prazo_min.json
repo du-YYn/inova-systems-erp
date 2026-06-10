@@ -1,0 +1,246 @@
+{
+  "scenario": "03_prazo_min",
+  "source": "inova-cockpit-v34.html",
+  "params": {
+    "prazo_total": 5,
+    "modo": "uteis",
+    "data_onboarding": "2026-06-10",
+    "pct_doc": 15,
+    "pct_dev": 50,
+    "pct_aud": 8,
+    "peso_val": 5,
+    "peso_hom": 17,
+    "peso_ent": 5,
+    "reupd_fds": 0,
+    "considerar_carnaval": true,
+    "considerar_corpus": true,
+    "data_reuniao_validacao": null,
+    "data_reuniao_apresentacao": null,
+    "data_reuniao_graduacao": null
+  },
+  "expected": {
+    "capped": true,
+    "total_gap": 0,
+    "entrega": "2026-06-17",
+    "entrega_base": "2026-06-17",
+    "fases": [
+      {
+        "key": "doc",
+        "label": "Documentação",
+        "dias": 1,
+        "pct": 15,
+        "cum_prev": 0,
+        "cum_end": 1,
+        "inicio": "2026-06-11",
+        "fim": "2026-06-11",
+        "sub_passos": [
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-11",
+            "pos": "ini",
+            "single": true,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Documentação pronta pra validar",
+            "data": "2026-06-11",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Agendar a reunião de validação com o cliente",
+            "data": "2026-06-11",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "val",
+        "label": "Validação e assinatura",
+        "dias": 1,
+        "pct": 20,
+        "cum_prev": 1,
+        "cum_end": 2,
+        "inicio": "2026-06-12",
+        "fim": "2026-06-12",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Reunião de validação com o cliente (refina ou muda)",
+            "data": "2026-06-12",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-06-12",
+            "pos": "ini",
+            "single": true,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente assina, baseline oficial",
+            "data": "2026-06-12",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "dev",
+        "label": "Desenvolvimento",
+        "dias": 2,
+        "pct": 50,
+        "cum_prev": 2,
+        "cum_end": 4,
+        "inicio": "2026-06-15",
+        "fim": "2026-06-16",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Início (quebra a documentação em fases)",
+            "data": "2026-06-15",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Desenvolvimento concluído, pronto pra auditoria",
+            "data": "2026-06-16",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "aud",
+        "label": "Auditoria interna",
+        "dias": 0,
+        "pct": 8,
+        "cum_prev": 4,
+        "cum_end": 4,
+        "inicio": "2026-06-17",
+        "fim": "2026-06-16",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Auditoria aprovada, reunião de apresentação agendada",
+            "data": "2026-06-16",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "hom",
+        "label": "Homologação",
+        "dias": 1,
+        "pct": 20,
+        "cum_prev": 4,
+        "cum_end": 5,
+        "inicio": "2026-06-17",
+        "fim": "2026-06-17",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Apresentação e liberação do acesso",
+            "data": "2026-06-17",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2026-06-17",
+            "pos": "ini",
+            "single": true,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente aprovou",
+            "data": "2026-06-17",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "ent",
+        "label": "Entrega ou Implementação",
+        "dias": 1,
+        "pct": 20,
+        "cum_prev": 5,
+        "cum_end": 6,
+        "inicio": "2026-06-18",
+        "fim": "2026-06-18",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Registro da versão entregue (release, baseline, deploy)",
+            "data": "2026-06-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Graduação (Fechado) ou subida no ambiente (Recorrente)",
+            "data": "2026-06-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Plano de recorrência definido e passagem pro suporte",
+            "data": "2026-06-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      }
+    ],
+    "reunioes": {
+      "val": {
+        "data_natural": "2026-06-12",
+        "gap": 0,
+        "marcada": false
+      },
+      "apr": {
+        "data_natural": "2026-06-17",
+        "gap": 0,
+        "marcada": false
+      },
+      "grad": {
+        "data_natural": "2026-06-18",
+        "gap": 0,
+        "marcada": false
+      }
+    },
+    "feriados": [],
+    "reupd_info": {
+      "base": 0,
+      "requested": 0,
+      "available": 0,
+      "used": 0,
+      "total": 0
+    }
+  }
+}
