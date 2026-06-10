@@ -68,6 +68,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
     project_name = serializers.SerializerMethodField()
 
+    # v32 F4: estágio do ciclo de cobrança (pré-cadastro → aguardando
+    # assinatura → cobrança ativa → paga) calculado no backend.
+    billing_cycle = serializers.SerializerMethodField()
+
     # F4.5: allow-list de chaves de payment_details expostas via API.
     # Campos fora desta lista (ex: CPF/card_last4 se algum dia forem gravados)
     # ficam invisiveis em listagens/retrieve — defense-in-depth LGPD.
@@ -75,6 +79,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         'provider_id', 'provider_code', 'activation_mode',
         'sequence', 'total_installments', 'total_months',
         'gross_charged_to_client', 'net_company_receives', 'fee_retained',
+        'precadastro_role',
     })
 
     class Meta:
@@ -87,16 +92,46 @@ class InvoiceSerializer(serializers.ModelSerializer):
                   'description', 'items', 'status', 'paid_amount', 'payment_method',
                   'payment_details', 'is_recurring', 'notes',
                   'nfse_number', 'nfse_status', 'nfse_xml_url', 'nfse_pdf_url',
+                  'precadastro_origem', 'cobranca_liberada', 'billing_cycle',
                   'created_by', 'created_by_name',
                   'created_at', 'updated_at']
         # Campos financeiros sensiveis: forca transicao via endpoints dedicados
         # (mark_paid, invoice_generator) em vez de PATCH direto. Evita bypass
         # do fluxo oficial que cria Transaction de contrapartida.
+        # v32 F4: precadastro_origem/cobranca_liberada sao campos de SISTEMA —
+        # escritos so pelas automacoes (services/signals), nunca via API.
         read_only_fields = [
             'id', 'number', 'created_by', 'created_at', 'updated_at',
             'status', 'paid_date', 'paid_amount', 'payment_details',
             'nfse_number', 'nfse_status', 'nfse_xml_url', 'nfse_pdf_url',
+            'precadastro_origem', 'cobranca_liberada',
         ]
+
+    def get_billing_cycle(self, obj):
+        """Estágio do ciclo de cobrança v32 F4 (somente receivables).
+
+        - paga: invoice quitada.
+        - cobranca_ativa: enviável (liberada ou fluxo sem pré-cadastro).
+        - aguardando_assinatura: pré-cadastro com contrato em assinatura.
+        - pre_cadastro: pré-cadastro ainda sem contrato em circulação.
+        """
+        if obj.invoice_type != 'receivable' or obj.status == 'cancelled':
+            return None
+        if obj.status == 'paid':
+            return 'paga'
+        if obj.cobranca_liberada or not obj.precadastro_origem_id:
+            return 'cobranca_ativa'
+        if obj.customer_id:
+            # Import lazy: evita acoplamento de import no startup do app.
+            from juridico.models import LegalCase
+            waiting = LegalCase.objects.filter(
+                customer_id=obj.customer_id,
+                process_type='contrato',
+                status__in=('envio_assinatura', 'aguardando_assinatura'),
+            ).exists()
+            if waiting:
+                return 'aguardando_assinatura'
+        return 'pre_cadastro'
 
     def to_representation(self, instance):
         """F4.5: filtra payment_details por allow-list antes de expor.

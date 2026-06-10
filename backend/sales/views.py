@@ -603,9 +603,21 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _mark_entry_paid(prospect, user):
-        """Marca primeira fatura A Receber como paga ao ir para produção."""
+        """Marca primeira fatura A Receber como paga ao ir para produção.
+
+        CAMINHO LEGADO (v32 F4, doc 08 §12.1): a transição para o status
+        deprecado `production` continua marcando a entrada como paga durante
+        a convivência de 1 release. O caminho novo é o evento entrada_paga
+        do Financeiro (finance/events.py, via Invoice da entrada -> paid).
+        Desativação prevista na F5.
+        """
         from finance.models import Invoice
         from django.utils import timezone
+        logger.info(
+            'CAMINHO LEGADO _mark_entry_paid: prospect %s movido para '
+            'production — substituido pelo evento entrada_paga do Financeiro '
+            '(F4); convivencia ate a F5.', prospect.id,
+        )
         inv = Invoice.objects.filter(
             invoice_type='receivable', status='pending',
             description__icontains=prospect.company_name,
