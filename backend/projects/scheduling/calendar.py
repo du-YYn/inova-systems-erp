@@ -4,7 +4,7 @@ Gauss/computus easter, fixed national + SP (9 de julho) holidays, movable
 holidays with toggles, business-day predicates and date stepping.
 """
 from datetime import date, timedelta
-from typing import Dict, Optional
+from typing import Dict
 
 # Fixed holidays: (month, day, name) — national + SP (doc 07 §4)
 FIXED_HOLIDAYS = (
