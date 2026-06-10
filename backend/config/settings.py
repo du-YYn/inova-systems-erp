@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     'support.apps.SupportConfig',
     'notifications.apps.NotificationsConfig',
     'juridico.apps.JuridicoConfig',
+    'diretoria.apps.DiretoriaConfig',
     'drf_spectacular',
 ]
 
@@ -239,6 +240,10 @@ REST_FRAMEWORK = {
         # por usuário cobre uso humano (sliders na mini-tela) sem permitir
         # flood (STRIDE DoS, doc 08 §8.1).
         'cronograma_simulate': '60/minute',
+        # F6 (doc 05 §9): canal público de chamados — 5/h por token de
+        # cliente (STRIDE DoS/Info disclosure, doc 08 §8.1). Empilha com o
+        # throttle por IP da view.
+        'public_ticket': '5/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -316,6 +321,22 @@ AUTOMATION_PROD_DOC_ASSINADA = _automation_flag('AUTOMATION_PROD_DOC_ASSINADA')
 
 # F5: bifurcação (graduação/implementação) -> cria RecurrenceContract
 AUTOMATION_PROD_RECORRENCIA = _automation_flag('AUTOMATION_PROD_RECORRENCIA')
+
+# F6: SupportTicket analisado com conclusao=inconclusivo -> cria
+# diretoria.DirectorEscalation + Notification para admins
+AUTOMATION_SUP_ESCALA = _automation_flag('AUTOMATION_SUP_ESCALA')
+
+# F6: promover PedidoUpdate -> cria Prospect(status=tech_analysis) no Comercial
+AUTOMATION_SUP_PEDIDO_UPDATE = _automation_flag('AUTOMATION_SUP_PEDIDO_UPDATE')
+
+# F6: auto-fechamento de chamados resolvidos sem retorno do cliente
+AUTOMATION_SUP_AUTOCLOSE = _automation_flag('AUTOMATION_SUP_AUTOCLOSE')
+
+# F6 (doc 05 §8): dias em `resolvido` sem retorno antes do auto-fechamento.
+try:
+    SUPPORT_AUTOCLOSE_DAYS = int(os.environ.get('SUPPORT_AUTOCLOSE_DAYS', '5'))
+except ValueError:
+    SUPPORT_AUTOCLOSE_DAYS = 5
 
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
@@ -582,6 +603,13 @@ CELERY_BEAT_SCHEDULE = {
     'dunning-reminders': {
         'task': 'finance.tasks.dunning_reminders',
         'schedule': crontab(hour=8, minute=30),
+    },
+    # v32 F6 (doc 05 §8): auto-fechamento de chamados resolvidos há mais de
+    # SUPPORT_AUTOCLOSE_DAYS dias sem retorno — diário às 07:30.
+    # Atrás da flag AUTOMATION_SUP_AUTOCLOSE (default dry_run).
+    'support-autoclose-resolved': {
+        'task': 'support.tasks.close_stale_resolved',
+        'schedule': crontab(hour=7, minute=30),
     },
 }
 

@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import SLAPolicy, SupportCategory, SupportTicket, KnowledgeBaseArticle
+from .models import (
+    SLAPolicy, SupportCategory, SupportTicket, KnowledgeBaseArticle, PedidoUpdate,
+)
 
 
 @admin.register(SLAPolicy)
@@ -23,3 +25,12 @@ class SupportTicketAdmin(admin.ModelAdmin):
 class KnowledgeBaseArticleAdmin(admin.ModelAdmin):
     list_display = ['title', 'category', 'status', 'is_public', 'views_count']
     list_filter = ['status', 'is_public']
+
+
+@admin.register(PedidoUpdate)
+class PedidoUpdateAdmin(admin.ModelAdmin):
+    list_display = ['id', 'originating_ticket', 'customer', 'status', 'prospect', 'requested_at']
+    list_filter = ['status']
+    search_fields = ['originating_ticket__number', 'customer__company_name', 'description']
+    raw_id_fields = ['originating_ticket', 'customer', 'prospect', 'created_by']
+    readonly_fields = ['requested_at', 'promoted_at']

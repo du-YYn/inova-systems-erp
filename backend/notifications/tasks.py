@@ -87,9 +87,13 @@ def check_sla_warnings():
         now = timezone.now()
         warning_threshold = now + timedelta(hours=2)
 
-        # Tickets onde o prazo de resolução está próximo (dentro de 2h)
+        # Tickets onde o prazo de resolução está próximo (dentro de 2h).
+        # F6: statuses novos do fluxo v32 + legados (convivência de release).
         at_risk = SupportTicket.objects.filter(
-            status__in=['open', 'in_progress'],
+            status__in=[
+                'aberto', 'triagem', 'analise', 'correcao',
+                'open', 'in_progress',
+            ],
             sla_resolution_deadline__isnull=False,
             sla_resolution_deadline__lte=warning_threshold,
             sla_resolution_deadline__gte=now,

@@ -43,12 +43,18 @@ class CustomerSerializer(serializers.ModelSerializer):
             "is_active",
             "source",
             "notes",
+            "public_token",
             "created_by",
             "created_by_name",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_by_name", "created_at", "updated_at"]
+        # public_token (v32 F6): gerado pelo sistema (uuid4) — read_only;
+        # equipe interna usa para montar o link do canal público de chamados.
+        read_only_fields = [
+            "id", "public_token", "created_by", "created_by_name",
+            "created_at", "updated_at",
+        ]
 
 
 class ProspectSerializer(serializers.ModelSerializer):

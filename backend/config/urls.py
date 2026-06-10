@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/v1/core/', include('core.urls')),
     path('api/v1/support/', include('support.urls')),
     path('api/v1/juridico/', include('juridico.urls')),
+    path('api/v1/diretoria/', include('diretoria.urls')),
     path('api/v1/', include('notifications.urls')),
     path('api/v1/notifications/', include('notifications.urls')),  # compat: frontend build antigo usa path duplo
 ]
