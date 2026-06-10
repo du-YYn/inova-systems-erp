@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'support.apps.SupportConfig',
     'notifications.apps.NotificationsConfig',
+    'juridico.apps.JuridicoConfig',
     'drf_spectacular',
 ]
 
@@ -269,6 +270,26 @@ ENFORCE_ADMIN_2FA = os.environ.get(
 RESET_DATA_ENABLED = DEBUG or os.environ.get(
     'RESET_DATA_ENABLED', 'false'
 ).lower() == 'true'
+
+# ─── v32: FLAGS DE AUTOMACAO CROSS-SETOR (doc 08 §11.2 R2) ────────────────────
+# Toda automacao nova nasce atras de flag por env: off | dry_run | on.
+# Default dry_run: loga (logger + log_audit) o que faria, sem efeito.
+# Kill-switch sem deploy: trocar env + restart.
+
+
+def _automation_flag(name: str, default: str = 'dry_run') -> str:
+    value = os.environ.get(name, default).strip().lower()
+    if value not in ('off', 'dry_run', 'on'):
+        logging.getLogger('django').warning(
+            'CONFIG: %s=%r invalido (esperado off|dry_run|on) — usando %r.',
+            name, value, default,
+        )
+        return default
+    return value
+
+
+# F3: ClientOnboarding submitted -> cria LegalCase(contrato, source=comercial)
+AUTOMATION_JURIDICO_CONTRATO = _automation_flag('AUTOMATION_JURIDICO_CONTRATO')
 
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
@@ -478,6 +499,7 @@ LOGGING = {
         'sales':     {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'finance':   {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'projects':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'juridico':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'audit': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
