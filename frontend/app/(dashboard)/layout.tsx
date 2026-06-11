@@ -83,7 +83,9 @@ const navSections: NavSection[] = [
   {
     title: 'FINANCEIRO',
     items: [
-      { href: '/finance',    label: 'Financeiro',  icon: DollarSign  },
+      // v32 F4b: entrada do Financeiro vira visão CRM (5 grupos do v34)
+      { href: '/financeiro', label: 'CRM Financeiro',    icon: DollarSign },
+      { href: '/finance',    label: 'Gestão Financeira', icon: Landmark   },
     ],
   },
   {
@@ -239,9 +241,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = '/login';
   };
 
-  const currentPage = allNavItems.find(
-    (item) => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)),
-  );
+  // v32 F4b: match por segmento (href + '/') para /financeiro não ativar /finance
+  const matchesNavItem = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+
+  const currentPage = allNavItems.find((item) => matchesNavItem(item.href));
 
   // Detect nested pages (e.g. /projects/123)
   const pathSegments = pathname.split('/').filter(Boolean);
@@ -284,9 +288,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                const isActive = matchesNavItem(item.href);
                 const Icon = item.icon;
                 return (
                   <Link
