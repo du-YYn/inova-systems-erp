@@ -29,7 +29,7 @@ from projects.models import (
     Project, ProjectDocument, ProjectPhase, RecurrenceContract,
     ScheduleVersion, WeeklyUpdate,
 )
-from sales.models import Customer
+from sales.models import Customer, Prospect
 
 User = get_user_model()
 
@@ -672,6 +672,79 @@ class TestLegalCaseReceivers:
         self._signed_case(customer, 'validacao_documento', project=project)
         assert not AuditLog.objects.filter(
             action='project_document_signed').exists()
+
+
+@pytest.mark.django_db
+class TestContratoAutocreatesProject:
+    """P0.4 (doc 09 §T-E2E): a assinatura do contrato CRIA o Project de
+    Produção quando não existe um pré-dev — antes era no-op silencioso."""
+
+    def _signed_contrato(self, customer, **kwargs):
+        return LegalCase.objects.create(
+            customer=customer, process_type='contrato', status='assinado',
+            signed_at=timezone.now(), **kwargs,
+        )
+
+    def test_on_creates_project_when_none_exists(
+        self, settings, customer,
+    ):
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'on'
+        assert not Project.objects.filter(customer=customer).exists()
+
+        case = self._signed_contrato(customer)
+
+        project = Project.objects.filter(customer=customer).first()
+        assert project is not None, 'Project de Produção não foi criado'
+        assert project.etapa_atual == 'agendar'
+        assert project.situacao == 'ativo'
+        assert project.contrato_assinado_at == case.signed_at
+        assert AuditLog.objects.filter(
+            action='project_autocreate_on_contrato',
+            resource_id=str(project.id),
+        ).exists()
+        assert AuditLog.objects.filter(
+            action='project_contrato_assinado', resource_id=str(project.id),
+        ).exists()
+
+    def test_created_project_inherits_tipo_from_prospect(
+        self, settings, customer, admin_user,
+    ):
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'on'
+        Prospect.objects.create(
+            customer=customer, company_name='Cliente F5 LTDA',
+            contact_name='C', source='website', status='coleta_de_dados',
+            project_type='recorrente', created_by=admin_user,
+        )
+        self._signed_contrato(customer)
+        project = Project.objects.filter(customer=customer).first()
+        assert project is not None
+        assert project.tipo == 'recorrente'
+
+    def test_idempotent_does_not_create_second_project(
+        self, settings, customer,
+    ):
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'on'
+        case = self._signed_contrato(customer)
+        case.save()  # re-save não cria outro projeto
+        assert Project.objects.filter(customer=customer).count() == 1
+
+    def test_dry_run_does_not_create_project(self, settings, customer):
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'dry_run'
+        self._signed_contrato(customer)
+        assert not Project.objects.filter(customer=customer).exists()
+        assert AuditLog.objects.filter(
+            action='project_autocreate_on_contrato_dry_run').exists()
+
+    def test_existing_predev_project_is_used_not_duplicated(
+        self, settings, customer, admin_user,
+    ):
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'on'
+        existing = make_project(
+            admin_user, customer, etapa_atual='etapa_3_preparacao')
+        self._signed_contrato(customer)
+        assert Project.objects.filter(customer=customer).count() == 1
+        existing.refresh_from_db()
+        assert existing.contrato_assinado_at is not None
 
 
 @pytest.mark.django_db

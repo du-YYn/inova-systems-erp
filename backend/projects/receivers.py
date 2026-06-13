@@ -164,19 +164,153 @@ def _resolve_project_for_case(case, etapas):
     )
 
 
+def _resolve_created_by_for_case(case):
+    """Resolve um usuário não-nulo para Project.created_by (PROTECT, NOT NULL).
+
+    Ordem: created_by do caso → da proposta → do onboarding → do prospect do
+    customer → primeiro admin ativo → qualquer usuário ativo. Retorna None só
+    se não houver NENHUM usuário (caller aborta a criação sem 500).
+    """
+    candidates = [
+        getattr(case, 'created_by', None),
+        getattr(getattr(case, 'proposal', None), 'created_by', None),
+        getattr(getattr(case, 'onboarding', None), 'created_by', None),
+    ]
+    for user in candidates:
+        if user is not None:
+            return user
+    # Prospect mais recente do customer (tem created_by).
+    if case.customer_id:
+        prospect = (
+            case.customer.prospects.select_related('created_by')
+            .order_by('-created_at')
+            .first()
+        )
+        if prospect and prospect.created_by_id:
+            return prospect.created_by
+    # Fallback: admin ativo, depois qualquer usuário ativo.
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    return (
+        User.objects.filter(is_active=True, role='admin').order_by('id').first()
+        or User.objects.filter(is_active=True).order_by('id').first()
+    )
+
+
+def _create_predev_project(case):
+    """P0.4 (doc 09 §T-E2E): cria o Project de Produção na assinatura do contrato.
+
+    Sem um Project pré-dev, o handshake Jurídico → Produção era no-op silencioso
+    (o card de Produção nunca nascia). Cria um na etapa "agendar" (1ª — crava o
+    Dia 0 provisório), com `tipo` derivado da proposta/prospect (fechado/
+    recorrente). Idempotente: chamado só quando _resolve_project_for_case não
+    achou nada. Atrás da flag CONTRATO_FLAG (tratada no caller).
+
+    Returns: o Project criado, ou None se faltar customer/usuário.
+    """
+    customer = case.customer
+    if customer is None:
+        logger.warning(
+            'contrato_assinado: LegalCase %s sem customer — Project de Produção '
+            'não criado.', case.id,
+        )
+        return None
+
+    created_by = _resolve_created_by_for_case(case)
+    if created_by is None:
+        logger.warning(
+            'contrato_assinado: LegalCase %s sem usuário resolvível para '
+            'created_by — Project de Produção não criado.', case.id,
+        )
+        return None
+
+    # tipo (fechado/recorrente): da proposta vinculada -> prospect -> default.
+    tipo = ''
+    proposal = getattr(case, 'proposal', None)
+    prospect = None
+    if customer.pk:
+        prospect = customer.prospects.order_by('-created_at').first()
+    for source in (prospect,):
+        pt = getattr(source, 'project_type', '') if source else ''
+        if pt in ('fechado', 'recorrente'):
+            tipo = pt
+            break
+
+    from .models import Project
+
+    name = (
+        f'{customer.company_name or customer.name or "Cliente"} — Produção'
+    )
+    project = Project.objects.create(
+        name=name,
+        customer=customer,
+        project_type='custom_dev',
+        tipo=tipo,
+        etapa_atual='agendar',
+        situacao='ativo',
+        start_date=timezone.now().date(),
+        created_by=created_by,
+        notes=(
+            f'Criado automaticamente na assinatura do contrato '
+            f'(LegalCase #{case.id}).'
+        ),
+    )
+    log_audit(
+        None, 'project_autocreate_on_contrato', 'project', project.id,
+        details=(
+            f'Project de Produção #{project.id} criado na assinatura do '
+            f'contrato (LegalCase {case.id}, customer {customer.id}).'
+        ),
+        new_value={
+            'project': project.id, 'customer': customer.id,
+            'legal_case': case.id, 'etapa_atual': 'agendar', 'tipo': tipo,
+        },
+    )
+    logger.info(
+        'contrato_assinado: Project %s criado para customer %s (LegalCase %s).',
+        project.id, customer.id, case.id,
+    )
+    return project
+
+
 def _on_contrato_assinado(case):
-    """LegalCase(contrato) assinado → Project.contrato_assinado_at."""
+    """LegalCase(contrato) assinado → Project.contrato_assinado_at.
+
+    P0.4: se não existir Project pré-dev do customer, CRIA um (etapa "agendar")
+    antes de marcar a assinatura — o card de Produção precisa nascer aqui.
+    """
     flag = _get_flag(CONTRATO_FLAG)
     if flag == 'off':
         return
 
     project = _resolve_project_for_case(case, _PRE_DEV_ETAPAS)
     if project is None:
-        logger.info(
-            'contrato_assinado: LegalCase %s sem projeto pré-dev do customer '
-            '%s — nada a fazer.', case.id, case.customer_id,
-        )
-        return
+        if flag == 'dry_run':
+            logger.info(
+                'DRY_RUN %s: criaria Project de Produção (etapa agendar) e '
+                'setaria contrato_assinado_at para o customer %s (LegalCase '
+                '%s). Sem efeito.',
+                CONTRATO_FLAG, case.customer_id, case.id,
+            )
+            log_audit(
+                None, 'project_autocreate_on_contrato_dry_run', 'project',
+                details=(
+                    f'DRY_RUN {CONTRATO_FLAG}: criaria Project de Produção + '
+                    f'contrato_assinado_at (LegalCase {case.id}).'
+                ),
+                new_value={
+                    'customer': case.customer_id, 'legal_case': case.id,
+                    'dry_run': True,
+                },
+            )
+            return
+        project = _create_predev_project(case)
+        if project is None:
+            logger.info(
+                'contrato_assinado: LegalCase %s — Project de Produção não '
+                'pôde ser criado; nada a fazer.', case.id,
+            )
+            return
     if project.contrato_assinado_at:
         logger.info(
             'contrato_assinado: project %s já marcado — ignorando '
