@@ -122,8 +122,20 @@ class TestLegalCaseModel:
         assert 'Aditivo' in str(case)
         assert 'Preparação' in str(case)
 
-    def test_status_order_matches_choices(self):
-        assert LegalCase.STATUS_ORDER == [c[0] for c in LegalCase.STATUS_CHOICES]
+    def test_status_order_is_subset_of_choices(self):
+        # Após v32 (doc 09 06/07) há colunas por modalidade — as ordens são
+        # subconjuntos das choices (que agregam todas as modalidades).
+        valid = {c[0] for c in LegalCase.STATUS_CHOICES}
+        for order in (
+            LegalCase.STATUS_ORDER,
+            LegalCase.STATUS_ORDER_ADITIVO,
+            LegalCase.STATUS_ORDER_VALIDACAO,
+        ):
+            assert set(order).issubset(valid)
+        # O fluxo do Contrato permanece o original (retrocompatível).
+        assert LegalCase.STATUS_ORDER == [
+            'preparacao', 'envio_assinatura', 'aguardando_assinatura', 'assinado',
+        ]
 
 
 # ─── Criação via API ─────────────────────────────────────────────────────────
