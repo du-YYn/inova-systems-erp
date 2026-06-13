@@ -517,8 +517,11 @@ class TestMarcarOnboardingRealizado:
 @pytest.mark.django_db
 class TestEntradaPagaReceiver:
     def test_dry_run_default_logs_without_effect(
-        self, project, admin_user, customer,
+        self, settings, project, admin_user, customer,
     ):
+        # Higiene: pin dry_run para a suite ficar verde independente do env
+        # (AUTOMATION_PROD_* pode estar 'on' no ambiente local/CI).
+        settings.AUTOMATION_PROD_ENTRADA = 'dry_run'
         invoice = make_invoice(admin_user, customer)
         receivers.entrada_paga(invoice)
         project.refresh_from_db()
@@ -587,7 +590,9 @@ class TestLegalCaseReceivers:
             status='assinado', signed_at=timezone.now(), **kwargs,
         )
 
-    def test_contrato_dry_run_default_no_effect(self, project, customer):
+    def test_contrato_dry_run_default_no_effect(self, settings, project, customer):
+        # Higiene: pin dry_run (env pode ter AUTOMATION_PROD_CONTRATO_ASSINADO='on').
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'dry_run'
         self._signed_case(customer, 'contrato')
         project.refresh_from_db()
         assert project.contrato_assinado_at is None
@@ -653,8 +658,10 @@ class TestLegalCaseReceivers:
         ).exists()
 
     def test_validacao_dry_run_no_effect(
-        self, project, customer, admin_user,
+        self, settings, project, customer, admin_user,
     ):
+        # Higiene: pin dry_run (env pode ter AUTOMATION_PROD_DOC_ASSINADA='on').
+        settings.AUTOMATION_PROD_DOC_ASSINADA = 'dry_run'
         pending = ProjectDocument.objects.create(
             project=project, version=1, status='pending_signature',
             created_by=admin_user,
@@ -755,8 +762,10 @@ class TestBifurcationRecurrenceContract:
         project.save(update_fields=['etapa_atual', 'tipo'])
 
     def test_dry_run_default_creates_nothing(
-        self, producao_client, project,
+        self, settings, producao_client, project,
     ):
+        # Higiene: pin dry_run (env pode ter AUTOMATION_PROD_RECORRENCIA='on').
+        settings.AUTOMATION_PROD_RECORRENCIA = 'dry_run'
         self._deliver(project, 'fechado')
         producao_client.post(
             f'{PROJECTS_URL}{project.id}/set-etapa/',
