@@ -6,7 +6,28 @@ de ação POST /transition/ — nunca por PATCH direto de campo.
 """
 from rest_framework import serializers
 
-from .models import LegalCase
+from .models import LegalCase, LegalCaseEvent
+
+
+class LegalCaseEventSerializer(serializers.ModelSerializer):
+    """Item da timeline do card (doc 09 item 06) — read-only."""
+    event_type_display = serializers.CharField(
+        source='get_event_type_display', read_only=True,
+    )
+    created_by_name = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = LegalCaseEvent
+        fields = [
+            'id', 'event_type', 'event_type_display',
+            'from_status', 'to_status', 'from_process_type', 'to_process_type',
+            'autentique_link', 'signed_at', 'description', 'metadata',
+            'created_by', 'created_by_name', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.full_name if obj.created_by else 'Automação'
 
 
 class LegalCaseSerializer(serializers.ModelSerializer):
@@ -15,22 +36,29 @@ class LegalCaseSerializer(serializers.ModelSerializer):
     process_type_display = serializers.CharField(source='get_process_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.SerializerMethodField(read_only=True)
+    # Painéis read-only do card (doc 09 item 05): dados do cliente (onboarding)
+    # + termos da proposta. Timeline de movimentação (item 06).
+    onboarding_data = serializers.SerializerMethodField(read_only=True)
+    proposal_data = serializers.SerializerMethodField(read_only=True)
+    events = LegalCaseEventSerializer(many=True, read_only=True)
 
     class Meta:
         model = LegalCase
         fields = [
             'id', 'customer', 'customer_name', 'project', 'project_name',
+            'onboarding', 'onboarding_data', 'proposal', 'proposal_data',
             'process_type', 'process_type_display', 'status', 'status_display',
             'source', 'autentique_id', 'autentique_link', 'signed_at',
             'notes', 'attachment', 'created_by', 'created_by_name',
-            'created_at', 'updated_at',
+            'events', 'created_at', 'updated_at',
         ]
         # status muda apenas via POST /transition/ (validação de ordem +
         # auditoria). Campos Autentique/assinatura são definidos pelo fluxo
-        # de transição (e pelo webhook HMAC na F7) — nunca por PATCH.
+        # de transição (e pelo webhook HMAC na F7) — nunca por PATCH. Os
+        # vínculos onboarding/proposal são setados pela automação/produtor.
         read_only_fields = [
             'id', 'status', 'autentique_id', 'autentique_link', 'signed_at',
-            'created_by', 'created_at', 'updated_at',
+            'onboarding', 'proposal', 'created_by', 'created_at', 'updated_at',
         ]
 
     def get_customer_name(self, obj):
@@ -40,6 +68,44 @@ class LegalCaseSerializer(serializers.ModelSerializer):
 
     def get_created_by_name(self, obj):
         return obj.created_by.full_name if obj.created_by else 'Automação'
+
+    def get_onboarding_data(self, obj):
+        """📋 Dados do Cliente (do onboarding) — painel read-only do card."""
+        ob = obj.onboarding
+        if ob is None:
+            return None
+        return {
+            'id': ob.id,
+            'status': ob.status,
+            'company_legal_name': ob.company_legal_name,
+            'company_cnpj': ob.company_cnpj,
+            'company_city': ob.company_city,
+            'company_state': ob.company_state,
+            'rep_full_name': ob.rep_full_name,
+            'rep_cpf': ob.rep_cpf,
+            'rep_marital_status': ob.rep_marital_status,
+            'rep_profession': ob.rep_profession,
+            'finance_contact_name': ob.finance_contact_name,
+            'finance_contact_email': ob.finance_contact_email,
+            'finance_contact_phone': ob.finance_contact_phone,
+            'submitted_at': ob.submitted_at,
+        }
+
+    def get_proposal_data(self, obj):
+        """📄 Proposta fechada (da proposal) — painel read-only do card."""
+        p = obj.proposal
+        if p is None:
+            return None
+        return {
+            'id': p.id,
+            'number': p.number,
+            'title': p.title,
+            'status': p.status,
+            'total_value': str(p.total_value),
+            'billing_type': p.billing_type,
+            'proposal_file': p.proposal_file.url if p.proposal_file else None,
+            'public_token': str(p.public_token) if p.public_token else None,
+        }
 
 
 class LegalCaseTransitionSerializer(serializers.Serializer):
