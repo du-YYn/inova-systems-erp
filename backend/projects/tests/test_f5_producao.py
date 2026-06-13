@@ -116,7 +116,11 @@ def make_project(user, customer=None, **kwargs):
 
 @pytest.fixture
 def project(admin_user, customer):
-    return make_project(admin_user, customer)
+    # v32 ajustes: a 1ª etapa passou a ser 'agendar' (default do model). As
+    # suites de transição/gate abaixo testam o fluxo a partir de Planejamento,
+    # então a fixture começa em etapa_3_preparacao explicitamente; o
+    # comportamento da nova etapa 'agendar' é coberto em TestEtapaAgendar.
+    return make_project(admin_user, customer, etapa_atual='etapa_3_preparacao')
 
 
 def make_signed_baseline(project, user):
@@ -194,7 +198,8 @@ class TestDataMigrationStatusToEtapa:
         project.refresh_from_db()
         assert project.situacao == expected_situacao
         # etapa fica no default — não sabemos onde o projeto parou
-        assert project.etapa_atual == 'etapa_3_preparacao'
+        # (v32 ajustes: o default do model é a nova 1ª etapa 'agendar')
+        assert project.etapa_atual == 'agendar'
 
     def test_backward_is_noop_and_status_intact(self, admin_user):
         from django.apps import apps
@@ -1086,3 +1091,345 @@ class TestFinanceEventIntegration:
         events_called(invoice)
         project.refresh_from_db()
         assert project.entrada_paga_at is not None
+
+
+# ─── v32 ajustes (doc 09 item 08 + doc 10) ──────────────────────────────────
+
+@pytest.mark.django_db
+class TestEtapaChoicesV32:
+    """Etapa 'agendar' aditiva + labels atualizados (chaves intocadas)."""
+
+    def test_agendar_is_first_choice_and_default(self):
+        keys = [k for k, _ in Project.ETAPA_CHOICES]
+        assert keys[0] == 'agendar'
+        assert Project._meta.get_field('etapa_atual').default == 'agendar'
+
+    def test_legacy_keys_preserved(self):
+        keys = {k for k, _ in Project.ETAPA_CHOICES}
+        # nenhuma chave legada foi renomeada/removida (produção, só aditivo)
+        for legacy in (
+            'etapa_3_preparacao', 'etapa_4_onboarding', 'etapa_5_documentacao',
+            'etapa_6_validacao_doc', 'etapa_7_desenvolvimento',
+            'etapa_8_auditoria', 'etapa_9_apresentacao', 'homologacao',
+            'registro_entrega', 'etapa_10_graduacao', 'implementacao',
+            'recorrencia',
+        ):
+            assert legacy in keys
+
+    def test_labels_updated(self):
+        labels = dict(Project.ETAPA_CHOICES)
+        assert labels['etapa_3_preparacao'] == 'Planejamento'
+        assert labels['etapa_9_apresentacao'] == 'Reunião de Apresentação'
+        assert labels['homologacao'] == 'Janela de teste'
+        assert labels['registro_entrega'] == 'Re-Update'
+        assert labels['etapa_10_graduacao'] == 'Homologação'
+        assert labels['implementacao'] == 'Concluído'
+        assert labels['recorrencia'] == 'Implementado'
+
+
+@pytest.mark.django_db
+class TestEtapaAgendar:
+    """Nova 1ª etapa + âncora provisória do cronograma (Visão 2)."""
+
+    def test_new_project_starts_in_agendar(self, admin_user, customer):
+        project = make_project(admin_user, customer)
+        assert project.etapa_atual == 'agendar'
+
+    def test_set_onboarding_agendado_sets_anchor_and_advances(
+        self, producao_client, admin_user, customer,
+    ):
+        project = make_project(admin_user, customer)  # etapa 'agendar'
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/set-onboarding-agendado/',
+            {'onboarding_agendado_em': '2026-07-01'},
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        project.refresh_from_db()
+        assert project.onboarding_agendado_em is not None
+        # avança 'agendar' → Planejamento
+        assert project.etapa_atual == 'etapa_3_preparacao'
+        assert AuditLog.objects.filter(
+            action='project_onboarding_agendado',
+            resource_id=str(project.id),
+        ).exists()
+
+    def test_set_onboarding_agendado_requires_value(
+        self, producao_client, admin_user, customer,
+    ):
+        project = make_project(admin_user, customer)
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/set-onboarding-agendado/', {},
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_onboarding_agendado_em_is_read_only_on_patch(
+        self, producao_client, admin_user, customer,
+    ):
+        project = make_project(admin_user, customer)
+        producao_client.patch(
+            f'{PROJECTS_URL}{project.id}/',
+            {'onboarding_agendado_em': '2026-07-01T12:00:00Z'},
+            format='json',
+        )
+        project.refresh_from_db()
+        assert project.onboarding_agendado_em is None  # read_only ignorado
+
+    def test_cronograma_preview_uses_provisional_anchor(
+        self, producao_client, admin_user, customer,
+    ):
+        """Sem dia_zero, o cronograma usa onboarding_agendado_em (preview)."""
+        project = make_project(admin_user, customer)
+        project.onboarding_agendado_em = timezone.make_aware(
+            timezone.datetime(2026, 7, 1, 12, 0))
+        project.save(update_fields=['onboarding_agendado_em'])
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/cronograma/', {},
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data['is_preview'] is True
+        version = ScheduleVersion.objects.get(project=project)
+        assert version.params['data_onboarding'] == '2026-07-01'
+
+    def test_cronograma_dia_zero_overrides_preview(
+        self, producao_client, admin_user, customer,
+    ):
+        project = make_project(admin_user, customer)
+        project.onboarding_agendado_em = timezone.make_aware(
+            timezone.datetime(2026, 7, 1, 12, 0))
+        project.dia_zero = date(2026, 6, 20)
+        project.save(update_fields=['onboarding_agendado_em', 'dia_zero'])
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/cronograma/', {},
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data['is_preview'] is False
+        version = ScheduleVersion.objects.get(project=project)
+        assert version.params['data_onboarding'] == '2026-06-20'
+
+
+@pytest.mark.django_db
+class TestProjectEtapaActions:
+    """Checklist de ações por etapa no card (doc 10)."""
+
+    URL = '/api/v1/projects/etapa-actions/'
+
+    def test_seed_creates_default_actions(self, producao_client, project):
+        response = producao_client.post(
+            f'{self.URL}seed/', {'project': project.id}, format='json',
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        from projects.models import ProjectEtapaAction
+        # 'agendar' tem 1 ação; etapas a definir (9/12/13) não semeiam nada
+        agendar_actions = ProjectEtapaAction.objects.filter(
+            project=project, etapa='agendar')
+        assert agendar_actions.count() == 1
+        assert not ProjectEtapaAction.objects.filter(
+            project=project, etapa='etapa_9_apresentacao').exists()
+        assert not ProjectEtapaAction.objects.filter(
+            project=project, etapa='recorrencia').exists()
+
+    def test_seed_is_idempotent(self, producao_client, project):
+        producao_client.post(
+            f'{self.URL}seed/', {'project': project.id}, format='json')
+        from projects.models import ProjectEtapaAction
+        count_first = ProjectEtapaAction.objects.filter(project=project).count()
+        response = producao_client.post(
+            f'{self.URL}seed/', {'project': project.id}, format='json')
+        assert response.data['seeded'] == 0
+        assert ProjectEtapaAction.objects.filter(
+            project=project).count() == count_first
+
+    def test_seed_single_etapa(self, producao_client, project):
+        response = producao_client.post(
+            f'{self.URL}seed/',
+            {'project': project.id, 'etapa': 'etapa_3_preparacao'},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        from projects.models import ProjectEtapaAction
+        etapas = set(ProjectEtapaAction.objects.filter(
+            project=project).values_list('etapa', flat=True))
+        assert etapas == {'etapa_3_preparacao'}
+
+    def test_toggle_marks_done_with_who_and_when(
+        self, producao_client, producao_user, project,
+    ):
+        from projects.models import ProjectEtapaAction
+        action_obj = ProjectEtapaAction.objects.create(
+            project=project, etapa='agendar', ordem=1, texto='X')
+        response = producao_client.post(f'{self.URL}{action_obj.id}/toggle/')
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['feito'] is True
+        assert response.data['feito_por'] == producao_user.id
+        assert response.data['feito_em'] is not None
+        # toggle de novo desmarca
+        response = producao_client.post(f'{self.URL}{action_obj.id}/toggle/')
+        assert response.data['feito'] is False
+        assert response.data['feito_em'] is None
+
+    def test_data_prevista_is_read_only(self, producao_client, project):
+        response = producao_client.post(
+            self.URL,
+            {'project': project.id, 'etapa': 'agendar', 'ordem': 1,
+             'texto': 'Ação', 'data_prevista': '2026-07-01'},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.data['data_prevista'] is None  # read_only ignorado
+
+    def test_filter_by_project_and_etapa(self, producao_client, project):
+        producao_client.post(
+            f'{self.URL}seed/', {'project': project.id}, format='json')
+        response = producao_client.get(
+            f'{self.URL}?project={project.id}&etapa=agendar')
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data.get('results', response.data)
+        assert all(a['etapa'] == 'agendar' for a in results)
+        assert len(results) == 1
+
+
+@pytest.mark.django_db
+class TestValidacaoProducer:
+    """Producer Produção → Jurídico: doc enviada pra validação cria LegalCase."""
+
+    DOCS_URL = '/api/v1/projects/documents/'
+
+    def test_dry_run_default_creates_no_case(
+        self, settings, producao_client, project, admin_user,
+    ):
+        settings.AUTOMATION_PROD_VALIDACAO_JURIDICO = 'dry_run'
+        document = ProjectDocument.objects.create(
+            project=project, version=1, status='draft', created_by=admin_user)
+        producao_client.post(f'{self.DOCS_URL}{document.id}/submit/')
+        assert not LegalCase.objects.filter(
+            process_type='validacao_documento').exists()
+        assert AuditLog.objects.filter(
+            action='legal_case_validacao_producer_dry_run').exists()
+
+    def test_on_creates_validacao_case(
+        self, settings, producao_client, project, customer, admin_user,
+    ):
+        settings.AUTOMATION_PROD_VALIDACAO_JURIDICO = 'on'
+        document = ProjectDocument.objects.create(
+            project=project, version=1, status='draft', created_by=admin_user)
+        producao_client.post(f'{self.DOCS_URL}{document.id}/submit/')
+        case = LegalCase.objects.get(
+            process_type='validacao_documento', project=project)
+        assert case.customer == customer
+        assert case.source == 'producao'
+        assert case.status == 'preparacao'
+        assert case.events.filter(event_type='created').exists()
+
+    def test_on_is_idempotent(
+        self, settings, producao_client, project, admin_user,
+    ):
+        settings.AUTOMATION_PROD_VALIDACAO_JURIDICO = 'on'
+        doc1 = ProjectDocument.objects.create(
+            project=project, version=1, status='draft', created_by=admin_user)
+        producao_client.post(f'{self.DOCS_URL}{doc1.id}/submit/')
+        doc2 = ProjectDocument.objects.create(
+            project=project, version=2, status='draft', created_by=admin_user)
+        producao_client.post(f'{self.DOCS_URL}{doc2.id}/submit/')
+        assert LegalCase.objects.filter(
+            process_type='validacao_documento', project=project).count() == 1
+
+    def test_off_creates_nothing(
+        self, settings, producao_client, project, admin_user,
+    ):
+        settings.AUTOMATION_PROD_VALIDACAO_JURIDICO = 'off'
+        document = ProjectDocument.objects.create(
+            project=project, version=1, status='draft', created_by=admin_user)
+        producao_client.post(f'{self.DOCS_URL}{document.id}/submit/')
+        assert not LegalCase.objects.filter(
+            process_type='validacao_documento').exists()
+
+
+@pytest.mark.django_db
+class TestSolicitarMudancaProducer:
+    """Botão Solicitar Mudança: ChangeRequest sempre; LegalCase(aditivo) c/ flag."""
+
+    def _payload(self):
+        return {'title': 'Nova tela', 'description': 'Adicionar relatório',
+                'impact_hours': 10, 'impact_value': '1500.00'}
+
+    def test_creates_change_request_always(
+        self, settings, producao_client, project,
+    ):
+        settings.AUTOMATION_PROD_ADITIVO_JURIDICO = 'off'
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            self._payload(), format='json',
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        from projects.models import ChangeRequest
+        cr = ChangeRequest.objects.get(project=project)
+        assert cr.title == 'Nova tela'
+        assert cr.status == 'pending'
+        # flag off: nenhum LegalCase aditivo
+        assert response.data['legal_case_id'] is None
+        assert not LegalCase.objects.filter(process_type='aditivo').exists()
+
+    def test_dry_run_creates_cr_but_no_case(
+        self, settings, producao_client, project,
+    ):
+        settings.AUTOMATION_PROD_ADITIVO_JURIDICO = 'dry_run'
+        producao_client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            self._payload(), format='json',
+        )
+        from projects.models import ChangeRequest
+        assert ChangeRequest.objects.filter(project=project).count() == 1
+        assert not LegalCase.objects.filter(process_type='aditivo').exists()
+        assert AuditLog.objects.filter(
+            action='legal_case_aditivo_producer_dry_run').exists()
+
+    def test_on_creates_cr_and_aditivo_case(
+        self, settings, producao_client, project, customer,
+    ):
+        settings.AUTOMATION_PROD_ADITIVO_JURIDICO = 'on'
+        settings.AUTOMATION_FIN_ADITIVO = 'off'  # isola o pré-cadastro F4
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            self._payload(), format='json',
+        )
+        assert response.data['legal_case_id'] is not None
+        case = LegalCase.objects.get(process_type='aditivo', project=project)
+        assert case.customer == customer
+        assert case.status == 'nova_solicitacao'
+        assert case.source == 'producao'
+
+    def test_on_links_original_contract(
+        self, settings, producao_client, project, customer,
+    ):
+        settings.AUTOMATION_PROD_ADITIVO_JURIDICO = 'on'
+        settings.AUTOMATION_FIN_ADITIVO = 'off'
+        contrato = LegalCase.objects.create(
+            customer=customer, process_type='contrato', status='assinado',
+            signed_at=timezone.now(),
+        )
+        producao_client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            self._payload(), format='json',
+        )
+        case = LegalCase.objects.get(process_type='aditivo', project=project)
+        event = case.events.get(event_type='created')
+        assert event.metadata['contrato_original'] == contrato.id
+
+    def test_requires_title_and_description(
+        self, producao_client, project,
+    ):
+        response = producao_client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            {'title': 'só título'}, format='json',
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_suporte_operator_cannot_solicitar_mudanca(
+        self, suporte_user, project,
+    ):
+        client = make_client(suporte_user)
+        response = client.post(
+            f'{PROJECTS_URL}{project.id}/solicitar-mudanca/',
+            self._payload(), format='json',
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
