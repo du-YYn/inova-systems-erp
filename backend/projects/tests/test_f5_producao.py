@@ -753,6 +753,43 @@ class TestContratoAutocreatesProject:
         existing.refresh_from_db()
         assert existing.contrato_assinado_at is not None
 
+    def test_created_by_is_system_user_not_arbitrary_admin(
+        self, settings, db,
+    ):
+        """M4 (code review): sem candidato de usuário (caso/proposta/onboarding/
+        prospect), o Project nasce com o USUÁRIO DE SERVIÇO dedicado, não com
+        um admin real arbitrário. O usuário de serviço é inativo p/ login."""
+        from accounts.services import SYSTEM_USERNAME, get_system_user
+
+        # admin real existe, mas NÃO deve ser usado como autor da automação.
+        real_admin = User.objects.create_user(
+            username='real_admin_m4', email='real@m4.com',
+            password='pass12345', role='admin',
+        )
+        # Customer criado pelo admin real, sem prospect.
+        cust = Customer.objects.create(
+            company_name='M4 LTDA', email='m4@cli.com', created_by=real_admin,
+        )
+        settings.AUTOMATION_PROD_CONTRATO_ASSINADO = 'on'
+        self._signed_contrato(cust)
+
+        project = Project.objects.filter(customer=cust).first()
+        assert project is not None
+        system = get_system_user()
+        assert project.created_by_id == system.id
+        assert project.created_by.username == SYSTEM_USERNAME
+        assert project.created_by.is_active is False
+        assert project.created_by_id != real_admin.id
+
+    def test_get_system_user_is_idempotent(self, db):
+        from accounts.services import get_system_user
+
+        u1 = get_system_user()
+        u2 = get_system_user()
+        assert u1.id == u2.id
+        assert not u1.has_usable_password()
+        assert User.objects.filter(username='system').count() == 1
+
 
 @pytest.mark.django_db
 class TestBifurcationRecurrenceContract:
@@ -1124,7 +1161,10 @@ class TestOnboardingFormAndWeeklyUpdate:
 class TestSectorRBAC:
     WEEKLY_URL = '/api/v1/projects/weekly-updates/'
 
-    def test_operator_without_sector_cannot_write(self, db, project):
+    def test_operator_without_sector_falls_back_to_role(self, db, project):
+        """H2 (code review): operador SEM sectors cai no comportamento legado
+        role-based (escreve como operator) — não é trancado no deploy do RBAC
+        por setor numa base de produção sem o campo `sectors`."""
         user = User.objects.create_user(
             username='semsetor_f5', email='semsetor@f5test.com',
             password='x_pass_123', role='operator', sectors=[],
@@ -1133,7 +1173,7 @@ class TestSectorRBAC:
         response = client.post(self.WEEKLY_URL, {
             'project': project.id, 'week_start': '2026-06-08', 'summary': 'x',
         })
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_201_CREATED, response.data
 
     def test_suporte_operator_reads_but_cannot_write(
         self, suporte_user, project,

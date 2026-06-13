@@ -168,8 +168,14 @@ def _resolve_created_by_for_case(case):
     """Resolve um usuário não-nulo para Project.created_by (PROTECT, NOT NULL).
 
     Ordem: created_by do caso → da proposta → do onboarding → do prospect do
-    customer → primeiro admin ativo → qualquer usuário ativo. Retorna None só
-    se não houver NENHUM usuário (caller aborta a criação sem 500).
+    customer → USUÁRIO DE SERVIÇO dedicado ("system", inativo).
+
+    M4 (code review): antes o último fallback era "primeiro admin ativo" — um
+    admin real, arbitrário, que ficava como autor de um efeito de automação
+    (poluindo a trilha de auditoria e podendo, no futuro, bloquear o delete
+    daquele admin por PROTECT). Agora cai num usuário de serviço rotulado e
+    inativo-para-login (accounts.services.get_system_user), que sempre existe
+    (get_or_create). Nunca retorna None.
     """
     candidates = [
         getattr(case, 'created_by', None),
@@ -188,13 +194,9 @@ def _resolve_created_by_for_case(case):
         )
         if prospect and prospect.created_by_id:
             return prospect.created_by
-    # Fallback: admin ativo, depois qualquer usuário ativo.
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-    return (
-        User.objects.filter(is_active=True, role='admin').order_by('id').first()
-        or User.objects.filter(is_active=True).order_by('id').first()
-    )
+    # Fallback dedicado: usuário de serviço (rotulado, inativo p/ login).
+    from accounts.services import get_system_user
+    return get_system_user()
 
 
 def _create_predev_project(case):
