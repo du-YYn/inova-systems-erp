@@ -113,6 +113,7 @@ class ProjectSerializer(serializers.ModelSerializer):
                   'phases', 'milestones', 'total_hours', 'total_logged',
                   # v32 F5 — processo de Produção (doc 04 §2)
                   'tipo', 'etapa_atual', 'recorrencia_tipo', 'situacao',
+                  'onboarding_agendado_em',
                   'contrato_assinado_at', 'entrada_paga_at',
                   'onboarding_realizado_at', 'dia_zero',
                   # v32 F5 — parâmetros do Game Plan (doc 07 §2)
@@ -127,6 +128,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         # direto não pode forjar critério do gate (STRIDE Tampering).
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at',
                             'etapa_atual', 'recorrencia_tipo', 'situacao',
+                            'onboarding_agendado_em',
                             'contrato_assinado_at', 'entrada_paga_at',
                             'onboarding_realizado_at', 'dia_zero']
 

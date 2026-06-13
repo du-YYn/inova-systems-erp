@@ -220,6 +220,44 @@ def set_situacao(project, nova: str, user=None, request=None):
     return project
 
 
+def set_onboarding_agendado(project, *, when, user=None, request=None):
+    """Etapa "agendar": crava a reunião de Onboarding AGENDADA (âncora
+    provisória do cronograma — Visão 2, doc 09 item 08).
+
+    `when` (datetime): data/hora da reunião agendada. Seta
+    `onboarding_agendado_em` e, se o projeto ainda está em "agendar", avança
+    para "etapa_3_preparacao" (Planejamento). Distinto do Dia 0 confirmado
+    (maybe_set_dia_zero), que só nasce quando o onboarding ACONTECE.
+    """
+    if when is None:
+        raise ValidationError(
+            {'onboarding_agendado_em': 'Informe a data/hora da reunião agendada.'})
+
+    old = project.onboarding_agendado_em
+    project.onboarding_agendado_em = when
+    project.save(update_fields=['onboarding_agendado_em', 'updated_at'])
+
+    log_audit(
+        user, 'project_onboarding_agendado', 'project', project.id,
+        details=(
+            f'Reunião de Onboarding agendada para {timezone.localdate(when)} — '
+            f'âncora provisória do cronograma (Dia 0 provisório).'
+        ),
+        old_value={'onboarding_agendado_em': str(old) if old else None},
+        new_value={'onboarding_agendado_em': str(when)},
+        request=request,
+    )
+    logger.info(
+        'Project %s: onboarding agendado em %s (user=%s).',
+        project.id, when, getattr(user, 'username', 'sistema'),
+    )
+
+    if project.etapa_atual == 'agendar':
+        set_etapa(project, 'etapa_3_preparacao', user=user, request=request)
+
+    return project
+
+
 def marcar_onboarding_realizado(project, user=None, data=None, request=None):
     """Etapa 4 realizada: seta onboarding_realizado_at (+ dia_zero se os
     outros 2 critérios já estão ok) e avança etapa_3 → etapa_4.

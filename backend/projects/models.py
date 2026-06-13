@@ -45,19 +45,28 @@ class Project(models.Model):
     # remoção só na F8). Ordem canônica do fluxo de Produção, com bifurcação
     # por tipo após registro_entrega (fechado → graduação; recorrente →
     # implementação) e convergência em recorrência.
+    #
+    # v32 ajustes (doc 09 item 08 + doc 10): "agendar" é a NOVA 1ª etapa
+    # (crava o Dia 0 provisório). As demais CHAVES são intocadas (produção com
+    # dados reais — migração só aditiva): só os LABELS foram atualizados pra
+    # bater com a lista de John (Planejamento, Reunião de Apresentação, Janela
+    # de teste, Re-Update, Homologação, Concluído, Implementado). As colunas
+    # "Janela de teste" e "Re-Update" reusam as chaves legadas `homologacao` e
+    # `registro_entrega` como rótulos novos — sem renomear chave.
     ETAPA_CHOICES = [
-        ('etapa_3_preparacao', 'Etapa 3 · Preparação'),
-        ('etapa_4_onboarding', 'Etapa 4 · Onboarding (Dia 0)'),
-        ('etapa_5_documentacao', 'Etapa 5 · Documentação'),
-        ('etapa_6_validacao_doc', 'Etapa 6 · Validação da doc'),
-        ('etapa_7_desenvolvimento', 'Etapa 7 · Desenvolvimento'),
-        ('etapa_8_auditoria', 'Etapa 8 · Auditoria interna'),
-        ('etapa_9_apresentacao', 'Etapa 9 · Apresentação/liberação'),
-        ('homologacao', 'Homologação'),
-        ('registro_entrega', 'Registro da entrega'),
-        ('etapa_10_graduacao', 'Etapa 10 · Graduação'),
-        ('implementacao', 'Implementação'),
-        ('recorrencia', 'Recorrência'),
+        ('agendar', 'Agendar'),  # 🆕 1ª etapa — crava o Dia 0 provisório (doc 10 §1)
+        ('etapa_3_preparacao', 'Planejamento'),
+        ('etapa_4_onboarding', 'Onboarding (Dia 0)'),
+        ('etapa_5_documentacao', 'Documentação'),
+        ('etapa_6_validacao_doc', 'Validação da doc'),
+        ('etapa_7_desenvolvimento', 'Desenvolvimento'),
+        ('etapa_8_auditoria', 'Auditoria interna'),
+        ('etapa_9_apresentacao', 'Reunião de Apresentação'),
+        ('homologacao', 'Janela de teste'),
+        ('registro_entrega', 'Re-Update'),
+        ('etapa_10_graduacao', 'Homologação'),
+        ('implementacao', 'Concluído'),
+        ('recorrencia', 'Implementado'),
     ]
 
     # Trilho linear até a bifurcação (transitions.py usa p/ validar a ordem).
@@ -128,7 +137,7 @@ class Project(models.Model):
         help_text='Fechado ou Recorrente — vem do Comercial (doc 01)',
     )
     etapa_atual = models.CharField(
-        max_length=30, choices=ETAPA_CHOICES, default='etapa_3_preparacao',
+        max_length=30, choices=ETAPA_CHOICES, default='agendar',
     )
     recorrencia_tipo = models.CharField(
         max_length=20, choices=RECORRENCIA_TIPO_CHOICES, blank=True, default='',
@@ -138,6 +147,15 @@ class Project(models.Model):
         max_length=12, choices=SITUACAO_CHOICES, default='ativo',
         help_text='Estado ortogonal — projeto em espera não perde a etapa',
     )
+
+    # Âncora provisória do cronograma (Visão 2 — doc 09 item 08 §"DECISÃO Visão 2").
+    # Data da reunião de Onboarding AGENDADA (na etapa "agendar"): permite o
+    # motor calcular o preview do cronograma ANTES do onboarding acontecer
+    # (ações de prep datadas de trás pra frente). Distinta de dia_zero, que só
+    # é cravado quando o onboarding ACONTECE + os 3 critérios estão ok.
+    onboarding_agendado_em = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Reunião de Onboarding agendada (âncora provisória do cronograma)')
 
     # Gatilho do Dia 0 (3 critérios — doc 04 §2)
     contrato_assinado_at = models.DateTimeField(
@@ -480,11 +498,13 @@ class DeliveryApproval(models.Model):
 # v32 F5: entidades novas do processo de Produção (import p/ descoberta do
 # Django — definidas em models_v32.py para não inchar este arquivo).
 from .models_v32 import (  # noqa: E402,F401
+    ETAPA_ACTIONS_SEED,
     ONBOARDING_FORM_BLOCKS,
     PROJECT_DOCUMENT_SECTIONS,
     OnboardingMappingForm,
     ProjectAudit,
     ProjectDocument,
+    ProjectEtapaAction,
     RecurrenceContract,
     ReUpdateCycle,
     ScheduleVersion,
