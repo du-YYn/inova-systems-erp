@@ -341,6 +341,24 @@ class TestAditivoFinanceOutputs:
         assert inv.cobranca_liberada is False
         assert inv.total == Decimal('2500')
 
+    def test_precadastro_invoice_born_with_default_bank_account(
+        self, settings, admin_user, customer,
+    ):
+        """L3 (code review): a invoice do aditivo nasce com a conta padrão
+        (primeira ativa) — mesma resiliência do P0.3. Sem isso, ao ser paga, o
+        mark_paid copiaria bank_account NULL para a Transaction (NOT NULL) -> 500."""
+        from finance.models import BankAccount
+
+        bank = BankAccount.objects.create(
+            name='Conta Padrão L3', bank='Teste', account_type='checking',
+            is_active=True,
+        )
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        project = make_project_with_cr(admin_user, customer, Decimal('900'))
+        case = make_aditivo(customer, admin_user, project=project)
+        inv = Invoice.objects.get(payment_details__aditivo_legal_case=case.id)
+        assert inv.bank_account_id == bank.id
+
     def test_precadastro_dry_run_does_not_create_but_audits(self, settings, admin_user, customer):
         settings.AUTOMATION_FIN_ADITIVO = 'dry_run'
         project = make_project_with_cr(admin_user, customer)

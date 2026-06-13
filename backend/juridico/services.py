@@ -136,11 +136,19 @@ def precadastrar_aditivo(case, *, user=None, dry_run=None):
         return None
 
     today = timezone.now().date()
+    # L3 (code review): nasce já com a conta padrão (primeira ativa) quando
+    # houver — mesma resiliência do pré-cadastro F4 (P0.3). Sem isso, se a
+    # invoice do aditivo for paga, o mark_paid copiaria o bank_account NULL
+    # para a Transaction (bank_account NOT NULL) -> 500. Sem conta ativa fica
+    # None (o mark_paid ainda trata via _default_bank_account).
+    from finance.models import BankAccount
+    default_bank = BankAccount.objects.filter(is_active=True).first()
     invoice = Invoice.objects.create(
         invoice_type='receivable',
         document_type='invoice',
         customer=customer,
         project=case.project,
+        bank_account=default_bank,
         number=_next_invoice_number('receivable'),
         issue_date=today,
         due_date=today,
