@@ -90,6 +90,8 @@ class TestV32ValidTransitions:
         ('tech_analysis', 'meeting_2_done'),
         ('meeting_2_done', 'proposal'),
         ('won', 'data_collection'),
+        ('proposal', 'data_collection'),       # v32: aprovar a proposta -> Coleta
+        ('coleta_de_dados', 'data_collection'),  # sinônimos (legado/novo)
     ])
     def test_valid_transition(self, manager_client, manager_user, from_status, to_status):
         prospect = make_prospect(manager_user, status=from_status)
@@ -124,10 +126,12 @@ class TestV32InvalidTransitions:
         ('new', 'meeting_invite'),
         ('new', 'tech_analysis'),
         ('qualified', 'meeting_2_done'),
-        ('proposal', 'data_collection'),
+        # ('proposal', 'data_collection') agora é VÁLIDA (v32: aprovar a
+        # proposta move para a Coleta — doc 09 §T-E2E P0.2). Ver
+        # TestV32ValidTransitions.
         ('scheduled', 'tech_analysis'),
         ('meeting_1_done', 'meeting_2_done'),  # pula a análise técnica
-        ('qualifying', 'data_collection'),
+        ('qualifying', 'data_collection'),     # qualifying não é origem válida
     ])
     def test_invalid_transition_returns_400_and_keeps_state(
         self, manager_client, manager_user, from_status, to_status,
@@ -371,3 +375,26 @@ class TestV32NewFields:
         assert response.status_code in (
             status.HTTP_200_OK, status.HTTP_201_CREATED,
         ), response.data
+
+    @pytest.mark.parametrize('status_value', [
+        'coleta_de_dados', 'projeto_fechado', 'em_producao',  # v32 novos
+        'won', 'production',                                  # legados
+    ])
+    def test_create_onboarding_allowed_in_v32_statuses(
+        self, manager_client, manager_user, status_value,
+    ):
+        """P0.2/T01: o link do forms precisa estar disponível em Coleta de
+        Dados (status novo coleta_de_dados) e nos demais fechados."""
+        prospect = make_prospect(manager_user, status=status_value)
+        response = manager_client.post(f'{URL}{prospect.id}/create-onboarding/', {})
+        assert response.status_code in (
+            status.HTTP_200_OK, status.HTTP_201_CREATED,
+        ), (status_value, response.data)
+
+    def test_create_onboarding_rejected_before_collection(
+        self, manager_client, manager_user,
+    ):
+        """Antes da Coleta (ex.: proposta), ainda recusa o cadastro."""
+        prospect = make_prospect(manager_user, status='proposal')
+        response = manager_client.post(f'{URL}{prospect.id}/create-onboarding/', {})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST

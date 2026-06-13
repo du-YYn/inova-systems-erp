@@ -322,8 +322,13 @@ class ProspectViewSet(viewsets.ModelViewSet):
         'tech_analysis': {'meeting_1_done', 'meeting_done'},
         # tech_analysis ──[Dev define escopo/prazo/valor]──► meeting_2_done
         'meeting_2_done': {'tech_analysis'},
-        # won ──[dispara abertura]──► data_collection
-        'data_collection': {'won'},
+        # Coleta de Dados: no fluxo v32, a APROVAÇÃO DA PROPOSTA (status
+        # proposal) move o card para coleta_de_dados — não mais "won ->
+        # data_collection". data_collection é o sinônimo legado de
+        # coleta_de_dados; ambos compartilham os mesmos origens válidos
+        # (doc 09 §T-E2E P0.2). won/proposal continuam aceitos pra não
+        # quebrar registros e fluxos vivos.
+        'data_collection': {'won', 'proposal', 'coleta_de_dados'},
     }
 
     # Subject da ProspectActivity automática criada ao entrar num status novo.
@@ -860,11 +865,21 @@ class ProspectViewSet(viewsets.ModelViewSet):
         from django.db import IntegrityError
 
         prospect = self.get_object()
-        # v32: data_collection é a etapa onde o ClientOnboarding é enviado;
-        # production permanece aceito durante a convivência (legado).
-        if prospect.status not in ('won', 'data_collection', 'production'):
+        # v32 ajustes (doc 09 §T-E2E P0.2 / T01): aprovar a proposta move o card
+        # para `coleta_de_dados` — é AÍ que o link do forms precisa estar
+        # disponível. Aceitamos os status novos (coleta_de_dados/projeto_fechado/
+        # em_producao) além dos legados equivalentes (won/data_collection/
+        # production). Status nessa lista são "fechados ou em coleta".
+        ONBOARDING_ALLOWED_STATUSES = (
+            'won', 'data_collection', 'production',           # legados
+            'coleta_de_dados', 'projeto_fechado', 'em_producao',  # v32 novos
+        )
+        if prospect.status not in ONBOARDING_ALLOWED_STATUSES:
             return Response(
-                {'error': 'Cadastro só pode ser criado para leads fechados (won/data_collection/production).'},
+                {'error': (
+                    'Cadastro só pode ser criado para leads em Coleta de Dados '
+                    'ou fechados.'
+                )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Retorna existente se já criado

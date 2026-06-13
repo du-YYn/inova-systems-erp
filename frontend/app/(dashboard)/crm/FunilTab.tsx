@@ -2061,8 +2061,12 @@ export default function FunilTab() {
             {/* ── Conteúdo rolável ─────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-              {/* Cadastro do Cliente (Onboarding) — banner no topo para leads fechados */}
-              {(viewingProspect.status === 'won' || viewingProspect.status === 'production') && (
+              {/* Cadastro do Cliente (Onboarding) — banner para leads em Coleta
+                  de Dados ou fechados. v32 (doc 09 §T-E2E P0.2/T01): aprovar a
+                  proposta move o card para coleta_de_dados — é aí que o link do
+                  forms precisa aparecer pro closer enviar ao cliente. */}
+              {['coleta_de_dados', 'data_collection', 'projeto_fechado',
+                'won', 'em_producao', 'production'].includes(viewingProspect.status) && (
                 <section>
                   <OnboardingLinkSection prospectId={viewingProspect.id} />
                 </section>
