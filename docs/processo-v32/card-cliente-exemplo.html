@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inova · Card do Cliente (Produção) — exemplo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+:root{--bg:#08080E;--panel:#14141d;--panel2:#1a1a24;--gold:#D4AF37;--gold-b:#F0D060;--ink:#ECECEF;--muted:#8A8A95;--line:rgba(255,255,255,.08);--ok:#56B97D;--warn:#E0A845;--err:#FF6B6B;--cyan:#46B7C9;--violet:#B98AE6}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font-family:'Outfit',system-ui,sans-serif;background:radial-gradient(1200px 600px at 70% -10%,rgba(212,175,55,.06),transparent),var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:24px;min-height:100%}
+.wrap{max-width:1080px;margin:0 auto}
+.card{background:linear-gradient(180deg,#15151e,#101017);border:1px solid var(--line);border-radius:20px;box-shadow:0 24px 60px rgba(0,0,0,.5);overflow:hidden}
+/* header */
+.head{display:flex;align-items:center;gap:16px;padding:20px 24px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(212,175,55,.06),transparent)}
+.avatar{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#C9A227,#F0D060);display:flex;align-items:center;justify-content:center;font-weight:800;color:#1a1405;font-size:18px;flex-shrink:0}
+.head .name{font-size:19px;font-weight:800}
+.head .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.chips{display:flex;gap:7px;margin-top:7px;flex-wrap:wrap}
+.chip{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid}
+.chip.tipo{color:var(--gold-b);background:rgba(212,175,55,.1);border-color:rgba(212,175,55,.35)}
+.chip.sit{color:var(--ok);background:rgba(86,185,125,.1);border-color:rgba(86,185,125,.35)}
+.chip.val{color:#cdd3df;background:rgba(255,255,255,.05);border-color:var(--line)}
+.head .right{margin-left:auto;text-align:right}
+.head .right .d0{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.head .right .d0 b{color:var(--gold-b);font-size:15px;display:block;margin-top:2px}
+/* progress */
+.prog{padding:14px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px}
+.bar{flex:1;height:8px;border-radius:8px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar > i{display:block;height:100%;background:linear-gradient(90deg,#C9A227,#F0D060);width:0;transition:width .4s ease}
+.prog .lbl{font-size:12px;color:var(--muted);min-width:140px}
+.prog .lbl b{color:var(--ink)}
+/* body */
+.body{display:grid;grid-template-columns:300px 1fr;min-height:480px}
+.rail{border-right:1px solid var(--line);padding:12px;overflow-y:auto;max-height:620px}
+.step{display:flex;gap:11px;padding:9px 10px;border-radius:11px;cursor:pointer;position:relative;transition:background .12s}
+.step:hover{background:rgba(255,255,255,.03)}
+.step.sel{background:rgba(212,175,55,.09);border:1px solid rgba(212,175,55,.25)}
+.step .ic{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;border:2px solid}
+.step.done .ic{background:var(--ok);border-color:var(--ok);color:#08120c}
+.step.current .ic{background:var(--gold);border-color:var(--gold);color:#1a1405;box-shadow:0 0 0 4px rgba(212,175,55,.18)}
+.step.locked .ic{background:transparent;border-color:rgba(255,107,107,.5);color:var(--err)}
+.step.todo .ic{background:transparent;border-color:rgba(255,255,255,.18);color:var(--muted)}
+.step .tx{min-width:0}
+.step .tx .n{font-size:13px;font-weight:700;line-height:1.2}
+.step.todo .tx .n,.step.locked .tx .n{color:#b9bcc6}
+.step .tx .dt{font-size:10.5px;color:var(--muted);margin-top:2px}
+.step .frac{margin-left:auto;font-size:10px;color:var(--muted);align-self:center}
+.rail .line{position:absolute;left:22px;top:34px;bottom:6px;width:2px;background:rgba(255,255,255,.06);z-index:0}
+/* detail */
+.detail{padding:20px 24px;overflow-y:auto;max-height:620px}
+.detail h2{margin:0;font-size:17px;font-weight:800;display:flex;align-items:center;gap:10px}
+.detail .meta{font-size:12px;color:var(--muted);margin-top:4px}
+.gate{margin:14px 0;border-radius:12px;padding:12px 14px;font-size:12.5px}
+.gate.lock{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.3)}
+.gate.hand{background:rgba(224,168,69,.08);border:1px solid rgba(224,168,69,.3)}
+.gate .gt{font-weight:700;margin-bottom:7px;display:flex;align-items:center;gap:7px}
+.crit{display:flex;gap:7px;align-items:center;font-size:12px;margin:4px 0;color:#cdd3df}
+.crit .b{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+.crit.ok .b{background:var(--ok);color:#08120c}.crit.no .b{background:rgba(255,107,107,.25);color:var(--err);border:1px solid var(--err)}
+.acts{margin-top:6px}
+.act{display:flex;gap:12px;align-items:flex-start;padding:11px 12px;border-radius:11px;border:1px solid var(--line);margin-bottom:8px;background:var(--panel);cursor:pointer;transition:border-color .12s,background .12s}
+.act:hover{border-color:rgba(212,175,55,.3)}
+.act .box{width:20px;height:20px;border-radius:6px;border:2px solid rgba(255,255,255,.22);flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.act.on .box{background:var(--ok);border-color:var(--ok)}
+.act .box svg{opacity:0;transition:opacity .15s}.act.on .box svg{opacity:1}
+.act .at{font-size:13px;line-height:1.35}
+.act.on .at{color:var(--muted);text-decoration:line-through}
+.act .ad{font-size:10.5px;color:var(--gold-b);background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.22);padding:2px 8px;border-radius:6px;margin-left:auto;white-space:nowrap;align-self:flex-start;margin-top:1px}
+.act .sub{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+.todo-note{background:rgba(255,255,255,.03);border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+.done-banner{margin-top:12px;background:rgba(86,185,125,.1);border:1px solid rgba(86,185,125,.35);color:#9fe0b6;border-radius:12px;padding:11px 14px;font-size:13px;font-weight:600;display:none;align-items:center;gap:8px}
+.done-banner.show{display:flex}
+.foot{padding:12px 24px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+.foot b{color:var(--gold)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1c1c26;border:1px solid rgba(212,175,55,.4);color:var(--gold-b);padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.5);opacity:0;transition:all .3s;z-index:50;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <div class="avatar">TL</div>
+      <div>
+        <div class="name">Transportes Limitada</div>
+        <div class="sub">Sistema Web + Aplicativo Mobile · Lucca Marinho</div>
+        <div class="chips">
+          <span class="chip tipo">Fechado</span>
+          <span class="chip sit">● Ativo</span>
+          <span class="chip val">R$ 55.000,00</span>
+        </div>
+      </div>
+      <div class="right">
+        <div class="d0">Dia 0 (Onboarding)<b>18/06/2026</b></div>
+        <div class="d0" style="margin-top:8px">Prazo<b>45 dias úteis</b></div>
+      </div>
+    </div>
+    <div class="prog">
+      <div class="lbl">Etapas: <b id="pe">3</b>/13 · ações <b id="pa">0</b></div>
+      <div class="bar"><i id="barfill"></i></div>
+    </div>
+    <div class="body">
+      <div class="rail" id="rail"><div class="line"></div></div>
+      <div class="detail" id="detail"></div>
+    </div>
+    <div class="foot">
+      <span><b>Como funciona:</b> o Dev dá check nas ações → o card avança sozinho.</span>
+      <span><b>📅</b> reunião · <b>🔒</b> trava · <b>⚡</b> handshake (Jurídico)</span>
+      <span><b>Datas</b> saem do motor (Dia 0 + Game Plan).</span>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+// estado do gate Regra de Ouro
+const gate={contrato:true, entrada:true, baseline:false};
+
+const ETAPAS=[
+ {n:'1',name:'Agendar',dt:'12/06',status:'done',anchor:true,acts:[
+   {t:'Agendar a reunião de Onboarding junto ao cliente',d:'12/06',on:true,sub:'⚓ Crava o Dia 0 → o motor data todo o card'},
+ ]},
+ {n:'2',name:'Planejamento',dt:'16–17/06',status:'done',acts:[
+   {t:'Revisar o material do Comercial + a proposta (escopo e prazo)',d:'16/06',on:true},
+   {t:'Montar o Game Plan visual (roadmap e prazos)',d:'16/06',on:true},
+   {t:'Preparar o roteiro de mapeamento',d:'17/06',on:true},
+ ]},
+ {n:'3',name:'Onboarding',dt:'18/06 · Dia 0',status:'done',meeting:true,acts:[
+   {t:'Apresentar o Game Plan e confirmar prazo + marcos do cliente',d:'18/06',on:true},
+   {t:'Aprofundar o processo (mapeamento completo)',d:'18/06',on:true,sub:'processo atual · ferramentas · gargalos · regras · usuários · dados · integrações · LGPD'},
+   {t:'Validar e refinar o escopo (o que entra e o que não entra)',d:'18/06',on:true},
+   {t:'Alinhar o modelo de entrega (por prioridade e fases)',d:'18/06',on:true},
+   {t:'Mapear dependências do cliente (acessos, dados, identidade visual)',d:'18/06',on:true},
+   {t:'Fechamento: agendar a reunião de Documentação',d:'18/06',on:true},
+ ]},
+ {n:'4',name:'Documentação',dt:'19–25/06',status:'current',acts:[
+   {t:'Revisar o material da onboarding (roteiro, proposta, briefing)',d:'19/06',on:true},
+   {t:'Preencher a documentação seção por seção (12 seções)',d:'22/06',on:true},
+   {t:'Definir as prioridades e as fases de entrega',d:'23/06',on:false},
+   {t:'Gerar o design e os wireframes no branding do cliente',d:'24/06',on:false},
+   {t:'Revisão interna (escopo fechado, nada a mais)',d:'25/06',on:false},
+   {t:'Preparar a apresentação da Validação',d:'25/06',on:false},
+ ]},
+ {n:'5',name:'Validação da doc',dt:'26/06 · reunião',status:'todo',meeting:true,unlocksBaseline:true,hand:'Ao aprovar, a baseline vai pro JURÍDICO assinar (⚡ handshake). Concluir esta etapa destrava o gate do Desenvolvimento.',acts:[
+   {t:'Apresentar a documentação seção por seção',d:'26/06',on:false},
+   {t:'Validar escopo e exclusões com o cliente',d:'26/06',on:false},
+   {t:'Validar design, fluxos, prioridades e fases',d:'26/06',on:false},
+   {t:'Explicar o processo de mudança',d:'26/06',on:false},
+   {t:'Aprovação formal do cliente → a doc vira a BASELINE',d:'26/06',on:false,sub:'⚡ dispara a assinatura no Jurídico'},
+ ]},
+ {n:'6',name:'Desenvolvimento',dt:'27/06–20/07',status:'locked',gate:true,acts:[
+   {t:'Quebrar a documentação aprovada em fases e tarefas',d:'27/06',on:false},
+   {t:'Desenvolver fase por fase (dentro do prazo)',d:'27/06–18/07',on:false},
+   {t:'Acompanhar o progresso contra a doc e o cronograma',d:'semanal',on:false},
+   {t:'Pedido fora do escopo → processo de mudança (Aditivo)',d:'—',on:false},
+   {t:'Concluir cada fase → encaminhar pra Auditoria',d:'18/07',on:false},
+   {t:'∥ Atualização semanal (resumo + pendências, dia fixo)',d:'sextas',on:false,sub:'roda em paralelo ao desenvolvimento'},
+ ]},
+ {n:'7',name:'Auditoria interna',dt:'21–22/07',status:'todo',acts:[
+   {t:'Conferir o desenvolvido contra a doc, item por item',d:'21/07',on:false},
+   {t:'Testar fluxos e casos de uso críticos',d:'21/07',on:false},
+   {t:'Testar regras, exceções, permissões e integrações',d:'22/07',on:false},
+   {t:'Verificar segurança, LGPD e performance',d:'22/07',on:false},
+   {t:'Registrar e corrigir bugs e ajustes',d:'22/07',on:false},
+   {t:'Agendar a reunião de apresentação com o cliente',d:'22/07',on:false},
+ ]},
+ {n:'8',name:'Reunião de Apresentação',dt:'23/07 · reunião',status:'todo',meeting:true,acts:[
+   {t:'Apresentar o sistema e demonstrar as funcionalidades',d:'23/07',on:false},
+   {t:'Liberar o acesso (link de cadastro admin único)',d:'23/07',on:false},
+   {t:'Alinhar a janela de teste (X dias, anotar tudo)',d:'23/07',on:false},
+ ]},
+ {n:'9',name:'Janela de teste',dt:'24–28/07',status:'todo',todo:true},
+ {n:'10',name:'Re-Update',dt:'29–30/07',status:'todo',acts:[
+   {t:'Revisar e analisar tudo o que o cliente enviou',d:'29/07',on:false},
+   {t:'Fazer os ajustes em lote (dentro do escopo)',d:'29/07',on:false},
+   {t:'Atualizar o sistema e devolver pro cliente',d:'30/07',on:false},
+   {t:'Repetir o ciclo até o cliente aprovar',d:'—',on:false},
+ ]},
+ {n:'11',name:'Homologação',dt:'31/07',status:'todo',acts:[
+   {t:'Taguear a versão do código (release)',d:'31/07',on:false},
+   {t:'Guardar a documentação aprovada como baseline',d:'31/07',on:false},
+   {t:'Registrar data e ambiente do deploy',d:'31/07',on:false},
+ ]},
+ {n:'12',name:'Entregue',dt:'01/08',status:'todo',todo:true},
+ {n:'13',name:'Implementado',dt:'04/08',status:'todo',todo:true},
+];
+
+let sel=3; // Documentação selecionada por padrão
+
+function statusOf(e,i){
+  if(e._done) return 'done';
+  if(i===6 && e.status==='locked' && !gate.baseline) return 'locked';
+  if(i===curIndex()) return 'current';
+  if(e.status==='done') return 'done';
+  return 'todo';
+}
+function curIndex(){
+  // primeira etapa não concluída e não travada
+  for(let i=0;i<ETAPAS.length;i++){
+    const e=ETAPAS[i];
+    const allOn=e.acts&&e.acts.length&&e.acts.every(a=>a.on);
+    if(e.todo){ if(!e._done) return i; continue; }
+    if(e.gate && !gate.baseline) return i; // dev travado conta como atual
+    if(!allOn) return i;
+  }
+  return ETAPAS.length-1;
+}
+// marca done inicial
+ETAPAS.forEach(e=>{ if(e.acts) e._done=e.acts.every(a=>a.on); });
+
+function renderRail(){
+  const cur=curIndex();
+  let h='<div class="line"></div>';
+  ETAPAS.forEach((e,i)=>{
+    let st='todo';
+    const allOn=e.acts&&e.acts.length&&e.acts.every(a=>a.on);
+    if(e.todo) st = e._done?'done':(i===cur?'current':'todo');
+    else if(e.gate && !gate.baseline) st='locked';
+    else if(allOn) st='done';
+    else if(i===cur) st='current';
+    e._st=st;
+    const icon = st==='done'?'✓':(st==='locked'?'🔒':e.n);
+    const frac = e.acts? `${e.acts.filter(a=>a.on).length}/${e.acts.length}`:'';
+    h+=`<div class="step ${st} ${i===sel?'sel':''}" data-i="${i}" style="position:relative;z-index:1">
+      <div class="ic">${icon}</div>
+      <div class="tx"><div class="n">${e.name}</div><div class="dt">${e.dt}</div></div>
+      <div class="frac">${frac}</div></div>`;
+  });
+  $('rail').innerHTML=h;
+  $('rail').querySelectorAll('.step').forEach(s=>s.onclick=()=>{sel=+s.dataset.i;render();});
+}
+const CK='<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-6" stroke="#08120c" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function renderDetail(){
+  const e=ETAPAS[sel];
+  let h=`<h2>${e.meeting?'📅 ':''}${e.name}</h2><div class="meta">${e.dt}${e.anchor?' · ⚓ âncora do cronograma':''}</div>`;
+  if(e.gate){
+    const c=(k,l)=>`<div class="crit ${gate[k]?'ok':'no'}"><span class="b">${gate[k]?'✓':'✗'}</span>${l}</div>`;
+    h+=`<div class="gate lock"><div class="gt">🔒 Gate Regra de Ouro — Dev só começa com os 3 critérios</div>
+      ${c('contrato','Contrato assinado')}${c('entrada','Entrada paga')}${c('baseline','Documentação (baseline) assinada pelo Jurídico')}
+      ${!gate.baseline?'<div style="margin-top:8px;font-size:11.5px;color:#ff9b9b">Conclua a etapa <b>Validação da doc</b> pra liberar a baseline.</div>':''}</div>`;
+  }
+  if(e.hand){ h+=`<div class="gate hand"><div class="gt">⚡ Handshake com o Jurídico</div>${e.hand}</div>`; }
+  if(e.todo){ h+=`<div class="todo-note">⛏ Ações desta etapa <b>ainda a definir</b> com o time.</div>`; }
+  else if(e.acts){
+    h+='<div class="acts">';
+    e.acts.forEach((a,j)=>{
+      h+=`<div class="act ${a.on?'on':''}" data-j="${j}"><div class="box">${CK}</div>
+        <div style="flex:1"><div style="display:flex;gap:10px"><div class="at">${a.t}</div><div class="ad">${a.d}</div></div>
+        ${a.sub?`<div class="sub">${a.sub}</div>`:''}</div></div>`;
+    });
+    h+='</div>';
+    h+=`<div class="done-banner ${e._done?'show':''}" id="db">✓ Etapa concluída — o card avança sozinho pra próxima.</div>`;
+  }
+  $('detail').innerHTML=h;
+  $('detail').querySelectorAll('.act').forEach(el=>el.onclick=()=>toggle(sel,+el.dataset.j));
+}
+function toggle(ei,j){
+  const e=ETAPAS[ei];
+  // não deixa checar etapa travada
+  if(e.gate && !gate.baseline){ toast('🔒 Trava: conclua a Validação da doc primeiro'); return; }
+  e.acts[j].on=!e.acts[j].on;
+  const wasDone=e._done; e._done=e.acts.every(a=>a.on);
+  // Validação concluída → libera baseline → destrava Dev
+  if(e.unlocksBaseline && e._done && !gate.baseline){ gate.baseline=true; toast('⚡ Jurídico assinou a baseline — Desenvolvimento liberado!'); }
+  if(e.unlocksBaseline && !e._done && gate.baseline){ gate.baseline=false; }
+  if(e._done && !wasDone) toast('✓ '+e.name+' concluída — card avançou');
+  render();
+}
+function totals(){
+  let ed=0,aOn=0,aT=0;
+  ETAPAS.forEach(e=>{ if(e._done)ed++; if(e.acts){aOn+=e.acts.filter(a=>a.on).length;aT+=e.acts.length;} });
+  $('pe').textContent=ed; $('pa').textContent=aOn+'/'+aT;
+  $('barfill').style.width=(ed/ETAPAS.length*100)+'%';
+}
+let toastT;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600);}
+function render(){renderRail();renderDetail();totals();}
+render();
+</script>
+</body>
+</html>
