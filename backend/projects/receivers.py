@@ -456,11 +456,46 @@ def _on_validacao_doc_assinada(case):
 
 # ─── BIFURCAÇÃO → RECORRÊNCIA (doc 04 §5) ────────────────────────────────────
 
+def _resolve_recurring_monthly_value(project):
+    """P1.7: valor mensal recorrente herdado do ProposalPaymentPlan.
+
+    Busca a proposta aprovada/convertida mais recente do customer do projeto
+    (via project.customer.proposals) que tenha um payment_plan com
+    `recurring_amount` > 0, e devolve esse valor. Sem proposta vinculável /
+    sem plano recorrente -> Decimal('0.00') (mesmo default do modelo).
+
+    O `recurring_amount` é a fonte da verdade do valor mensal vendido (modal de
+    proposta: Setup+Mensal / Só Mensal). Antes o RecurrenceContract nascia com
+    monthly_value=0.00 e o MRR ficava zerado.
+    """
+    from decimal import Decimal
+
+    if not project.customer_id:
+        return Decimal('0.00')
+
+    from sales.models import Proposal
+
+    plan = (
+        Proposal.objects.filter(
+            customer_id=project.customer_id,
+            status__in=['approved', 'converted'],
+            payment_plan__recurring_amount__gt=0,
+        )
+        .order_by('-created_at')
+        .values_list('payment_plan__recurring_amount', flat=True)
+        .first()
+    )
+    if plan is None:
+        return Decimal('0.00')
+    return Decimal(plan)
+
+
 def create_recurrence_contract(project, user=None):
     """Cria o RecurrenceContract na bifurcação (chamado por set_etapa).
 
     kind: suporte_basico (fechado/graduação) | operacao_continua
     (recorrente/implementação). Idempotente: 1 contrato ATIVO por projeto.
+    O `monthly_value` é herdado do ProposalPaymentPlan (P1.7).
     """
     flag = _get_flag(RECORRENCIA_FLAG)
     if flag == 'off':
@@ -493,22 +528,25 @@ def create_recurrence_contract(project, user=None):
         )
         return None
 
+    monthly_value = _resolve_recurring_monthly_value(project)
+
     if flag == 'dry_run':
         logger.info(
-            'DRY_RUN %s: criaria RecurrenceContract(%s) para project %s '
-            '(customer %s). Sem efeito.',
-            RECORRENCIA_FLAG, kind, project.id, project.customer_id,
+            'DRY_RUN %s: criaria RecurrenceContract(%s, R$ %s/mês) para '
+            'project %s (customer %s). Sem efeito.',
+            RECORRENCIA_FLAG, kind, monthly_value, project.id, project.customer_id,
         )
         log_audit(
             user, 'recurrence_contract_create_dry_run', 'recurrence_contract',
             details=(
                 f'DRY_RUN {RECORRENCIA_FLAG}: criaria RecurrenceContract '
-                f'({kind}) para o projeto {project.name}.'
+                f'({kind}, R$ {monthly_value}/mês) para o projeto {project.name}.'
             ),
             new_value={
                 'project': project.id,
                 'customer': project.customer_id,
                 'kind': kind,
+                'monthly_value': str(monthly_value),
                 'dry_run': True,
             },
         )
@@ -519,6 +557,7 @@ def create_recurrence_contract(project, user=None):
         project=project,
         kind=kind,
         status='ativo',
+        monthly_value=monthly_value,
         started_at=timezone.now(),
         created_by=user if (user and user.is_authenticated) else None,
     )
@@ -526,14 +565,15 @@ def create_recurrence_contract(project, user=None):
         user, 'recurrence_contract_create', 'recurrence_contract', contract.id,
         details=(
             f'Bifurcação ({project.etapa_atual}): RecurrenceContract {kind} '
-            f'criado para o projeto {project.name} — todo entregue entra em '
-            f'recorrência.'
+            f'criado para o projeto {project.name} (R$ {monthly_value}/mês) — '
+            f'todo entregue entra em recorrência.'
         ),
         new_value={
             'project': project.id,
             'customer': project.customer_id,
             'kind': kind,
             'status': 'ativo',
+            'monthly_value': str(monthly_value),
         },
     )
     logger.info(

@@ -804,6 +804,70 @@ class TestBifurcationRecurrenceContract:
         receivers.create_recurrence_contract(project, user=admin_user)
         assert RecurrenceContract.objects.filter(project=project).count() == 1
 
+    # ─── P1.7: monthly_value herdado do ProposalPaymentPlan ──────────────────
+
+    @staticmethod
+    def _approved_proposal_with_plan(user, customer, recurring=Decimal('990')):
+        import uuid as _uuid
+
+        from sales.models import Proposal, ProposalPaymentPlan
+        proposal = Proposal.objects.create(
+            customer=customer, number=f'P-{_uuid.uuid4().hex[:12]}',
+            title='Proposta Recorrente', proposal_type='software_dev',
+            billing_type='monthly', total_value=Decimal('990'),
+            status='approved', valid_until=date(2026, 12, 31), created_by=user,
+        )
+        ProposalPaymentPlan.objects.create(
+            proposal=proposal, plan_type='recurring_only',
+            recurring_amount=recurring,
+        )
+        return proposal
+
+    def test_monthly_value_inherited_from_payment_plan(
+        self, settings, project, customer, admin_user,
+    ):
+        settings.AUTOMATION_PROD_RECORRENCIA = 'on'
+        self._approved_proposal_with_plan(admin_user, customer, Decimal('990'))
+        self._deliver(project, 'recorrente')
+        project.etapa_atual = 'implementacao'
+        project.save(update_fields=['etapa_atual'])
+        contract = receivers.create_recurrence_contract(project, user=admin_user)
+        assert contract.monthly_value == Decimal('990')
+
+    def test_monthly_value_zero_without_recurring_plan(
+        self, settings, project, customer, admin_user,
+    ):
+        # Sem proposta recorrente vinculável -> 0.00 (default), sem erro.
+        settings.AUTOMATION_PROD_RECORRENCIA = 'on'
+        self._deliver(project, 'fechado')
+        project.etapa_atual = 'etapa_10_graduacao'
+        project.save(update_fields=['etapa_atual'])
+        contract = receivers.create_recurrence_contract(project, user=admin_user)
+        assert contract.monthly_value == Decimal('0.00')
+
+    def test_monthly_value_ignores_non_approved_proposal(
+        self, settings, project, customer, admin_user,
+    ):
+        import uuid as _uuid
+
+        from sales.models import Proposal, ProposalPaymentPlan
+        settings.AUTOMATION_PROD_RECORRENCIA = 'on'
+        draft = Proposal.objects.create(
+            customer=customer, number=f'P-{_uuid.uuid4().hex[:12]}',
+            title='Draft', proposal_type='software_dev', billing_type='monthly',
+            total_value=Decimal('500'), status='draft',
+            valid_until=date(2026, 12, 31), created_by=admin_user,
+        )
+        ProposalPaymentPlan.objects.create(
+            proposal=draft, plan_type='recurring_only',
+            recurring_amount=Decimal('500'),
+        )
+        self._deliver(project, 'recorrente')
+        project.etapa_atual = 'implementacao'
+        project.save(update_fields=['etapa_atual'])
+        contract = receivers.create_recurrence_contract(project, user=admin_user)
+        assert contract.monthly_value == Decimal('0.00')
+
 
 # ─── 06° Game Plan persistente (ScheduleVersion + ProjectPhase) ─────────────
 

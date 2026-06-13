@@ -179,6 +179,116 @@ def precadastrar_aditivo(case, *, user=None, dry_run=None):
     return invoice
 
 
+def _resolve_change_request_for_aditivo(case):
+    """ChangeRequest vinculado a um LegalCase(aditivo).
+
+    O vínculo nasce no produtor (projects.receivers._create_aditivo_legal_case),
+    que grava `change_request` na metadata do LegalCaseEvent de criação. Fallback
+    (caso aberto manualmente, sem evento): o ChangeRequest pending mais recente do
+    projeto do caso. Sem projeto/CR -> None.
+    """
+    try:
+        from projects.models import ChangeRequest
+    except Exception:  # noqa: BLE001 — app opcional/lazy
+        return None
+
+    cr_id = (
+        case.events.filter(metadata__change_request__isnull=False)
+        .order_by('created_at')
+        .values_list('metadata__change_request', flat=True)
+        .first()
+    )
+    if cr_id:
+        cr = ChangeRequest.objects.filter(id=cr_id).first()
+        if cr is not None:
+            return cr
+
+    if not case.project_id:
+        return None
+    return (
+        ChangeRequest.objects.filter(project_id=case.project_id, status='pending')
+        .order_by('-created_at')
+        .first()
+    )
+
+
+def approve_change_request_for_aditivo(case, *, user=None, dry_run=None):
+    """P1.5: Aditivo assinado -> marca o ChangeRequest vinculado como `approved`.
+
+    Fecha o loop "volta-pro-dev" (doc 09 item 07 / doc 10 §B): quando o cliente
+    assina o aditivo, a Solicitação de Mudança vira "Mudança Aprovada" no board
+    do Dev. Seta status='approved' + approved_at + approved_by (do SISTEMA — é a
+    automação, não o criador, então NÃO é self-approval e NÃO passa pelo guard
+    da action approve do ChangeRequestViewSet).
+
+    Idempotente: CR já `approved` não é tocado de novo. Isolado: erros são
+    tratados pelo caller (try/except). Atrás da flag AUTOMATION_FIN_ADITIVO
+    (mesma do ciclo do aditivo); em dry_run só loga/audita.
+
+    Returns: id do ChangeRequest aprovado, ou None (nada a fazer / dry_run /
+    flag off / sem CR vinculável).
+    """
+    flag = _get_flag() if dry_run is None else ('dry_run' if dry_run else 'on')
+    if flag == 'off':
+        return None
+
+    cr = _resolve_change_request_for_aditivo(case)
+    if cr is None:
+        logger.info(
+            'Aditivo P1.5: LegalCase %s sem ChangeRequest vinculável — '
+            'nada a aprovar.', case.id,
+        )
+        return None
+    if cr.status == 'approved':
+        logger.info(
+            'Aditivo P1.5: ChangeRequest %s já aprovado — ignorando '
+            '(idempotente).', cr.id,
+        )
+        return None
+
+    if flag == 'dry_run':
+        logger.info(
+            'DRY_RUN %s: aprovaria ChangeRequest %s (LegalCase %s assinado). '
+            'Sem efeito.', ADITIVO_FLAG, cr.id, case.id,
+        )
+        log_audit(
+            user, 'change_request_auto_approve_dry_run', 'change_request', cr.id,
+            details=(
+                f'DRY_RUN {ADITIVO_FLAG}: aprovaria ChangeRequest {cr.id} '
+                f'(Aditivo LegalCase {case.id} assinado).'
+            ),
+            new_value={'change_request': cr.id, 'legal_case': case.id,
+                       'dry_run': True},
+        )
+        return None
+
+    old_status = cr.status
+    cr.status = 'approved'
+    # approved_by/approved_at de SISTEMA (contorna o self-approval guard, que só
+    # vale para a action manual). user pode ser None (automação pura).
+    cr.approved_by = user if (user and getattr(user, 'is_authenticated', False)) else None
+    cr.approved_at = timezone.now()
+    cr.save(update_fields=['status', 'approved_by', 'approved_at', 'updated_at'])
+    logger.info(
+        'Aditivo P1.5: ChangeRequest %s aprovado (Mudança Aprovada) — '
+        'LegalCase %s assinado.', cr.id, case.id,
+    )
+    log_audit(
+        user, 'change_request_auto_approve', 'change_request', cr.id,
+        details=(
+            f'Aditivo assinado (LegalCase {case.id}) — ChangeRequest {cr.id} '
+            f'aprovado automaticamente (Mudança Aprovada). Aprovação de sistema.'
+        ),
+        old_value={'status': old_status, 'approved_at': None},
+        new_value={
+            'status': 'approved', 'change_request': cr.id,
+            'legal_case': case.id,
+            'approved_at': str(cr.approved_at),
+        },
+    )
+    return cr.id
+
+
 def notify_finance_aditivo_outcome(case, new_status, *, user=None, dry_run=None):
     """Saída do Aditivo: Assinado ATIVA a cobrança; Recusado CANCELA o pré-cadastro.
 

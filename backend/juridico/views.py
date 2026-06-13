@@ -207,3 +207,15 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
                     'Falha na saída do Aditivo p/ Financeiro (LegalCase %s, '
                     'status %s): %s', case.id, new_status, exc,
                 )
+
+        # P1.5: Aditivo assinado fecha o loop pro Dev — marca o ChangeRequest
+        # vinculado como "Mudança Aprovada" (approved + approved_at/by sistema).
+        if case.process_type == 'aditivo' and new_status == 'assinado':
+            from .services import approve_change_request_for_aditivo
+            try:
+                approve_change_request_for_aditivo(case, user=request.user)
+            except Exception as exc:  # noqa: BLE001 — isolamento (CLAUDE.md)
+                logger.exception(
+                    'Falha ao aprovar ChangeRequest do Aditivo (LegalCase %s): %s',
+                    case.id, exc,
+                )

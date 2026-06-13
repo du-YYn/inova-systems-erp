@@ -393,3 +393,108 @@ class TestAditivoFinanceOutputs:
         inv = Invoice.objects.get(payment_details__aditivo_legal_case=case.id)
         assert inv.status == 'cancelled'
         assert AuditLog.objects.filter(action='aditivo_precadastro_cancelado').exists()
+
+
+# ─── P1.5: Aditivo assinado aprova o ChangeRequest vinculado ─────────────────
+
+@pytest.mark.django_db
+class TestAditivoApprovesChangeRequest:
+    """P1.5 (doc 09 §T-E2E): assinar o aditivo marca o ChangeRequest como
+    `approved` ("Mudança Aprovada") com approved_at/by de sistema, contornando
+    o self-approval guard (é a automação, não o criador)."""
+
+    def _signed_aditivo(self, juridico_client, customer, admin_user, project):
+        case = make_aditivo(customer, admin_user, project=project)
+        case.status = 'aguardando_assinatura'
+        case.save()
+        juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'assinado'})
+        return case
+
+    def test_signed_approves_change_request(self, settings, juridico_client,
+                                            admin_user, customer):
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        project = make_project_with_cr(admin_user, customer)
+        cr = ChangeRequest.objects.get(project=project)
+        self._signed_aditivo(juridico_client, customer, admin_user, project)
+        cr.refresh_from_db()
+        assert cr.status == 'approved'
+        assert cr.approved_at is not None
+        assert AuditLog.objects.filter(action='change_request_auto_approve').exists()
+
+    def test_bypasses_self_approval_guard(self, settings, customer, admin_user):
+        """A automação aprova mesmo quando o usuário é o criador do CR — o
+        guard de self-approval só vale para a action manual approve."""
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        from juridico.services import approve_change_request_for_aditivo
+        project = make_project_with_cr(admin_user, customer)
+        cr = ChangeRequest.objects.get(project=project)
+        assert cr.created_by_id == admin_user.id  # mesmo usuário
+        case = make_aditivo(customer, admin_user, project=project, status='aguardando_assinatura')
+        approve_change_request_for_aditivo(case, user=admin_user)
+        cr.refresh_from_db()
+        assert cr.status == 'approved'
+        assert cr.approved_by_id == admin_user.id
+
+    def test_resolves_cr_via_event_metadata(self, settings, customer, admin_user):
+        """Vínculo preferencial: change_request na metadata do evento de criação
+        (como o produtor de Produção grava). Usa esse CR mesmo com outro pending
+        no projeto."""
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        from juridico.services import approve_change_request_for_aditivo
+        project = make_project_with_cr(admin_user, customer)
+        linked = ChangeRequest.objects.create(
+            project=project, title='Mudança vinculada', description='x',
+            impact_value=Decimal('100'), status='pending', created_by=admin_user,
+        )
+        case = make_aditivo(customer, admin_user, project=project,
+                            status='aguardando_assinatura')
+        case.record_event('created', metadata={'change_request': linked.id})
+        approve_change_request_for_aditivo(case, user=admin_user)
+        linked.refresh_from_db()
+        assert linked.status == 'approved'
+
+    def test_idempotent_already_approved(self, settings, customer, admin_user):
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        from juridico.services import approve_change_request_for_aditivo
+        project = make_project_with_cr(admin_user, customer)
+        cr = ChangeRequest.objects.get(project=project)
+        case = make_aditivo(customer, admin_user, project=project,
+                            status='aguardando_assinatura')
+        assert approve_change_request_for_aditivo(case, user=admin_user) == cr.id
+        # 2ª chamada: já approved -> no-op, sem novo audit.
+        assert approve_change_request_for_aditivo(case, user=admin_user) is None
+        assert AuditLog.objects.filter(action='change_request_auto_approve').count() == 1
+
+    def test_dry_run_does_not_approve(self, settings, customer, admin_user):
+        settings.AUTOMATION_FIN_ADITIVO = 'dry_run'
+        from juridico.services import approve_change_request_for_aditivo
+        project = make_project_with_cr(admin_user, customer)
+        cr = ChangeRequest.objects.get(project=project)
+        case = make_aditivo(customer, admin_user, project=project,
+                            status='aguardando_assinatura')
+        approve_change_request_for_aditivo(case, user=admin_user)
+        cr.refresh_from_db()
+        assert cr.status == 'pending'
+        assert AuditLog.objects.filter(action='change_request_auto_approve_dry_run').exists()
+
+    def test_off_does_nothing(self, settings, customer, admin_user):
+        settings.AUTOMATION_FIN_ADITIVO = 'off'
+        from juridico.services import approve_change_request_for_aditivo
+        project = make_project_with_cr(admin_user, customer)
+        cr = ChangeRequest.objects.get(project=project)
+        case = make_aditivo(customer, admin_user, project=project,
+                            status='aguardando_assinatura')
+        assert approve_change_request_for_aditivo(case, user=admin_user) is None
+        cr.refresh_from_db()
+        assert cr.status == 'pending'
+
+    def test_no_cr_no_error(self, settings, customer, admin_user):
+        settings.AUTOMATION_FIN_ADITIVO = 'on'
+        from juridico.services import approve_change_request_for_aditivo
+        project = Project.objects.create(
+            name='Proj sem CR p1.5', customer=customer,
+            start_date=date(2026, 6, 1), created_by=admin_user,
+        )
+        case = make_aditivo(customer, admin_user, project=project,
+                            status='aguardando_assinatura')
+        assert approve_change_request_for_aditivo(case, user=admin_user) is None
