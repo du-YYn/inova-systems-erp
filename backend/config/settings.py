@@ -309,6 +309,10 @@ AUTOMATION_FIN_ENTRADA_PAGA = _automation_flag('AUTOMATION_FIN_ENTRADA_PAGA')
 # F4: régua de cobrança (lembretes a vencer 3d / vencida 1d e 7d)
 AUTOMATION_FIN_REGUA = _automation_flag('AUTOMATION_FIN_REGUA')
 
+# F3/F4 (doc 09 item 07): Aditivo -> Financeiro. Nova solicitação pré-cadastra
+# o valor (pendente); Assinado ativa a cobrança; Recusado cancela o pré-cadastro.
+AUTOMATION_FIN_ADITIVO = _automation_flag('AUTOMATION_FIN_ADITIVO')
+
 # F5: evento entrada_paga (Financeiro) -> seta Project.entrada_paga_at
 AUTOMATION_PROD_ENTRADA = _automation_flag('AUTOMATION_PROD_ENTRADA')
 

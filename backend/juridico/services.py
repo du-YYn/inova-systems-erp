@@ -1,0 +1,272 @@
+"""Serviços de automação do Jurídico (v32, doc 09 itens 05/06/07).
+
+Saídas do Aditivo para o Financeiro (doc 09 item 07):
+01° Nova solicitação -> PRÉ-CADASTRA o valor adicional (Invoice receivable,
+    pending, cobranca_liberada=False). Paralelo, como no Contrato.
+02° Assinado -> ATIVA a cobrança (cobranca_liberada=True).
+03° Recusado -> CANCELA o pré-cadastro (Invoice status='cancelled').
+
+Tudo atrás da flag AUTOMATION_FIN_ADITIVO (off | dry_run | on, default
+dry_run): em dry_run loga (logger + log_audit) o que faria, sem efeito.
+Idempotente: a Invoice carrega o marcador `payment_details.aditivo_legal_case`
+= id do caso, então não duplica nem reativa o que já está no estado-alvo.
+
+A regra de negócio fica aqui (testável sem disparar signal); o gatilho da
+criação (Nova solicitação) é o post_save de LegalCase em juridico/signals.py.
+"""
+import logging
+from decimal import Decimal
+
+from django.utils import timezone
+
+from core.audit import log_audit
+
+logger = logging.getLogger('juridico')
+
+ADITIVO_FLAG = 'AUTOMATION_FIN_ADITIVO'
+
+PRECADASTRO_ACTION = 'aditivo_precadastro_create'
+PRECADASTRO_DRY_RUN_ACTION = 'aditivo_precadastro_dry_run'
+ATIVA_ACTION = 'aditivo_cobranca_ativada'
+ATIVA_DRY_RUN_ACTION = 'aditivo_cobranca_ativada_dry_run'
+CANCELA_ACTION = 'aditivo_precadastro_cancelado'
+CANCELA_DRY_RUN_ACTION = 'aditivo_precadastro_cancelado_dry_run'
+
+
+def _get_flag():
+    """Lê AUTOMATION_FIN_ADITIVO validada (off | dry_run | on)."""
+    from finance.flags import get_automation_flag
+    return get_automation_flag(ADITIVO_FLAG)
+
+
+def _resolve_impact_value(case) -> Decimal:
+    """Valor da mudança a pré-cadastrar.
+
+    Deriva do ChangeRequest mais recente (pending/approved) do projeto do caso
+    (projects.ChangeRequest.impact_value). Sem projeto/ChangeRequest -> 0.
+    """
+    if not case.project_id:
+        return Decimal('0')
+    try:
+        from projects.models import ChangeRequest
+    except Exception:  # noqa: BLE001 — app opcional/lazy
+        return Decimal('0')
+    cr = (
+        ChangeRequest.objects.filter(project_id=case.project_id)
+        .exclude(status='rejected')
+        .order_by('-created_at')
+        .first()
+    )
+    if cr is None:
+        return Decimal('0')
+    return Decimal(cr.impact_value or 0)
+
+
+def _find_aditivo_invoice(case):
+    """Invoice de pré-cadastro deste aditivo (idempotência via payment_details)."""
+    from finance.models import Invoice
+    return (
+        Invoice.objects.filter(
+            invoice_type='receivable',
+            payment_details__aditivo_legal_case=case.id,
+        )
+        .exclude(status='cancelled')
+        .first()
+    )
+
+
+def precadastrar_aditivo(case, *, user=None, dry_run=None):
+    """Nova solicitação de Aditivo -> pré-cadastra a cobrança adicional (pendente).
+
+    Cria 1 Invoice(receivable, pending, cobranca_liberada=False) com o
+    impact_value da mudança. Idempotente: se já existe invoice deste caso, não
+    recria. Sem valor (>0) ou sem customer -> nada a fazer.
+
+    Returns: Invoice criada, ou None (nada a fazer / dry_run / flag off).
+    """
+    flag = _get_flag() if dry_run is None else ('dry_run' if dry_run else 'on')
+    if flag == 'off':
+        return None
+
+    from finance.invoice_generator import _next_invoice_number
+    from finance.models import Invoice
+
+    if _find_aditivo_invoice(case) is not None:
+        logger.info(
+            'Aditivo F4: LegalCase %s ja tem invoice de pre-cadastro — '
+            'ignorando (idempotente).', case.id,
+        )
+        return None
+
+    customer = case.customer
+    if customer is None:
+        logger.warning(
+            'Aditivo F4: LegalCase %s sem customer — pre-cadastro nao criado.',
+            case.id,
+        )
+        return None
+
+    value = _resolve_impact_value(case)
+    if value <= 0:
+        logger.warning(
+            'Aditivo F4: LegalCase %s sem valor (impact_value > 0) — '
+            'nada a pre-cadastrar.', case.id,
+        )
+        return None
+
+    description = f'{getattr(customer, "company_name", customer)} — Aditivo (mudança de escopo)'
+
+    if flag == 'dry_run':
+        logger.info(
+            'DRY_RUN %s: pre-cadastraria invoice de R$ %s (pendente) para '
+            'customer %s (LegalCase %s). Sem efeito.',
+            ADITIVO_FLAG, value, customer.id, case.id,
+        )
+        log_audit(
+            user, PRECADASTRO_DRY_RUN_ACTION, 'invoice',
+            details=(
+                f'DRY_RUN {ADITIVO_FLAG}: pré-cadastraria invoice de R$ {value} '
+                f'(aditivo, pendente) p/ customer {customer.id} (LegalCase {case.id}).'
+            ),
+            new_value={
+                'customer': customer.id, 'legal_case': case.id,
+                'value': str(value), 'dry_run': True,
+            },
+        )
+        return None
+
+    today = timezone.now().date()
+    invoice = Invoice.objects.create(
+        invoice_type='receivable',
+        document_type='invoice',
+        customer=customer,
+        project=case.project,
+        number=_next_invoice_number('receivable'),
+        issue_date=today,
+        due_date=today,
+        value=value,
+        total=value,
+        description=description,
+        items=[{
+            'description': description, 'quantity': 1,
+            'unit_price': float(value), 'total': float(value),
+        }],
+        payment_details={'aditivo_legal_case': case.id, 'precadastro_role': 'aditivo'},
+        status='pending',
+        cobranca_liberada=False,
+        notes=(
+            f'Pré-cadastro automático de Aditivo (LegalCase {case.id}) — '
+            'pendente até a assinatura.'
+        ),
+        created_by=user or customer.created_by,
+    )
+    logger.info(
+        'Aditivo F4: invoice %s pre-cadastrada (R$ %s, pendente) p/ customer %s '
+        '(LegalCase %s).', invoice.id, value, customer.id, case.id,
+    )
+    log_audit(
+        user, PRECADASTRO_ACTION, 'invoice', invoice.id,
+        details=(
+            f'Aditivo (LegalCase {case.id}) — invoice {invoice.number} '
+            f'pré-cadastrada (R$ {value}, pendente).'
+        ),
+        new_value={
+            'customer': customer.id, 'legal_case': case.id,
+            'invoice': invoice.id, 'value': str(value),
+            'cobranca_liberada': False,
+        },
+    )
+    return invoice
+
+
+def notify_finance_aditivo_outcome(case, new_status, *, user=None, dry_run=None):
+    """Saída do Aditivo: Assinado ATIVA a cobrança; Recusado CANCELA o pré-cadastro.
+
+    Idempotente: a invoice já no estado-alvo não é tocada de novo.
+
+    Returns: id da Invoice afetada, ou None (nada a fazer / dry_run / flag off).
+    """
+    flag = _get_flag() if dry_run is None else ('dry_run' if dry_run else 'on')
+    if flag == 'off':
+        return None
+
+    invoice = _find_aditivo_invoice(case)
+    if invoice is None:
+        logger.info(
+            'Aditivo F4: LegalCase %s sem invoice de pre-cadastro ativa — '
+            'nada a %s.', case.id, new_status,
+        )
+        return None
+
+    if new_status == 'assinado':
+        if invoice.cobranca_liberada:
+            return None  # já ativada (idempotente)
+        if flag == 'dry_run':
+            logger.info(
+                'DRY_RUN %s: ativaria cobranca da invoice %s (LegalCase %s '
+                'assinado). Sem efeito.', ADITIVO_FLAG, invoice.id, case.id,
+            )
+            log_audit(
+                user, ATIVA_DRY_RUN_ACTION, 'invoice', invoice.id,
+                details=(
+                    f'DRY_RUN {ADITIVO_FLAG}: ativaria cobrança da invoice '
+                    f'{invoice.number} (LegalCase {case.id} assinado).'
+                ),
+                new_value={'invoice': invoice.id, 'legal_case': case.id,
+                           'dry_run': True},
+            )
+            return None
+        # .update() não dispara signals de Invoice — intencional (só o gate).
+        from finance.models import Invoice
+        Invoice.objects.filter(id=invoice.id).update(cobranca_liberada=True)
+        logger.info(
+            'Aditivo F4: cobranca ATIVADA na invoice %s (LegalCase %s assinado).',
+            invoice.id, case.id,
+        )
+        log_audit(
+            user, ATIVA_ACTION, 'invoice', invoice.id,
+            details=(
+                f'Aditivo assinado (LegalCase {case.id}) — cobrança ativada na '
+                f'invoice {invoice.number}.'
+            ),
+            old_value={'cobranca_liberada': False},
+            new_value={'cobranca_liberada': True, 'invoice': invoice.id,
+                       'legal_case': case.id},
+        )
+        return invoice.id
+
+    if new_status == 'recusado':
+        if flag == 'dry_run':
+            logger.info(
+                'DRY_RUN %s: cancelaria o pre-cadastro da invoice %s (LegalCase '
+                '%s recusado). Sem efeito.', ADITIVO_FLAG, invoice.id, case.id,
+            )
+            log_audit(
+                user, CANCELA_DRY_RUN_ACTION, 'invoice', invoice.id,
+                details=(
+                    f'DRY_RUN {ADITIVO_FLAG}: cancelaria pré-cadastro da invoice '
+                    f'{invoice.number} (LegalCase {case.id} recusado).'
+                ),
+                new_value={'invoice': invoice.id, 'legal_case': case.id,
+                           'dry_run': True},
+            )
+            return None
+        from finance.models import Invoice
+        Invoice.objects.filter(id=invoice.id).update(status='cancelled')
+        logger.info(
+            'Aditivo F4: pre-cadastro CANCELADO na invoice %s (LegalCase %s '
+            'recusado).', invoice.id, case.id,
+        )
+        log_audit(
+            user, CANCELA_ACTION, 'invoice', invoice.id,
+            details=(
+                f'Aditivo recusado (LegalCase {case.id}) — pré-cadastro '
+                f'cancelado na invoice {invoice.number}.'
+            ),
+            old_value={'status': invoice.status},
+            new_value={'status': 'cancelled', 'invoice': invoice.id,
+                       'legal_case': case.id},
+        )
+        return invoice.id
+
+    return None

@@ -19,7 +19,11 @@ logger = logging.getLogger('juridico')
 
 @extend_schema(tags=['juridico'])
 class LegalCaseViewSet(viewsets.ModelViewSet):
-    queryset = LegalCase.objects.select_related('customer', 'project', 'created_by')
+    queryset = (
+        LegalCase.objects
+        .select_related('customer', 'project', 'created_by', 'onboarding', 'proposal')
+        .prefetch_related('events', 'events__created_by')
+    )
     serializer_class = LegalCaseSerializer
     permission_classes = [HasSectorAccess('juridico')]
     pagination_class = DynamicPageSizePagination
@@ -52,13 +56,32 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             case.id, case.process_type, case.customer_id, self.request.user.username,
         )
 
+    def _allowed_targets(self, case):
+        """Status válidos a partir do atual, conforme a modalidade do caso.
+
+        Avança exatamente 1 macro-etapa (doc 02 §2). No Aditivo, a etapa
+        `aguardando_assinatura` tem DOIS desfechos terminais (doc 09 item 07):
+        `assinado` (próximo na ordem) ou `recusado` (ramo de recusa).
+        """
+        order = LegalCase.status_order_for(case.process_type)
+        if case.status not in order:
+            return []
+        idx = order.index(case.status)
+        targets = []
+        if idx + 1 < len(order):
+            targets.append(order[idx + 1])
+        if case.process_type == 'aditivo' and case.status == 'aguardando_assinatura':
+            targets.append('recusado')
+        return targets
+
     @action(detail=True, methods=['post'])
     def transition(self, request, pk=None):
-        """Avança o caso exatamente 1 macro-etapa (doc 02 §2).
+        """Avança o caso exatamente 1 macro-etapa da SUA modalidade (doc 02 §2).
 
         Body: {"status": "<próximo status>", "autentique_id"?, "autentique_link"?}
         Transição inválida (pular etapa, voltar, repetir) retorna 400 sem
-        mudar estado. Toda transição gera log_audit com old/new.
+        mudar estado. Toda transição gera log_audit com old/new + um
+        LegalCaseEvent na timeline do card (doc 09 item 06).
         """
         case = self.get_object()
         input_serializer = LegalCaseTransitionSerializer(data=request.data)
@@ -66,19 +89,22 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             return Response(input_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         new_status = input_serializer.validated_data['status']
-        order = LegalCase.STATUS_ORDER
-        current_idx = order.index(case.status)
 
-        if case.status == 'assinado':
+        if case.status in LegalCase.TERMINAL_STATUSES:
             return Response(
-                {'error': 'Caso já assinado — não há transição possível.'},
+                {'error': (
+                    f'Caso em estado terminal ({case.get_status_display()}) — '
+                    'não há transição possível.'
+                )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if new_status != order[current_idx + 1]:
+
+        allowed = self._allowed_targets(case)
+        if new_status not in allowed:
             return Response(
                 {'error': (
                     f'Transição inválida: {case.status} → {new_status}. '
-                    f'Próxima etapa permitida: {order[current_idx + 1]}.'
+                    f'Próxima(s) etapa(s) permitida(s): {", ".join(allowed) or "-"}.'
                 )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -89,9 +115,10 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             'autentique_link': case.autentique_link,
             'signed_at': case.signed_at.isoformat() if case.signed_at else None,
         }
+        old_status = case.status
 
         case.status = new_status
-        # Upload no Autentique acontece na transição Preparação → Envio
+        # Upload no Autentique acontece na transição de preparação → envio
         # (doc 02 §2): única porta de escrita desses campos até a F7.
         if input_serializer.validated_data.get('autentique_id'):
             case.autentique_id = input_serializer.validated_data['autentique_id']
@@ -110,15 +137,42 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
         log_audit(
             request.user, 'legal_case_transition', 'legal_case', case.id,
             details=(
-                f"{old_value['status']} -> {new_status} "
+                f'{old_status} -> {new_status} '
                 f'(process_type={case.process_type}, autentique_id={case.autentique_id or "-"})'
             ),
             old_value=old_value, new_value=new_value, request=request,
         )
 
-        # SAÍDAS (doc 02 §3): nesta fase apenas log + audit. Consumidores
-        # reais entram na F4 (Financeiro libera cobrança) e F5 (Produção
-        # libera baseline) — atrás de flags próprias de automação.
+        # Timeline do card (doc 09 item 06): preserva cada passagem, com o
+        # documento assinado (link Autentique + data) quando houver.
+        if new_status == 'assinado':
+            event_type = 'signed'
+        elif new_status == 'recusado':
+            event_type = 'rejected'
+        else:
+            event_type = 'status_change'
+        case.record_event(
+            event_type,
+            from_status=old_status, to_status=new_status,
+            autentique_link=case.autentique_link,
+            signed_at=case.signed_at if new_status == 'assinado' else None,
+            created_by=request.user,
+        )
+
+        # SAÍDAS por modalidade (doc 02 §3 + doc 09 item 07).
+        self._handle_transition_outputs(request, case, new_status)
+
+        return Response(LegalCaseSerializer(case).data)
+
+    def _handle_transition_outputs(self, request, case, new_status):
+        """Saídas (automação) das transições, por modalidade.
+
+        - contrato/validacao assinado: log + audit (consumidores reais já
+          existem em finance/signals e projects/receivers atrás das suas flags).
+        - aditivo assinado: Financeiro ATIVA a cobrança pré-cadastrada.
+        - aditivo recusado: Financeiro CANCELA o pré-cadastro.
+        Tudo isolado (try/except) p/ não derrubar a transição (CLAUDE.md).
+        """
         if new_status == 'assinado' and case.process_type in ('contrato', 'validacao_documento'):
             outcome = (
                 'financeiro_liberar_cobranca' if case.process_type == 'contrato'
@@ -126,17 +180,25 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             )
             logger.info(
                 'SAIDA juridico: LegalCase %s (%s) assinado — consumidor %s '
-                'sera implementado na F4/F5 (apenas log nesta fase).',
+                '(finance/signals + projects/receivers atras das flags).',
                 case.id, case.process_type, outcome,
             )
             log_audit(
                 request.user, 'legal_case_signed_output', 'legal_case', case.id,
                 details=(
-                    f'Saída {outcome} registrada (sem efeito na F3; '
-                    'consumidores reais em F4/F5).'
+                    f'Saída {outcome} registrada (consumidores em F4/F5 atrás '
+                    'das próprias flags de automação).'
                 ),
                 new_value={'process_type': case.process_type, 'outcome': outcome},
                 request=request,
             )
 
-        return Response(LegalCaseSerializer(case).data)
+        if case.process_type == 'aditivo' and new_status in ('assinado', 'recusado'):
+            from .services import notify_finance_aditivo_outcome
+            try:
+                notify_finance_aditivo_outcome(case, new_status, user=request.user)
+            except Exception as exc:  # noqa: BLE001 — isolamento (CLAUDE.md)
+                logger.exception(
+                    'Falha na saída do Aditivo p/ Financeiro (LegalCase %s, '
+                    'status %s): %s', case.id, new_status, exc,
+                )
