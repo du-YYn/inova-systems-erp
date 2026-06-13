@@ -420,3 +420,124 @@ Status: 🟡 aberto (coletando) · ⚙️ a corrigir · ✅ corrigido
 ### Pendência aberta (não bloqueia)
 - **Quem define o `impact_value`** (o valor da mudança) antes de ir pro cliente? O Dev estima as
   horas; o valor comercial precisa do closer/Comercial, ou é derivado das horas? (a confirmar)
+
+---
+
+# ACHADOS DO TESTE MANUAL DE JOHN (após o desenvolvimento — 2026-06-13)
+> John testando a branch v32-ajustes. Registro só; corrigir tudo junto no fim (mesmo modo).
+
+## T01 · Coleta de Dados: o card precisa expor o LINK DO FORMS pra enviar ao cliente
+- **Status:** 🟡 aberto (testando). Liga com o GAP #1 já conhecido do desenvolvimento.
+- **Onde:** CRM Comercial → card do cliente na coluna **"Coleta de Dados"**.
+- **O que John apontou:** quando o card vai pra Coleta de Dados, ele precisa ter acesso ao
+  **link do FORMS** (coleta de dados) pra copiar e enviar ao cliente — mesmo que o link também
+  esteja dentro da proposta. Hoje não aparece.
+- **Causa (já mapeada no dev):** o endpoint `create-onboarding` (backend/sales/views.py ~l.865)
+  só aceita `prospect.status in ('won','data_collection','production')` — NÃO aceita o status
+  novo `coleta_de_dados`. Então, ao aprovar a proposta (que move pra `coleta_de_dados`), o banner
+  do link de onboarding no drawer do FunilTab (gate em won/production, ~l.2065) não aparece e a
+  criação seria recusada.
+- **Correção (na fase de reconciliação):**
+  1. Backend: `create-onboarding` aceitar `coleta_de_dados` (e provavelmente `projeto_fechado`).
+  2. Frontend: no card em "Coleta de Dados", mostrar o **link do FORMS** (gerar/copiar) — e, como
+     desenhamos no item 04, ter os 2 links (proposta + forms) acessíveis pelo card.
+- **Confirma o redesenho:** é o que o item 04 e o doc 10 já previam (2 links no card da Coleta).
+
+## T-E2E · Teste E2E por agentes (2026-06-13, branch v32-ajustes)
+> 2 jornadas (Padaria Aurora=Fechado, TransLog=Recorrente) + RBAC. Ambas completaram ponta a
+> ponta, MAS só com 5-6 workarounds de admin cada → o caminho feliz está quebrado nos P0 abaixo.
+
+### ✅ Confirmado funcionando (ponta a ponta)
+- **Cobrança em dobro CORRIGIDA** — pré-cadastro F4 idempotente, 1 invoice (Aurora) / 13 (TransLog), sem dobra.
+- project_type derivado (fechado/recorrente); send→proposal; approve→coleta_de_dados.
+- Jurídico: contrato/validação/aditivo transitam até assinado + **timeline (LegalCaseEvent)** gravada.
+- Finance LIBERA_COBRANCA sem dobrar; **Dia 0** (3 critérios); **Dev gate (Regra de Ouro)** robusto nos 2 sentidos.
+- Bifurcação por tipo + RecurrenceContract idempotente; validação pública (CNPJ/CPF) ok; **RBAC do Financeiro** ok.
+
+### 🔴 P0 — bloqueadores do caminho feliz (hoje só passam com admin)
+- **P0.1 Customer não é criado no funil (gap RAIZ):** nada em comercial→coleta cria o Customer do
+  prospect. Sem ele, pré-cadastro F4 + sync + LegalCase(contrato) abortam silenciosos no submit.
+- **P0.2 create-onboarding rejeita `coleta_de_dados`** (= T01) + `coleta_de_dados`↔`data_collection`
+  são sinônimos divergentes; a guarda V32_TRANSITIONS_INTO_NEW só deixa data_collection a partir de won.
+- **P0.3 mark_paid estoura 500:** invoice de pré-cadastro nasce sem `bank_account`; a Transaction
+  copia o NULL e `transactions.bank_account_id` é NOT NULL (em TransLog não havia NENHuma conta).
+- **P0.4 Project de Produção não é criado na assinatura do contrato:** o receiver exige Project
+  pré-dev existente; sem ele, no-op silencioso.
+
+### 🟡 P1 — automações que disparam mas incompletas
+- **P1.5 Aditivo assinado NÃO aprova o ChangeRequest** (fica pending) — loop volta-pro-dev incompleto. (única automação marcada incorreta)
+- **P1.6 Comissão no approve:** aborta sem Customer mas seta `commissions_generated_at` → nunca re-tenta.
+- **P1.7 RecurrenceContract `monthly_value=0.00`** — não herda o valor recorrente do ProposalPaymentPlan.
+
+### 🟢 P2 — RBAC e polimento
+- **P2.8 sales/ ainda sem HasSectorAccess:** financeiro consegue escrever no Comercial (segregação só existe no finance/). Aplicar HasSectorAccess('comercial').
+- **P2.9** payload de proposta exige billing_type + valid_until (doc/UX).
+- **P2.10** GET cronograma/ vazio mesmo com âncora + Dia 0 (investigar materialização do Game Plan).
+
+### RECONCILIAÇÃO (resultado — 2026-06-13)
+> Workflow corrigiu P0/P1/P2 + revalidou com 2 jornadas NOVAS. **Meta atingida: 0 workarounds de
+> admin** (Padaria Bela Vista=Fechado e RotaSul=Recorrente rodaram ponta a ponta limpas).
+> 1048 testes passando (4 falhas = artefato de ambiente, passam com flag dry_run); tsc limpo;
+> sem novas migrations (correções comportamentais). NÃO pushado.
+
+**Corrigido:** P0.1 Customer auto no approve (raiz) · P0.2 create-onboarding aceita
+coleta_de_dados + banner no card · P0.3 mark_paid com conta default (sem 500) · P0.4 Project
+criado na assinatura do contrato · P1.5 aditivo assinado → ChangeRequest "Mudança Aprovada" ·
+P1.7 RecurrenceContract herda monthly_value · P2.8 RBAC por setor no sales/ · P2.9 proposta
+billing_type/valid_until com default · P2.10 cronograma materializa on-demand.
+
+**🔴 2 decisões de John (achados ALTOS da revisão — NÃO corrigidos):**
+- **D1 (RBAC × prod):** aplicar RBAC por setor no Comercial faz os usuários do Comercial em
+  PRODUÇÃO precisarem de `sectors=['comercial']`, senão tomam 403 ao escrever. **Antes de subir
+  pra prod: backfill do campo `sectors`.** (dev/local ok.)
+- **D2 (PII):** com RBAC por setor no Customer, o `viewer` (leitura global) passou a conseguir o
+  `data-export` (PII do cliente). Confirmar: viewer DEVE exportar PII? Se não, checagem extra na
+  action (aditiva).
+
+**🟡 Gaps que sobraram (não bloqueiam):**
+- Funil: envio do form NÃO move o card pra "Projeto Fechado" (doc 09 §04 passo 13) — Jur/Fin/Prod
+  operam normais, mas o status do card não avança.
+- Cronograma: o Game Plan datado não materializa sozinho ao cravar âncora/Dia 0 — só sob demanda
+  (POST). Pela Visão 2 deveria gerar sozinho. (gap real)
+- Bifurcação label/rota: Fechado vai registro_entrega→graduação→recorrência (terminal); o label
+  "Concluído" (etapa implementacao) é só do recorrente. Confirmar se "Concluído" é o terminal do Fechado.
+- Invoice de aditivo nasce sem bank_account (mesmo padrão P0.3); não estoura no caminho feliz, mas
+  se for paga pode repetir o 500. Pequeno.
+
+---
+
+## T-E2E-2 · Re-validação independente JORNADA FECHADO (2026-06-13, branch v32-ajustes)
+> Senior validator rodou a jornada FECHADO INTEIRA ponta a ponta de novo, cliente novo
+> "Mercado Sao Jorge Ltda" (Helena Costa, one_time), só via endpoints documentados (john admin,
+> flags AUTOMATION_* on). **Meta atingida: 0 workarounds de admin** — nenhum estado avançado na
+> marra; tudo passou pela automação/transição correta. 1072 testes backend passando (0 falhas,
+> só 4 warnings de paginação/teardown); `tsc --noEmit` limpo.
+
+### ✅ Automações confirmadas funcionando
+- **Customer automático no approve** (P0.1): aprovar PROP-00010 criou Customer #7 e vinculou.
+- **Comissão** (idempotente): 2 ClientCost no approve — Closer R$1.800 (10%) + SDR R$900 (5%).
+- **billing_type/valid_until default** (P2.9): omitidos no POST → `fixed` (one_time) + hoje+30.
+- **approve → coleta_de_dados** + create-onboarding aceita `coleta_de_dados` (P0.2/T01) + gera token.
+- **Submit do forms** dispara em paralelo: LegalCase(contrato) #17 vinculado a proposta+onboarding
+  (§05) E pré-cadastro Financeiro (1 invoice REC-00048, R$18.000, **bank_account=1**, sem dobra).
+- **Contrato assinado**: criou Project #8 (P0.4) + liberou cobrança (`cobranca_liberada=True`).
+- **mark_paid sem 500** (P0.3): invoice paga + Transaction #11 com bank_account=1 (não-NULL).
+- **Produção** (Dia 0): agendar crava âncora; 3 critérios (contrato+entrada+onboarding) → dia_zero=2026-06-20.
+- **Handshake Produção→Jurídico**: submit do doc (pending_validation) criou LegalCase(validacao) #19.
+- **Handshake Jurídico→Produção**: validacao assinada criou ProjectDocument baseline `signed` → **Dev gate liberado**.
+- **Regra de Ouro robusta**: gate bloqueava só na baseline; liberou só com os 3 ok.
+- **Aditivo (P1.5 — antes incorreto, AGORA OK)**: aditivo assinado → ChangeRequest #5 vira
+  `approved` (Mudança Aprovada) + Financeiro ativa a cobrança pré-cadastrada (INV REC-00062, R$4.000).
+- **Falha do H1 VISÍVEL**: forçando exceção no pré-cadastro F4, o erro sai como `ERROR` + traceback
+  (`logger.exception`) e NÃO derruba o submit (signal do Jurídico ainda roda). Falha não é engolida.
+- **RBAC por setor**: producao RW só producao+admin (fran/bia/leo → 403 write, read global ok);
+  comercial RW só comercial+admin (fran financeiro **bloqueado** de escrever no Comercial — P2.8).
+
+### Observações (consistentes com os gaps já registrados; não bloqueiam)
+- **Funil não avança**: prospect ficou em `coleta_de_dados` após submit do forms — confirma o gap
+  "envio do form não move o card pra Projeto Fechado" (§04 passo 13). Jur/Fin/Prod operam normais.
+- **Aditivo invoice COM bank_account**: nesta corrida a INV de aditivo (REC-00062) nasceu já com
+  `bank_account=1` — o gap "aditivo sem bank_account" parece resolvido p/ este caminho.
+- **Bifurcação fechado**: terminal = `recorrencia` (label "Implementado") via `etapa_10_graduacao`
+  ("Homologação"); `implementacao` ("Concluído") é rejeitado p/ fechado (guard ok). Pendência de
+  NOMENCLATURA permanece: confirmar com John se o terminal do Fechado deve se chamar "Concluído".
