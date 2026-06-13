@@ -28,11 +28,22 @@ from .serializers import (
     PaymentProviderSerializer, PaymentProviderRateSerializer,
 )
 from accounts.permissions import (
-    IsAdminOrManager, IsAdminOrManagerOrOperator, IsAdminOrReadOnly,
+    HasSectorAccess, IsAdminOrManager, IsAdminOrManagerOrOperator,
+    IsAdminOrReadOnly,
 )
 from core.audit import log_audit
 
 logger = logging.getLogger('finance')
+
+# v32 ajustes (doc 09 §04 RBAC / gap E2E): o Financeiro passa a usar RBAC por
+# setor (padrão F3, accounts.permissions.HasSectorAccess) em vez de role-based
+# puro (IsAdminOrManager). Assim:
+#   - operador/gerente DO setor financeiro escreve no Financeiro (antes tomava
+#     403 em tudo por não ser admin/manager global);
+#   - quem NÃO é do setor financeiro só lê (matriz SECTOR_ACCESS_MATRIX) — o
+#     Financeiro deixa de escrever no Comercial e vice-versa;
+#   - admin mantém bypass total; viewer mantém leitura global.
+FinanceSectorAccess = HasSectorAccess('financeiro')
 
 
 class _SimulatePaymentThrottle(ScopedRateThrottle):
@@ -44,7 +55,7 @@ class _SimulatePaymentThrottle(ScopedRateThrottle):
 class BankAccountViewSet(viewsets.ModelViewSet):
     queryset = BankAccount.objects.filter(is_active=True)
     serializer_class = BankAccountSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
 
 @extend_schema(tags=['finance'])
@@ -68,7 +79,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.select_related('customer', 'category', 'bank_account', 'created_by')
     serializer_class = InvoiceSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -332,7 +343,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 class TransactionViewSet(viewsets.ModelViewSet):
     queryset = Transaction.objects.select_related('bank_account', 'category', 'customer', 'created_by')
     serializer_class = TransactionSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -466,14 +477,14 @@ class TransactionViewSet(viewsets.ModelViewSet):
 class CostCenterViewSet(viewsets.ModelViewSet):
     queryset = CostCenter.objects.all()
     serializer_class = CostCenterSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
 
 @extend_schema(tags=['finance'])
 class BudgetViewSet(viewsets.ModelViewSet):
     queryset = Budget.objects.select_related('category', 'cost_center', 'created_by')
     serializer_class = BudgetSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -527,7 +538,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
 class TaxConfigViewSet(viewsets.ModelViewSet):
     queryset = TaxConfig.objects.all()
     serializer_class = TaxConfigSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def list(self, request, *args, **kwargs):
         config = TaxConfig.objects.first()
@@ -549,7 +560,7 @@ class TaxConfigViewSet(viewsets.ModelViewSet):
 class TaxEntryViewSet(viewsets.ModelViewSet):
     queryset = TaxEntry.objects.all()
     serializer_class = TaxEntrySerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -572,7 +583,7 @@ class TaxEntryViewSet(viewsets.ModelViewSet):
 class ClientCostViewSet(viewsets.ModelViewSet):
     queryset = ClientCost.objects.select_related('customer')
     serializer_class = ClientCostSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -592,7 +603,7 @@ class ClientCostViewSet(viewsets.ModelViewSet):
 class RecurringExpenseViewSet(viewsets.ModelViewSet):
     queryset = RecurringExpense.objects.all()
     serializer_class = RecurringExpenseSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -612,7 +623,7 @@ class RecurringExpenseViewSet(viewsets.ModelViewSet):
 class LoanViewSet(viewsets.ModelViewSet):
     queryset = Loan.objects.prefetch_related('installments')
     serializer_class = LoanSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def perform_create(self, serializer):
         loan = serializer.save(created_by=self.request.user)
@@ -648,7 +659,7 @@ class LoanViewSet(viewsets.ModelViewSet):
 class AssetViewSet(viewsets.ModelViewSet):
     queryset = Asset.objects.all()
     serializer_class = AssetSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def perform_create(self, serializer):
         asset = serializer.save(created_by=self.request.user)
@@ -665,7 +676,7 @@ class AssetViewSet(viewsets.ModelViewSet):
 class ProfitDistConfigViewSet(viewsets.ModelViewSet):
     queryset = ProfitDistConfig.objects.prefetch_related('partners')
     serializer_class = ProfitDistConfigSerializer
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     @action(detail=True, methods=['post'], url_path='partners')
     def add_partner(self, request, pk=None):
@@ -843,7 +854,7 @@ def _calc_dre_month(year, month, active_customers, rob_f, churn_value, tax_confi
 @extend_schema(tags=['finance'])
 class FinanceDashboardView(viewsets.ViewSet):
     """Dashboard financeiro consolidado — DRE 12 meses, indicadores, MRR, distribuição."""
-    permission_classes = [IsAdminOrManager]
+    permission_classes = [FinanceSectorAccess]
 
     def list(self, request):
         from sales.models import Customer
