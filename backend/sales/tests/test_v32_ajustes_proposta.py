@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from finance.models import Invoice
+from finance.models import ClientCost, Invoice
 from finance.services import precadastrar_invoice_da_proposta
 from sales.models import (
     Customer, Prospect, Proposal, ProposalPaymentPlan,
@@ -303,3 +303,117 @@ class TestDoubleChargeDedupe:
         assert len(numbers) == 3
         assert len(set(numbers)) == 3  # todos únicos
         assert all(n.startswith('REC-') for n in numbers)
+
+
+# ─── P0.1 Customer criado/vinculado no funil ao aprovar a proposta ───────────
+
+@pytest.mark.django_db
+class TestApproveEnsuresCustomer:
+    """P0.1 (doc 09 §T-E2E): aprovar a proposta cria/obtém o Customer do
+    prospect e vincula proposta+prospect+onboarding. Idempotente."""
+
+    def _prospect_sem_customer(self, admin_user, **kwargs):
+        defaults = dict(
+            company_name='Padaria Aurora LTDA',
+            contact_name='Aurora Dona',
+            contact_email='dona@aurora.com',
+            contact_phone='11999990000',
+            source='website',
+            status='proposal',
+            created_by=admin_user,
+        )
+        defaults.update(kwargs)
+        return Prospect.objects.create(**defaults)
+
+    def test_approve_creates_customer_when_none(self, admin_client, admin_user):
+        prospect = self._prospect_sem_customer(admin_user)
+        assert prospect.customer_id is None
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+
+        r = admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+        assert r.status_code == status.HTTP_200_OK, r.data
+
+        prospect.refresh_from_db()
+        proposal.refresh_from_db()
+        assert prospect.customer_id is not None
+        customer = prospect.customer
+        assert customer.company_name == 'Padaria Aurora LTDA'
+        assert customer.email == 'dona@aurora.com'
+        assert customer.source == 'crm'
+        # proposta vinculada ao mesmo Customer
+        assert proposal.customer_id == customer.id
+
+    def test_approve_reuses_existing_customer_by_email(
+        self, admin_client, admin_user,
+    ):
+        existing = Customer.objects.create(
+            company_name='Outro Nome LTDA',
+            email='dona@aurora.com',
+            created_by=admin_user,
+        )
+        prospect = self._prospect_sem_customer(admin_user)
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        prospect.refresh_from_db()
+        # reaproveita o existente — não cria duplicado
+        assert prospect.customer_id == existing.id
+        assert Customer.objects.filter(email='dona@aurora.com').count() == 1
+
+    def test_approve_idempotent_keeps_linked_customer(
+        self, admin_client, admin_user, customer,
+    ):
+        prospect = self._prospect_sem_customer(
+            admin_user, customer=customer, company_name='Ajustes V32 LTDA',
+            contact_email='contato@v32aj.com',
+        )
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        before = Customer.objects.count()
+        # re-aprovar (admin reverte e aprova de novo) não duplica
+        proposal.refresh_from_db()
+        proposal.status = 'sent'
+        proposal.save(update_fields=['status'])
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        assert Customer.objects.count() == before
+        prospect.refresh_from_db()
+        assert prospect.customer_id == customer.id
+
+    def test_approve_without_company_name_does_not_crash(
+        self, admin_client, admin_user,
+    ):
+        """Sem company_name não dá pra criar Customer — aprova mesmo assim."""
+        prospect = self._prospect_sem_customer(
+            admin_user, company_name='', contact_email='',
+        )
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+
+        r = admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+        assert r.status_code == status.HTTP_200_OK, r.data
+        prospect.refresh_from_db()
+        assert prospect.customer_id is None  # não criou
+        proposal.refresh_from_db()
+        assert proposal.status == 'approved'  # mas aprovou
+
+    def test_commission_generated_after_customer_created(
+        self, admin_client, admin_user,
+    ):
+        """P1.6: com o Customer criado em P0.1, a comissão é gerada no approve."""
+        prospect = self._prospect_sem_customer(admin_user)
+        proposal = make_proposal(
+            prospect, admin_user, plan_type='one_time',
+            recurring_amount=Decimal('0'),
+        )
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        proposal.refresh_from_db()
+        assert proposal.commissions_generated_at is not None
+        prospect.refresh_from_db()
+        # 2 ClientCost (Closer 10% + SDR 5%) no Customer recém-criado
+        assert ClientCost.objects.filter(
+            customer=prospect.customer, cost_category='comercial',
+        ).count() == 2

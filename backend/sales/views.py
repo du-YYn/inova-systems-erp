@@ -998,7 +998,14 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.status = 'approved'
         proposal.save()
 
-        # Gerar comissões automaticamente
+        # P0.1 (raiz do caminho feliz, doc 09 §T-E2E): garante o Customer do
+        # prospect ANTES de qualquer efeito que dependa dele. Sem isso, o
+        # pré-cadastro F4, o _sync_customer do onboarding e o LegalCase(contrato)
+        # abortavam calados no submit, e a comissão (abaixo) nunca era gerada.
+        # Idempotente: reaproveita o Customer existente (por FK ou e-mail).
+        self._ensure_customer_for_proposal(proposal, request.user)
+
+        # Gerar comissões automaticamente (agora com Customer garantido — P1.6)
         self._generate_commissions(proposal, request.user)
 
         if proposal.prospect:
@@ -1035,6 +1042,84 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if plan.plan_type in ('recurring_only', 'setup_plus_recurring'):
             return 'recorrente'
         return ''
+
+    @staticmethod
+    def _ensure_customer_for_proposal(proposal, user):
+        """P0.1: cria/obtém o Customer do prospect e vincula proposta+prospect.
+
+        Ponto certo do funil (doc 09 §T-E2E P0.1): ao aprovar a proposta — que
+        move o card para a Coleta de Dados — o Customer já precisa existir, pois
+        o submit do onboarding dispara o pré-cadastro F4, o _sync_customer e o
+        LegalCase(contrato), todos dependentes de um Customer.
+
+        Idempotente:
+          - se a proposta já tem customer, não faz nada;
+          - reaproveita Customer existente por e-mail do contato;
+          - só então cria um novo (mesma regra do convert_to_contract).
+        Isolado em try/except — uma falha aqui NÃO derruba a aprovação.
+
+        Returns: o Customer resolvido (ou None se não foi possível).
+        """
+        if proposal.customer_id:
+            return proposal.customer
+        prospect = proposal.prospect
+        if prospect is None:
+            return None
+        try:
+            with transaction.atomic():
+                # Lock no prospect para evitar corrida com outra aprovação.
+                prospect = Prospect.objects.select_for_update().get(pk=prospect.pk)
+                if prospect.customer_id:
+                    customer = prospect.customer
+                else:
+                    prospect_email = (prospect.contact_email or '').strip()
+                    prospect_company = (prospect.company_name or '').strip()
+                    customer = None
+                    if prospect_email:
+                        customer = Customer.objects.filter(
+                            email=prospect_email,
+                        ).first()
+                    if customer is None:
+                        if not prospect_company:
+                            logger.warning(
+                                'P0.1: prospect %s sem company_name — Customer '
+                                'não criado na aprovação da proposta %s.',
+                                prospect.id, proposal.number,
+                            )
+                            return None
+                        customer = Customer.objects.create(
+                            customer_type='PJ',
+                            company_name=prospect_company,
+                            name=(prospect.contact_name or '').strip(),
+                            email=prospect_email,
+                            phone=(prospect.contact_phone or '').strip(),
+                            source='crm',
+                            created_by=user,
+                        )
+                        logger.info(
+                            'P0.1: Customer %s (%s) auto-criado na aprovação da '
+                            'proposta %s.',
+                            customer.id, customer.company_name, proposal.number,
+                        )
+                    prospect.customer = customer
+                    prospect.save(update_fields=['customer'])
+                # Vincula a proposta ao Customer (sempre — idempotente).
+                if proposal.customer_id != customer.id:
+                    proposal.customer = customer
+                    proposal.save(update_fields=['customer'])
+                # Vincula o onboarding existente, se houver, ao Customer.
+                onboarding = getattr(prospect, 'onboarding', None)
+                if onboarding is not None and not onboarding.customer_id:
+                    onboarding.customer = customer
+                    onboarding.save(update_fields=['customer'])
+            return customer
+        except Exception as exc:  # noqa: BLE001 — isolamento de efeito colateral
+            logger.warning(
+                'P0.1: falha ao garantir Customer para a proposta %s '
+                '(prospect %s): %s',
+                proposal.id, getattr(prospect, 'id', None), exc,
+            )
+            return None
 
     def _on_proposal_approved(self, proposal, user):
         """Efeitos colaterais da aprovação da proposta (isolados).
@@ -1108,6 +1193,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
         Idempotente: se `proposal.commissions_generated_at` ja esta setado,
         nao gera de novo (evita duplicacao em re-aprovacao quando admin
         reverte status via Django Admin).
+
+        P1.6 (doc 09 §T-E2E): a flag `commissions_generated_at` SÓ é marcada no
+        bloco atômico final, depois de criar os ClientCost. Os aborts (sem
+        valor / sem Customer) retornam ANTES de marcar a flag, então o approve
+        re-tenta na próxima vez. Com o Customer garantido em
+        _ensure_customer_for_proposal (P0.1), o abort por "sem Customer" não
+        acontece mais no caminho feliz.
         """
         from decimal import Decimal, ROUND_HALF_UP
         from django.db import transaction as db_tx
