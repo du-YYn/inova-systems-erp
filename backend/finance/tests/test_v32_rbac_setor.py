@@ -87,11 +87,15 @@ class TestFinanceSectorRBAC:
         r = client.post(INVOICES_URL, _invoice_payload(), format='json')
         assert r.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_operator_without_any_sector_is_blocked(self, db):
+    def test_operator_without_any_sector_falls_back_to_role(self, db):
+        """H2 (code review): operador SEM sectors cai no comportamento legado
+        role-based (lê + escreve como operator) — não é trancado no deploy do
+        RBAC por setor numa base de produção sem `sectors`. Quando recebe um
+        setor, a regra por setor passa a valer."""
         client = _client(_user('no_sector', 'operator', []))
-        assert client.get(INVOICES_URL).status_code == status.HTTP_403_FORBIDDEN
+        assert client.get(INVOICES_URL).status_code == status.HTTP_200_OK
         r = client.post(INVOICES_URL, _invoice_payload(), format='json')
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_201_CREATED, r.data
 
     def test_viewer_reads_globally(self, db):
         client = _client(_user('rbac_viewer', 'viewer'))

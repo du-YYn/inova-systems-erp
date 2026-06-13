@@ -82,11 +82,16 @@ class TestCommercialSectorRBAC:
         r = client.post(PROSPECTS_URL, _prospect_payload(), format='json')
         assert r.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_operator_without_any_sector_is_blocked(self, db):
+    def test_operator_without_any_sector_falls_back_to_role(self, db):
+        """H2 (code review): operador SEM sectors NÃO é trancado — cai no
+        comportamento legado role-based (lê + escreve como operator). Evita
+        403 em massa no deploy do RBAC numa base de produção sem o campo
+        `sectors` preenchido. Assim que recebe um setor, a regra por setor
+        passa a valer (ver test_finance_operator_can_read_but_not_write)."""
         client = _client(_user('no_sector_com', 'operator', []))
-        assert client.get(PROSPECTS_URL).status_code == status.HTTP_403_FORBIDDEN
+        assert client.get(PROSPECTS_URL).status_code == status.HTTP_200_OK
         r = client.post(PROSPECTS_URL, _prospect_payload(), format='json')
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_201_CREATED, r.data
 
     def test_viewer_reads_globally(self, db):
         client = _client(_user('rbaccom_viewer', 'viewer'))

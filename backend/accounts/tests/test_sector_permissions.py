@@ -70,10 +70,39 @@ class TestHasSectorAccess:
         assert not check(partner, 'juridico', 'GET')
         assert not check(partner, 'juridico', 'POST')
 
-    def test_empty_sectors_denied(self):
-        op = make_user('operator', sectors=[], suffix='_empty')
-        assert not check(op, 'juridico', 'GET')
-        assert not check(op, 'juridico', 'POST')
+    def test_empty_sectors_falls_back_to_role_based(self):
+        """H2 (code review): manager/operator SEM sectors NÃO são trancados —
+        caem no comportamento legado role-based (leitura p/ todos, escrita p/
+        manager/operator). Evita 403 em massa no deploy do RBAC por setor numa
+        base de produção sem o campo preenchido."""
+        op = make_user('operator', sectors=[], suffix='_empty_op')
+        # leitura liberada em qualquer setor
+        assert check(op, 'juridico', 'GET')
+        assert check(op, 'comercial', 'GET')
+        # escrita liberada (role operator) — comportamento pré-v32
+        assert check(op, 'juridico', 'POST')
+        assert check(op, 'comercial', 'POST')
+
+        mgr = make_user('manager', sectors=[], suffix='_empty_mgr')
+        assert check(mgr, 'financeiro', 'GET')
+        assert check(mgr, 'financeiro', 'POST')
+
+    def test_empty_sectors_still_blocks_non_operator_roles(self):
+        """O fallback é só para manager/operator. Viewer (leitura global) e
+        partner (negado) mantêm suas regras mesmo sem sectors."""
+        viewer = make_user('viewer', sectors=[], suffix='_empty_viewer')
+        assert check(viewer, 'comercial', 'GET')
+        assert not check(viewer, 'comercial', 'POST')
+        partner = make_user('partner', sectors=[], suffix='_empty_partner')
+        assert not check(partner, 'comercial', 'GET')
+        assert not check(partner, 'comercial', 'POST')
+
+    def test_assigned_sector_overrides_fallback(self):
+        """Assim que o usuário recebe um setor, a regra por setor passa a valer
+        (o fallback some) — escrita só no próprio setor."""
+        op = make_user('operator', sectors=['juridico'], suffix='_assigned')
+        assert check(op, 'juridico', 'POST')
+        assert not check(op, 'comercial', 'POST')  # fallback não vale mais
 
     def test_custom_access_map_injectable(self):
         op = make_user('operator', sectors=['x'])

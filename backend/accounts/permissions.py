@@ -145,6 +145,23 @@ def HasSectorAccess(sector, access_map=None):
                 # partner (e papéis futuros) não acessam recursos de setor
                 return False
             user_sectors = set(user.sectors or [])
+            # H2 (code review) — FALLBACK ROLE-BASED PARA PROD:
+            # aplicar RBAC por setor sobre uma base que NÃO tem o campo
+            # `sectors` preenchido (ERP em produção) trancaria os usuários
+            # reais (403 em toda escrita). Como NÃO há mapeamento confiável
+            # role->setor no modelo de dados (role é admin/manager/operator/
+            # viewer; setor é comercial/juridico/...), um backfill seria um
+            # chute e poderia conceder o setor errado. Em vez disso: se o
+            # usuário não tem NENHUM setor, cai no comportamento legado
+            # role-based (= IsAdminOrManagerOrOperator: leitura p/ todos,
+            # escrita p/ manager/operator). Ninguém é trancado no deploy; à
+            # medida que John atribui `sectors`, a regra por setor passa a
+            # valer para aquele usuário (a interseção abaixo). Idempotente e
+            # reversível, sem tocar dados.
+            if not user_sectors:
+                if request.method in SAFE_METHODS:
+                    return True
+                return user.role in ('manager', 'operator')
             if request.method in SAFE_METHODS:
                 return bool(user_sectors & read_set)
             return bool(user_sectors & write_set)
