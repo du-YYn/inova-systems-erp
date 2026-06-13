@@ -31,14 +31,17 @@ ENTRADA_FLAG = 'AUTOMATION_PROD_ENTRADA'
 CONTRATO_FLAG = 'AUTOMATION_PROD_CONTRATO_ASSINADO'
 DOC_FLAG = 'AUTOMATION_PROD_DOC_ASSINADA'
 RECORRENCIA_FLAG = 'AUTOMATION_PROD_RECORRENCIA'
+# PRODUCERS Produção → Jurídico (doc 09 itens 06/07 + doc 10 §5/§B):
+VALIDACAO_FLAG = 'AUTOMATION_PROD_VALIDACAO_JURIDICO'  # doc enviada → LegalCase(validacao)
+ADITIVO_FLAG = 'AUTOMATION_PROD_ADITIVO_JURIDICO'      # Solicitar Mudança → LegalCase(aditivo)
 
 # Etapas "iniciais" onde o pagamento da entrada/assinatura ainda é esperado
 # (antes do desenvolvimento — doc 04 §1).
 _EARLY_ETAPAS = (
-    'etapa_3_preparacao', 'etapa_4_onboarding',
+    'agendar', 'etapa_3_preparacao', 'etapa_4_onboarding',
 )
 _PRE_DEV_ETAPAS = (
-    'etapa_3_preparacao', 'etapa_4_onboarding',
+    'agendar', 'etapa_3_preparacao', 'etapa_4_onboarding',
     'etapa_5_documentacao', 'etapa_6_validacao_doc',
 )
 
@@ -404,3 +407,272 @@ def create_recurrence_contract(project, user=None):
         contract.id, kind, project.id,
     )
     return contract
+
+
+# ─── PRODUCER: Validação da doc → Jurídico (doc 09 item 06 / doc 10 §5) ───────
+
+def create_validacao_legal_case(document, user=None):
+    """Etapa 5 → 6: doc enviada pra validação CRIA LegalCase(validacao_documento).
+
+    Preenche o gap do E2E: o consumidor (juridico/projects receivers — o
+    `_on_validacao_doc_assinada`) já existe; faltava o PRODUTOR. Quando o
+    ProjectDocument vira a baseline a validar (status pending_validation), abre
+    o card no Jurídico (modalidade Validação) vinculado ao projeto/customer.
+
+    Idempotente: 1 LegalCase(validacao_documento) ABERTO por projeto. Atrás da
+    flag AUTOMATION_PROD_VALIDACAO_JURIDICO (off | dry_run | on, default dry_run).
+
+    Returns: o LegalCase criado, ou None (flag off/dry_run / sem customer /
+    idempotente).
+    """
+    flag = _get_flag(VALIDACAO_FLAG)
+    if flag == 'off':
+        return None
+
+    project = document.project
+    customer = project.customer if project else None
+    if customer is None:
+        logger.warning(
+            'validacao_producer: ProjectDocument %s sem customer no projeto — '
+            'LegalCase(validacao) não criado.', document.id,
+        )
+        return None
+
+    from juridico.models import LegalCase
+
+    already_open = LegalCase.objects.filter(
+        customer=customer, project=project,
+        process_type='validacao_documento',
+    ).exclude(status__in=('assinado', 'aprovado_dev', 'recusado')).exists()
+    if already_open:
+        logger.info(
+            'validacao_producer: projeto %s já tem LegalCase(validacao) aberto '
+            '— ignorando (idempotente).', project.id,
+        )
+        return None
+
+    if flag == 'dry_run':
+        logger.info(
+            'DRY_RUN %s: criaria LegalCase(validacao_documento) para customer '
+            '%s (projeto %s, doc %s v%s). Sem efeito.',
+            VALIDACAO_FLAG, customer.id, project.id, document.id, document.version,
+        )
+        log_audit(
+            user, 'legal_case_validacao_producer_dry_run', 'legal_case',
+            details=(
+                f'DRY_RUN {VALIDACAO_FLAG}: criaria LegalCase(validacao_documento) '
+                f'p/ customer {customer.id} (projeto {project.id}, doc {document.id}).'
+            ),
+            new_value={
+                'customer': customer.id, 'project': project.id,
+                'document': document.id, 'process_type': 'validacao_documento',
+                'dry_run': True,
+            },
+        )
+        return None
+
+    case = LegalCase.objects.create(
+        customer=customer,
+        project=project,
+        process_type='validacao_documento',
+        source='producao',
+        status='preparacao',
+        autentique_id=document.autentique_id or '',
+        notes=(
+            f'Criado automaticamente pela Produção — doc v{document.version} '
+            f'do projeto {project.name} enviada para validação/assinatura.'
+        ),
+        created_by=user if (user and getattr(user, 'is_authenticated', False)) else None,
+    )
+    case.record_event(
+        'created',
+        to_status=case.status, to_process_type=case.process_type,
+        created_by=case.created_by,
+        description=(
+            f'Aberto pela Produção (Validação da doc) — projeto {project.name}, '
+            f'doc v{document.version} (#{document.id}).'
+        ),
+        metadata={'project': project.id, 'document': document.id},
+    )
+    log_audit(
+        user, 'legal_case_validacao_producer', 'legal_case', case.id,
+        details=(
+            f'Produção → Jurídico: LegalCase(validacao_documento) {case.id} '
+            f'criado (projeto {project.name}, doc #{document.id}).'
+        ),
+        new_value={
+            'customer': customer.id, 'project': project.id,
+            'document': document.id, 'legal_case': case.id,
+            'process_type': 'validacao_documento', 'source': 'producao',
+        },
+    )
+    logger.info(
+        'validacao_producer: LegalCase %s (validacao) criado p/ projeto %s '
+        '(doc %s).', case.id, project.id, document.id,
+    )
+    return case
+
+
+# ─── PRODUCER: Solicitar Mudança → Jurídico Aditivo (doc 09 item 07 / doc 10 §B) ─
+
+def solicitar_mudanca(project, *, title, description, impact_hours=0,
+                      impact_value=0, user=None, request=None):
+    """Botão "Solicitar Mudança" (doc 10 §B): cria um ChangeRequest E abre a
+    modalidade Aditivo no Jurídico (LegalCase aditivo) vinculado ao projeto +
+    contrato original.
+
+    O ChangeRequest é SEMPRE criado (registro do pedido na Produção). A criação
+    do LegalCase(aditivo) fica atrás da flag AUTOMATION_PROD_ADITIVO_JURIDICO
+    (off | dry_run | on, default dry_run). Idempotência do aditivo: 1 caso
+    ABERTO por ChangeRequest (marcado em LegalCase.notes/event metadata).
+
+    O consumidor da saída já existe: juridico.signals.on_aditivo_created
+    pré-cadastra o valor no Financeiro; a transição assinado/recusado em
+    juridico.services ativa/cancela a cobrança.
+
+    Returns: (change_request, legal_case|None).
+    """
+    from decimal import Decimal
+
+    from .models import ChangeRequest
+
+    cr = ChangeRequest.objects.create(
+        project=project,
+        title=title,
+        description=description,
+        impact_hours=Decimal(str(impact_hours or 0)),
+        impact_value=Decimal(str(impact_value or 0)),
+        status='pending',
+        requested_by=user if (user and getattr(user, 'is_authenticated', False)) else None,
+        created_by=user,
+    )
+    log_audit(
+        user, 'change_request_create', 'change_request', cr.id,
+        details=(
+            f'Solicitação de Mudança aberta no projeto {project.name}: '
+            f'{title} (R$ {cr.impact_value}, {cr.impact_hours}h).'
+        ),
+        new_value={
+            'project': project.id, 'title': title,
+            'impact_value': str(cr.impact_value),
+            'impact_hours': str(cr.impact_hours),
+        },
+        request=request,
+    )
+
+    case = _create_aditivo_legal_case(project, cr, user=user)
+    return cr, case
+
+
+def _create_aditivo_legal_case(project, change_request, user=None):
+    """Abre LegalCase(aditivo, nova_solicitacao) vinculado ao projeto.
+
+    Recebe por referência o contrato original (LegalCase contrato assinado) e
+    os dados da mudança (ChangeRequest, via metadata). Atrás da flag
+    AUTOMATION_PROD_ADITIVO_JURIDICO. Idempotente por ChangeRequest.
+    """
+    flag = _get_flag(ADITIVO_FLAG)
+    if flag == 'off':
+        return None
+
+    customer = project.customer
+    if customer is None:
+        logger.warning(
+            'aditivo_producer: projeto %s sem customer — LegalCase(aditivo) '
+            'não criado.', project.id,
+        )
+        return None
+
+    from juridico.models import LegalCase
+
+    # Idempotência: não duplica caso aberto deste ChangeRequest.
+    already_open = LegalCase.objects.filter(
+        customer=customer, project=project, process_type='aditivo',
+        events__metadata__change_request=change_request.id,
+    ).exclude(status__in=('assinado', 'recusado')).exists()
+    if already_open:
+        logger.info(
+            'aditivo_producer: ChangeRequest %s já tem LegalCase(aditivo) '
+            'aberto — ignorando (idempotente).', change_request.id,
+        )
+        return None
+
+    # Contrato original assinado (vínculo por referência — doc 09 item 07).
+    contrato = (
+        LegalCase.objects.filter(
+            customer=customer, process_type='contrato', status='assinado',
+        )
+        .order_by('-signed_at', '-created_at')
+        .first()
+    )
+
+    if flag == 'dry_run':
+        logger.info(
+            'DRY_RUN %s: criaria LegalCase(aditivo) para customer %s '
+            '(projeto %s, ChangeRequest %s). Sem efeito.',
+            ADITIVO_FLAG, customer.id, project.id, change_request.id,
+        )
+        log_audit(
+            user, 'legal_case_aditivo_producer_dry_run', 'legal_case',
+            details=(
+                f'DRY_RUN {ADITIVO_FLAG}: criaria LegalCase(aditivo) p/ customer '
+                f'{customer.id} (projeto {project.id}, CR {change_request.id}).'
+            ),
+            new_value={
+                'customer': customer.id, 'project': project.id,
+                'change_request': change_request.id, 'process_type': 'aditivo',
+                'dry_run': True,
+            },
+        )
+        return None
+
+    case = LegalCase.objects.create(
+        customer=customer,
+        project=project,
+        process_type='aditivo',
+        source='producao',
+        status='nova_solicitacao',
+        notes=(
+            f'Solicitação de Mudança (ChangeRequest #{change_request.id}): '
+            f'{change_request.title}. '
+            + (f'Contrato original: LegalCase #{contrato.id}. '
+               if contrato else 'Sem contrato original assinado vinculável. ')
+            + f'Valor estimado: R$ {change_request.impact_value}, '
+            f'{change_request.impact_hours}h.'
+        ),
+        created_by=user if (user and getattr(user, 'is_authenticated', False)) else None,
+    )
+    case.record_event(
+        'created',
+        to_status=case.status, to_process_type=case.process_type,
+        created_by=case.created_by,
+        description=(
+            f'Aberto pela Produção (Solicitar Mudança) — projeto {project.name}, '
+            f'ChangeRequest #{change_request.id}.'
+        ),
+        metadata={
+            'project': project.id,
+            'change_request': change_request.id,
+            'contrato_original': contrato.id if contrato else None,
+        },
+    )
+    log_audit(
+        user, 'legal_case_aditivo_producer', 'legal_case', case.id,
+        details=(
+            f'Produção → Jurídico: LegalCase(aditivo) {case.id} criado '
+            f'(projeto {project.name}, ChangeRequest #{change_request.id}).'
+        ),
+        new_value={
+            'customer': customer.id, 'project': project.id,
+            'change_request': change_request.id, 'legal_case': case.id,
+            'contrato_original': contrato.id if contrato else None,
+            'process_type': 'aditivo', 'source': 'producao',
+        },
+    )
+    logger.info(
+        'aditivo_producer: LegalCase %s (aditivo) criado p/ projeto %s '
+        '(ChangeRequest %s, contrato %s).',
+        case.id, project.id, change_request.id,
+        contrato.id if contrato else None,
+    )
+    return case

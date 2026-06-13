@@ -326,6 +326,14 @@ AUTOMATION_PROD_DOC_ASSINADA = _automation_flag('AUTOMATION_PROD_DOC_ASSINADA')
 # F5: bifurcação (graduação/implementação) -> cria RecurrenceContract
 AUTOMATION_PROD_RECORRENCIA = _automation_flag('AUTOMATION_PROD_RECORRENCIA')
 
+# v32 ajustes (doc 09 itens 06/07 + doc 10): PRODUCERS Produção -> Jurídico.
+# Doc enviada pra validação -> cria LegalCase(validacao_documento).
+AUTOMATION_PROD_VALIDACAO_JURIDICO = _automation_flag(
+    'AUTOMATION_PROD_VALIDACAO_JURIDICO')
+# Solicitar Mudança -> cria ChangeRequest + LegalCase(aditivo).
+AUTOMATION_PROD_ADITIVO_JURIDICO = _automation_flag(
+    'AUTOMATION_PROD_ADITIVO_JURIDICO')
+
 # F6: SupportTicket analisado com conclusao=inconclusivo -> cria
 # diretoria.DirectorEscalation + Notification para admins
 AUTOMATION_SUP_ESCALA = _automation_flag('AUTOMATION_SUP_ESCALA')
