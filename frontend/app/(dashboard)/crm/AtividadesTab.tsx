@@ -66,7 +66,7 @@ const activityLabels: Record<string, string> = {
   demo: 'Demonstração', linkedin: 'LinkedIn', other: 'Outro',
   lead_created: 'Lead Recebido', status_changed: 'Status Alterado',
   qualified: 'Qualificado', disqualified: 'Não Qualificado',
-  meeting_scheduled: 'Reunião Agendada', no_show: 'Não Compareceu',
+  meeting_scheduled: 'Reunião Agendada', no_show: 'No-Show',
   meeting_done: 'Reunião Realizada', proposal_created: 'Proposta Criada',
   proposal_sent: 'Proposta Enviada', proposal_approved: 'Proposta Aprovada',
   proposal_rejected: 'Proposta Rejeitada', won: 'Lead Fechado',
