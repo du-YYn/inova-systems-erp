@@ -78,36 +78,44 @@ def on_client_onboarding_submitted(sender, instance, created, **kwargs):
 
     prospect = instance.prospect
 
-    if flag == 'dry_run':
-        planned = precadastrar_invoice_da_proposta(prospect, dry_run=True)
-        if not planned:
+    # Isolamento (CLAUDE.md): um erro na automação NÃO pode derrubar o submit
+    # do onboarding (a request principal). Loga e segue.
+    try:
+        if flag == 'dry_run':
+            planned = precadastrar_invoice_da_proposta(prospect, dry_run=True)
+            if not planned:
+                return
+            logger.info(
+                'DRY_RUN %s: criaria %s invoices pendentes para prospect %s '
+                '(onboarding %s). Sem efeito.',
+                PRECADASTRO_FLAG, len(planned), prospect.id, instance.id,
+            )
+            log_audit(
+                None, PRECADASTRO_DRY_RUN_ACTION, 'invoice',
+                details=(
+                    f'DRY_RUN {PRECADASTRO_FLAG}: criaria {len(planned)} invoices '
+                    f'pendentes do plano da proposta (prospect {prospect.id}, '
+                    f'onboarding {instance.id}).'
+                ),
+                new_value={
+                    'prospect': prospect.id,
+                    'onboarding': instance.id,
+                    'invoices': [
+                        {'description': e['description'], 'value': str(e['value']),
+                         'due_date': str(e['due_date']), 'role': e['role']}
+                        for e in planned
+                    ],
+                    'dry_run': True,
+                },
+            )
             return
-        logger.info(
-            'DRY_RUN %s: criaria %s invoices pendentes para prospect %s '
-            '(onboarding %s). Sem efeito.',
-            PRECADASTRO_FLAG, len(planned), prospect.id, instance.id,
-        )
-        log_audit(
-            None, PRECADASTRO_DRY_RUN_ACTION, 'invoice',
-            details=(
-                f'DRY_RUN {PRECADASTRO_FLAG}: criaria {len(planned)} invoices '
-                f'pendentes do plano da proposta (prospect {prospect.id}, '
-                f'onboarding {instance.id}).'
-            ),
-            new_value={
-                'prospect': prospect.id,
-                'onboarding': instance.id,
-                'invoices': [
-                    {'description': e['description'], 'value': str(e['value']),
-                     'due_date': str(e['due_date']), 'role': e['role']}
-                    for e in planned
-                ],
-                'dry_run': True,
-            },
-        )
-        return
 
-    precadastrar_invoice_da_proposta(prospect)
+        precadastrar_invoice_da_proposta(prospect)
+    except Exception as exc:  # noqa: BLE001 — isolamento de signal
+        logger.exception(
+            'Falha no pré-cadastro F4 (prospect %s, onboarding %s): %s',
+            getattr(prospect, 'id', None), instance.id, exc,
+        )
 
 
 @receiver(
@@ -134,35 +142,43 @@ def on_legal_case_signed(sender, instance, created, **kwargs):
     if flag == 'off':
         return
 
-    if flag == 'dry_run':
-        invoice_ids = liberar_cobranca_do_cliente(
-            instance.customer, legal_case=instance, dry_run=True,
-        )
-        if not invoice_ids:
+    # Isolamento (CLAUDE.md): um erro na liberação NÃO pode derrubar o save do
+    # LegalCase (a request do Jurídico). Loga e segue.
+    try:
+        if flag == 'dry_run':
+            invoice_ids = liberar_cobranca_do_cliente(
+                instance.customer, legal_case=instance, dry_run=True,
+            )
+            if not invoice_ids:
+                return
+            logger.info(
+                'DRY_RUN %s: liberaria cobranca de %s invoices do customer %s '
+                '(LegalCase %s assinado). Sem efeito.',
+                LIBERA_COBRANCA_FLAG, len(invoice_ids),
+                instance.customer_id, instance.id,
+            )
+            log_audit(
+                None, LIBERA_COBRANCA_DRY_RUN_ACTION, 'invoice',
+                details=(
+                    f'DRY_RUN {LIBERA_COBRANCA_FLAG}: liberaria cobrança de '
+                    f'{len(invoice_ids)} invoices do customer '
+                    f'{instance.customer_id} (LegalCase {instance.id} assinado).'
+                ),
+                new_value={
+                    'customer': instance.customer_id,
+                    'legal_case': instance.id,
+                    'invoices': invoice_ids,
+                    'dry_run': True,
+                },
+            )
             return
-        logger.info(
-            'DRY_RUN %s: liberaria cobranca de %s invoices do customer %s '
-            '(LegalCase %s assinado). Sem efeito.',
-            LIBERA_COBRANCA_FLAG, len(invoice_ids),
-            instance.customer_id, instance.id,
-        )
-        log_audit(
-            None, LIBERA_COBRANCA_DRY_RUN_ACTION, 'invoice',
-            details=(
-                f'DRY_RUN {LIBERA_COBRANCA_FLAG}: liberaria cobrança de '
-                f'{len(invoice_ids)} invoices do customer '
-                f'{instance.customer_id} (LegalCase {instance.id} assinado).'
-            ),
-            new_value={
-                'customer': instance.customer_id,
-                'legal_case': instance.id,
-                'invoices': invoice_ids,
-                'dry_run': True,
-            },
-        )
-        return
 
-    liberar_cobranca_do_cliente(instance.customer, legal_case=instance)
+        liberar_cobranca_do_cliente(instance.customer, legal_case=instance)
+    except Exception as exc:  # noqa: BLE001 — isolamento de signal
+        logger.exception(
+            'Falha na liberação de cobrança F4 (LegalCase %s, customer %s): %s',
+            instance.id, instance.customer_id, exc,
+        )
 
 
 @receiver(
