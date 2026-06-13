@@ -90,7 +90,13 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
 
         new_status = input_serializer.validated_data['status']
 
-        if case.status in LegalCase.TERMINAL_STATUSES:
+        # Terminalidade é POR MODALIDADE: um caso é terminal quando NÃO há mais
+        # alvo permitido na sua ordem (ex.: `assinado` é fim do Contrato, mas na
+        # Validação ainda avança p/ `aprovado_dev`). Não usar o set global
+        # TERMINAL_STATUSES como short-circuit — ele trava `assinado` para todas
+        # as modalidades e mata a 5ª coluna da Validação (doc 06).
+        allowed = self._allowed_targets(case)
+        if not allowed:
             return Response(
                 {'error': (
                     f'Caso em estado terminal ({case.get_status_display()}) — '
@@ -99,7 +105,6 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        allowed = self._allowed_targets(case)
         if new_status not in allowed:
             return Response(
                 {'error': (

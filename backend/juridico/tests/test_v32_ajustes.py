@@ -279,6 +279,57 @@ class TestAditivoColumns:
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
 
+def make_validacao(customer, user, status='preparacao'):
+    return LegalCase.objects.create(
+        customer=customer, process_type='validacao_documento', source='producao',
+        status=status, created_by=user,
+    )
+
+
+@pytest.mark.django_db
+class TestValidacaoColumns:
+    """Validação (doc 06): 5ª coluna `aprovado_dev` deve ser alcançável a partir
+    de `assinado` — `assinado` é terminal só p/ Contrato/Aditivo, não p/ Validação.
+    """
+
+    def test_validacao_status_order(self):
+        assert LegalCase.status_order_for('validacao_documento') == [
+            'preparacao', 'envio_assinatura', 'aguardando_assinatura',
+            'assinado', 'aprovado_dev',
+        ]
+
+    def test_assinado_advances_to_aprovado_dev(self, juridico_client, customer, admin_user):
+        case = make_validacao(customer, admin_user, status='assinado')
+        resp = juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'aprovado_dev'})
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        case.refresh_from_db()
+        assert case.status == 'aprovado_dev'
+        assert case.events.filter(event_type='status_change',
+                                  to_status='aprovado_dev').exists()
+
+    def test_aprovado_dev_is_terminal(self, juridico_client, customer, admin_user):
+        case = make_validacao(customer, admin_user, status='aprovado_dev')
+        resp = juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'preparacao'})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        case.refresh_from_db()
+        assert case.status == 'aprovado_dev'
+
+    def test_validacao_cannot_skip_to_aprovado_dev(self, juridico_client, customer, admin_user):
+        case = make_validacao(customer, admin_user, status='aguardando_assinatura')
+        resp = juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'aprovado_dev'})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        case.refresh_from_db()
+        assert case.status == 'aguardando_assinatura'
+
+    def test_contrato_assinado_remains_terminal(self, juridico_client, customer, admin_user):
+        # Regressão: `assinado` continua terminal para Contrato (não vaza p/ aprovado_dev).
+        case = make_case(customer, admin_user, status='assinado')
+        resp = juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'aprovado_dev'})
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+        case.refresh_from_db()
+        assert case.status == 'assinado'
+
+
 @pytest.mark.django_db
 class TestAditivoFinanceOutputs:
     def test_precadastro_on_creation_when_on(self, settings, admin_user, customer):

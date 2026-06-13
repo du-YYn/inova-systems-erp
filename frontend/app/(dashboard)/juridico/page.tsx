@@ -269,10 +269,11 @@ export default function JuridicoPage() {
     if (processType === 'validacao_documento') return ['preparacao', 'envio_assinatura', 'aguardando_assinatura', 'assinado', 'aprovado_dev'];
     return ['preparacao', 'envio_assinatura', 'aguardando_assinatura', 'assinado'];
   };
-  const TERMINAL = new Set(['assinado', 'recusado', 'aprovado_dev']);
-
+  // Terminalidade é POR MODALIDADE: não há "próximo" quando o status é o último
+  // da ordem da modalidade (espelha _allowed_targets do backend). `assinado` é
+  // terminal no Contrato, mas na Validação ainda avança p/ `aprovado_dev`.
+  // `recusado` (ramo do Aditivo) não está na ordem → idx < 0 → sem próximo.
   const nextStatus = (legalCase: LegalCase): string | null => {
-    if (TERMINAL.has(legalCase.status)) return null;
     const order = statusOrderFor(legalCase.process_type);
     const idx = order.indexOf(legalCase.status);
     if (idx < 0 || idx >= order.length - 1) return null;
