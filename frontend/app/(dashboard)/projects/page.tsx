@@ -34,20 +34,24 @@ interface Customer {
   name: string;
 }
 
-// v32 F5 (doc 04 §1): kanban por etapa_atual — as 12 colunas do processo.
+// v32 F5 (doc 10 — kanban principal): 13 colunas por etapa_atual, na ordem e
+// com os rótulos do doc 10 (Agendar … Concluído, Implementado). As CHAVES são
+// as de Project.ETAPA_CHOICES — NÃO renomear (produção com dados reais); só os
+// LABELS acompanham o doc 10.
 const etapaColumns: { key: string; label: string; accent: string }[] = [
-  { key: 'etapa_3_preparacao', label: 'Etapa 3 · Preparação', accent: 'border-t-gray-400' },
-  { key: 'etapa_4_onboarding', label: 'Etapa 4 · Onboarding', accent: 'border-t-purple-400' },
-  { key: 'etapa_5_documentacao', label: 'Etapa 5 · Documentação', accent: 'border-t-amber-400' },
-  { key: 'etapa_6_validacao_doc', label: 'Etapa 6 · Validação doc', accent: 'border-t-violet-500' },
-  { key: 'etapa_7_desenvolvimento', label: 'Etapa 7 · Desenvolvimento', accent: 'border-t-yellow-500' },
-  { key: 'etapa_8_auditoria', label: 'Etapa 8 · Auditoria', accent: 'border-t-emerald-500' },
-  { key: 'etapa_9_apresentacao', label: 'Etapa 9 · Apresentação', accent: 'border-t-cyan-500' },
-  { key: 'homologacao', label: 'Homologação', accent: 'border-t-sky-500' },
-  { key: 'registro_entrega', label: 'Registro da entrega', accent: 'border-t-orange-400' },
-  { key: 'etapa_10_graduacao', label: 'Etapa 10 · Graduação', accent: 'border-t-green-500' },
-  { key: 'implementacao', label: 'Implementação', accent: 'border-t-teal-500' },
-  { key: 'recorrencia', label: 'Recorrência', accent: 'border-t-accent-gold' },
+  { key: 'agendar', label: '1 · Agendar', accent: 'border-t-gray-400' },
+  { key: 'etapa_3_preparacao', label: '2 · Planejamento', accent: 'border-t-slate-400' },
+  { key: 'etapa_4_onboarding', label: '3 · Onboarding', accent: 'border-t-purple-400' },
+  { key: 'etapa_5_documentacao', label: '4 · Documentação', accent: 'border-t-amber-400' },
+  { key: 'etapa_6_validacao_doc', label: '5 · Validação da doc', accent: 'border-t-violet-500' },
+  { key: 'etapa_7_desenvolvimento', label: '6 · Desenvolvimento', accent: 'border-t-yellow-500' },
+  { key: 'etapa_8_auditoria', label: '7 · Auditoria interna', accent: 'border-t-emerald-500' },
+  { key: 'etapa_9_apresentacao', label: '8 · Reunião de Apresentação', accent: 'border-t-cyan-500' },
+  { key: 'homologacao', label: '9 · Janela de teste', accent: 'border-t-sky-500' },
+  { key: 'registro_entrega', label: '10 · Re-Update', accent: 'border-t-orange-400' },
+  { key: 'etapa_10_graduacao', label: '11 · Homologação', accent: 'border-t-green-500' },
+  { key: 'implementacao', label: '12 · Concluído', accent: 'border-t-teal-500' },
+  { key: 'recorrencia', label: '13 · Implementado', accent: 'border-t-accent-gold' },
 ];
 
 const tipoLabels: Record<string, string> = {

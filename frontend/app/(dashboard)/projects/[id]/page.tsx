@@ -16,6 +16,7 @@ import api from '@/lib/api';
 import { safeHref } from '@/lib/url';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
+import ClienteCard from './ClienteCard';
 
 // Types
 interface Project {
@@ -28,6 +29,8 @@ interface Project {
   total_logged: string;
   // v32 F5
   etapa_atual: string; situacao: string; tipo: string; dia_zero: string | null;
+  prazo_total: number; modo: string;
+  contrato_assinado_at: string | null; entrada_paga_at: string | null;
 }
 
 interface OnboardingForm {
@@ -115,20 +118,22 @@ const taskTypeColors: Record<string, string> = {
   meeting: 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600',
 };
 
-// v32 F5 (doc 04 §1): rótulos das etapas do processo de Produção
+// v32 (doc 10): rótulos das etapas do processo de Produção (kanban principal).
+// CHAVES = Project.ETAPA_CHOICES; LABELS seguem o doc 10.
 const etapaLabels: Record<string, string> = {
-  etapa_3_preparacao: 'Etapa 3 · Preparação',
-  etapa_4_onboarding: 'Etapa 4 · Onboarding',
-  etapa_5_documentacao: 'Etapa 5 · Documentação',
-  etapa_6_validacao_doc: 'Etapa 6 · Validação doc',
-  etapa_7_desenvolvimento: 'Etapa 7 · Desenvolvimento',
-  etapa_8_auditoria: 'Etapa 8 · Auditoria',
-  etapa_9_apresentacao: 'Etapa 9 · Apresentação',
-  homologacao: 'Homologação',
-  registro_entrega: 'Registro da entrega',
-  etapa_10_graduacao: 'Etapa 10 · Graduação',
-  implementacao: 'Implementação',
-  recorrencia: 'Recorrência',
+  agendar: 'Agendar',
+  etapa_3_preparacao: 'Planejamento',
+  etapa_4_onboarding: 'Onboarding',
+  etapa_5_documentacao: 'Documentação',
+  etapa_6_validacao_doc: 'Validação da doc',
+  etapa_7_desenvolvimento: 'Desenvolvimento',
+  etapa_8_auditoria: 'Auditoria interna',
+  etapa_9_apresentacao: 'Reunião de Apresentação',
+  homologacao: 'Janela de teste',
+  registro_entrega: 'Re-Update',
+  etapa_10_graduacao: 'Homologação',
+  implementacao: 'Concluído',
+  recorrencia: 'Implementado',
 };
 
 const situacaoBadges: Record<string, { label: string; cls: string }> = {
@@ -179,7 +184,7 @@ export default function ProjectDetailPage() {
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [profitability, setProfitability] = useState<Profitability | null>(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('card');
   const [loading, setLoading] = useState(true);
 
   // Task modal state
@@ -395,6 +400,7 @@ export default function ProjectDetailPage() {
   };
 
   const tabs = [
+    { key: 'card', label: 'Card do Cliente', icon: ClipboardList },
     { key: 'overview', label: 'Visão Geral', icon: BarChart2 },
     { key: 'tasks', label: `Tarefas (${tasks.length})`, icon: CheckCircle2 },
     { key: 'phases', label: `Fases & Marcos`, icon: Layers },
@@ -478,6 +484,27 @@ export default function ProjectDetailPage() {
           );
         })}
       </div>
+
+      {/* Tab: Card do Cliente (v32 — doc 10) */}
+      {activeTab === 'card' && (
+        <ClienteCard
+          project={{
+            id: project.id,
+            name: project.name,
+            customer_name: project.customer_name,
+            etapa_atual: project.etapa_atual,
+            situacao: project.situacao,
+            tipo: project.tipo,
+            budget_value: project.budget_value,
+            dia_zero: project.dia_zero,
+            prazo_total: project.prazo_total,
+            modo: project.modo,
+            contrato_assinado_at: project.contrato_assinado_at,
+            entrada_paga_at: project.entrada_paga_at,
+          }}
+          onEtapaChanged={fetchAll}
+        />
+      )}
 
       {/* Tab: Overview */}
       {activeTab === 'overview' && (
