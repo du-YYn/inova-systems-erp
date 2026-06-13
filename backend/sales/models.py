@@ -104,6 +104,13 @@ class Prospect(models.Model):
         ('proposal',        'Proposta Enviada'),       # proposta comercial enviada
         ('won',             'Projeto Fechado'),        # projeto contratado
         ('data_collection', 'Coleta de Dados'),        # v32: ClientOnboarding enviado ao cliente
+        # ── v32 ajustes (doc 09 §04) — funil otimizado da proposta ───────────
+        # Status NOVOS aditivos. Convivem com os equivalentes legados acima
+        # (won≈projeto_fechado, data_collection≈coleta_de_dados, production≈
+        # em_producao). Nenhuma chave renomeada — migração só aditiva.
+        ('coleta_de_dados', 'Coleta de Dados'),        # aprovar proposta -> coleta (forms onboarding)
+        ('projeto_fechado', 'Projeto Fechado'),        # cliente enviou o forms (assinatura/pagamento pendentes)
+        ('em_producao',     'Em Produção'),            # leitura: projeto iniciado pela Produção
         # ── Ramos e terminais ────────────────────────────────────────────────
         ('disqualified',    'Não Qualificado'),        # não atende critérios mínimos (terminal)
         ('no_show',         'Não Compareceu'),         # lead não apareceu na reunião
