@@ -149,15 +149,20 @@ const statusLabels: Record<string, string> = {
   tech_analysis: 'Análise Técnica e Proposta',
   meeting_2_done: 'Reunião 2 Realizada',
   proposal: 'Proposta Enviada',
-  won: 'Projeto Fechado',
-  data_collection: 'Coleta de Dados',
+  // v32 ajustes (doc 09 §04/§05) — funil otimizado alinhado ao backend b1.
+  coleta_de_dados: 'Coleta de Dados',
+  projeto_fechado: 'Projeto Fechado',
+  em_producao: 'Em Produção',
   // Ramos
   disqualified: 'Não Qualificado',
-  no_show: 'Não Compareceu',
+  no_show: 'No-Show',
   follow_up: 'Follow-Up',
+  // Equivalentes legados v32 (registros antigos seguem; rotulados como os novos)
+  won: 'Projeto Fechado',
+  data_collection: 'Coleta de Dados',
+  production: 'Em Produção',
   // Legados (deprecados — registros antigos seguem até fecharem)
   meeting_done: 'Reunião Realizada (legado)',
-  production: 'Em Produção (legado)',
   concluded: 'Concluído (legado)',
   not_closed: 'Não Fechou (legado)',
   lost: 'Perdido (legado)',
@@ -177,9 +182,12 @@ const statusColors: Record<string, string> = {
   tech_analysis: 'bg-fuchsia-100 text-fuchsia-800',
   meeting_2_done: 'bg-lime-100 text-lime-800',
   proposal: 'bg-amber-100 text-amber-800',
+  coleta_de_dados: 'bg-emerald-100 text-emerald-800',
+  projeto_fechado: 'bg-green-100 text-green-800',
+  em_producao: 'bg-teal-100 text-teal-800',
   won: 'bg-green-100 text-green-800',
   data_collection: 'bg-emerald-100 text-emerald-800',
-  production: 'bg-emerald-100 text-emerald-800',
+  production: 'bg-teal-100 text-teal-800',
   concluded: 'bg-sky-100 text-sky-800',
   not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
@@ -200,6 +208,9 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   tech_analysis: 'purple',
   meeting_2_done: 'success',
   proposal: 'gold',
+  coleta_de_dados: 'gold',
+  projeto_fechado: 'success',
+  em_producao: 'success',
   won: 'success',
   data_collection: 'gold',
   production: 'success',
@@ -216,12 +227,14 @@ const PROJECT_TYPE_LABELS: Record<string, string> = {
 
 const FOLLOW_UP_REASONS = [
   { value: 'nao_agendou', label: 'Não Agendou', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-orange-100 text-orange-700' },
+  { value: 'nao_compareceu', label: 'No-Show', color: 'bg-orange-100 text-orange-700' },
   { value: 'nao_fechou', label: 'Não Fechou', color: 'bg-red-100 text-red-700' },
 ];
 
-// Colunas do kanban — caminho principal das 12 etapas (v32) + ramos
-// no_show/follow_up. Desqualificado só na lista; legados na coluna "Legados".
+// Colunas do kanban — caminho principal v32 + funil otimizado da proposta
+// (doc 09 §04/§05) alinhado ao backend b1: Proposta → Coleta de Dados →
+// Projeto Fechado → Em Produção. Ramos no_show/follow_up. Desqualificado só na
+// lista; legados na coluna "Legados".
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
@@ -233,14 +246,29 @@ const PIPELINE_COLUMNS = [
   'tech_analysis',
   'meeting_2_done',
   'proposal',
-  'won',
-  'data_collection',
+  'coleta_de_dados',
+  'projeto_fechado',
+  'em_producao',
   'no_show',
   'follow_up',
 ];
 
+// Equivalência status legado → coluna nova (doc 09 §04). Cards antigos em
+// produção (won/data_collection/production) seguem aparecendo na coluna nova
+// correspondente, sem perder visibilidade nem precisar de migração de dados.
+const COLUMN_STATUS_ALIASES: Record<string, string[]> = {
+  coleta_de_dados: ['coleta_de_dados', 'data_collection'],
+  projeto_fechado: ['projeto_fechado', 'won'],
+  em_producao: ['em_producao', 'production'],
+};
+
+// Resolve quais status um card precisa ter para cair numa coluna do kanban.
+const columnStatuses = (columnId: string): string[] =>
+  COLUMN_STATUS_ALIASES[columnId] ?? [columnId];
+
 // Status deprecados na v32 — agrupados numa coluna "Legados" read-only.
-const LEGACY_STATUSES = ['meeting_done', 'production', 'concluded', 'not_closed', 'lost'];
+// production saiu daqui: vira o equivalente legado da coluna "Em Produção".
+const LEGACY_STATUSES = ['meeting_done', 'concluded', 'not_closed', 'lost'];
 const LEGACY_COLUMN_ID = '__legacy__';
 
 const sourceOptions = [
@@ -672,10 +700,16 @@ export default function FunilTab() {
       targetStatus = targetProspect.status;
     }
 
-    if (!PIPELINE_COLUMNS.includes(targetStatus)) return;
-    if (prospect.status === targetStatus) return;
+    // Card legado (won/data_collection/production) resolve para a coluna nova
+    // equivalente; assim soltar numa coluna nova grava sempre o status novo.
+    const targetColumn =
+      PIPELINE_COLUMNS.find(col => columnStatuses(col).includes(targetStatus)) ?? targetStatus;
 
-    handleStatusChange(prospect, targetStatus);
+    if (!PIPELINE_COLUMNS.includes(targetColumn)) return;
+    // Já está nesta coluna (mesmo status ou equivalente legado) → nada a fazer.
+    if (columnStatuses(targetColumn).includes(prospect.status)) return;
+
+    handleStatusChange(prospect, targetColumn);
   };
 
   // ─── KPI computations (from full dataset) ────────────────────────────────
@@ -695,7 +729,10 @@ export default function FunilTab() {
      'tech_analysis', 'meeting_2_done', 'proposal'].includes(p.status)
   ).length;
 
-  const wonProspects = kpiSource.filter(p => p.status === 'won' || p.status === 'data_collection');
+  const wonProspects = kpiSource.filter(p => [
+    'coleta_de_dados', 'projeto_fechado', 'em_producao',
+    'won', 'data_collection', 'production',
+  ].includes(p.status));
   const kpiWonCount = wonProspects.length;
   const kpiWonValue = wonProspects.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
 
@@ -1025,7 +1062,7 @@ export default function FunilTab() {
       const updated = await api.post<Prospect>(`/sales/prospects/${prospect.id}/${action}/`, {});
       const labels: Record<string, string> = {
         mark_attended: 'Reunião marcada como realizada.',
-        mark_no_show: 'Lead marcado como não compareceu.',
+        mark_no_show: 'Lead marcado como No-Show.',
         mark_ebook_sent: 'E-book marcado como enviado.',
       };
       toast.success(labels[action]);
@@ -1448,7 +1485,8 @@ export default function FunilTab() {
               para compatibilidade com CSP nonce-based (sem unsafe-inline). */}
           <div className="flex gap-3 min-w-max" style={{ transform: 'rotateX(180deg)' }}>
             {PIPELINE_COLUMNS.map((status) => {
-              const col = allProspects.filter(p => p.status === status);
+              const accepted = columnStatuses(status);
+              const col = allProspects.filter(p => accepted.includes(p.status));
               const colValue = col.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
               const colIds = col.map(p => `prospect-${p.id}`);
               return (
@@ -2310,7 +2348,7 @@ export default function FunilTab() {
                       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                     >
                       {markingAction === 'mark_no_show' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                      Não Compareceu
+                      No-Show
                     </button>
                   </div>
                 </section>
