@@ -588,6 +588,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         from finance.invoice_generator import _next_invoice_number
         from django.db import transaction as db_tx
         from datetime import date
+        from decimal import Decimal, ROUND_HALF_UP
 
         # Bug #3: idempotencia — nao re-gerar se ja rodou
         if prospect.receivables_generated_at is not None:
@@ -603,7 +604,15 @@ class ProspectViewSet(viewsets.ModelViewSet):
             )
             return
 
-        total = float(prospect.proposal_value or prospect.estimated_value or 0)
+        # L4 (code review): valores monetários em Decimal (não float). Os campos
+        # de Invoice são DecimalField; float introduzia erro de ponto flutuante
+        # (ex.: 0.1+0.2) que se acumula em parcelas e diverge do total.
+        def _money(amount):
+            return Decimal(str(amount or 0)).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP,
+            )
+
+        total = _money(prospect.proposal_value or prospect.estimated_value or 0)
         if total <= 0:
             return
 
@@ -644,8 +653,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
             elif pay_type == 'split':
                 pct = prospect.payment_split_pct or 50
-                entrada = round(total * pct / 100, 2)
-                entrega = round(total - entrada, 2)
+                entrada = _money(total * Decimal(pct) / Decimal('100'))
+                entrega = _money(total - entrada)
                 make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
                 # Entrega: 3 meses depois
                 em = due.month + 3
@@ -659,22 +668,25 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
             elif pay_type == 'installments':
                 n = prospect.payment_installments or 1
-                parcela = round(total / n, 2)
+                parcela = _money(total / Decimal(n))
                 for i in range(n):
                     m = due.month + i
                     y = due.year + (m - 1) // 12
                     m = (m - 1) % 12 + 1
                     d = min(due.day, 28)
-                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
+                    # Última parcela absorve a diferença de arredondamento para
+                    # o somatório bater com o total exatamente.
+                    value = parcela if i < n - 1 else total - parcela * (n - 1)
+                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', value,
                                  date(y, m, d))
 
             elif pay_type == 'monthly':
-                mv = float(prospect.payment_monthly_value or total)
+                mv = _money(prospect.payment_monthly_value or total)
                 make_invoice(f'{desc_base} — Mensalidade', mv, due)
 
             elif pay_type == 'setup_monthly':
-                setup = float(prospect.estimated_value or total)
-                mv = float(prospect.payment_monthly_value or 0)
+                setup = _money(prospect.estimated_value or total)
+                mv = _money(prospect.payment_monthly_value or 0)
                 make_invoice(f'{desc_base} — Setup', setup, due)
                 if mv > 0:
                     m2 = due.month + 1

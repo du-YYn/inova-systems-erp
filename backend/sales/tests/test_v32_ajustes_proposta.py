@@ -305,6 +305,61 @@ class TestDoubleChargeDedupe:
         assert all(n.startswith('REC-') for n in numbers)
 
 
+# ─── L4 · recebíveis legados usam Decimal (sem drift de float) ───────────────
+
+@pytest.mark.django_db
+class TestLegacyReceivablesDecimal:
+    """L4 (code review): _generate_receivables usa Decimal, não float. As
+    parcelas são Decimal e o somatório bate exatamente com o total (a última
+    parcela absorve o arredondamento)."""
+
+    def _close_won(self, client, prospect):
+        return client.patch(
+            f'/api/v1/sales/prospects/{prospect.id}/',
+            {'status': 'won'}, format='json',
+        )
+
+    def test_installments_sum_equals_total_no_drift(
+        self, admin_client, admin_user, customer,
+    ):
+        # 1000 / 3 = 333.33 + 333.33 + 333.34 = 1000.00 (exato).
+        prospect = Prospect.objects.create(
+            customer=customer, company_name='Decimal Parcelas LTDA',
+            contact_name='C', source='website', status='proposal',
+            payment_type='installments', payment_installments=3,
+            proposal_value=Decimal('1000'), created_by=admin_user,
+        )
+        r = self._close_won(admin_client, prospect)
+        assert r.status_code == status.HTTP_200_OK, r.data
+        invoices = list(Invoice.objects.filter(
+            invoice_type='receivable',
+            description__icontains='Decimal Parcelas',
+        ))
+        assert len(invoices) == 3
+        # Todos os valores são Decimal (não float).
+        for inv in invoices:
+            assert isinstance(inv.value, Decimal)
+        assert sum((inv.total for inv in invoices), Decimal('0')) == Decimal('1000.00')
+
+    def test_split_entrada_plus_entrega_equals_total(
+        self, admin_client, admin_user, customer,
+    ):
+        prospect = Prospect.objects.create(
+            customer=customer, company_name='Decimal Split LTDA',
+            contact_name='C', source='website', status='proposal',
+            payment_type='split', payment_split_pct=30,
+            proposal_value=Decimal('999.99'), created_by=admin_user,
+        )
+        r = self._close_won(admin_client, prospect)
+        assert r.status_code == status.HTTP_200_OK, r.data
+        invoices = list(Invoice.objects.filter(
+            invoice_type='receivable',
+            description__icontains='Decimal Split',
+        ))
+        assert len(invoices) == 2
+        assert sum((inv.total for inv in invoices), Decimal('0')) == Decimal('999.99')
+
+
 # ─── P0.1 Customer criado/vinculado no funil ao aprovar a proposta ───────────
 
 @pytest.mark.django_db
