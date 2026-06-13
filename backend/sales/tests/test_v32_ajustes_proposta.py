@@ -729,3 +729,94 @@ class TestApproveAtomicCore:
         assert proposal.status == 'approved'
         assert prospect.customer_id is None
         assert proposal.customer_id is None
+
+
+# ─── Migration 0036 — pré-check de e-mail duplicado (H1, deploy-safety) ───────
+
+@pytest.mark.django_db
+class TestMigration0036DupEmailPrecheck:
+    """O pré-check da migration 0036 deve:
+    - ser NO-OP em base limpa (e com e-mails em branco duplicados, permitidos);
+    - ABORTAR com erro acionável se houver e-mail NÃO-VAZIO duplicado.
+    """
+
+    def _load_precheck(self):
+        from importlib import import_module
+        mod = import_module(
+            'sales.migrations.0036_customer_email_unique_partial'
+        )
+        return mod.check_no_duplicate_emails
+
+    def test_noop_on_clean_db(self, admin_user):
+        from django.apps import apps
+        # e-mails distintos + um em branco -> sem duplicata não-vazia.
+        Customer.objects.create(
+            company_name='A LTDA', email='a@clean.com', created_by=admin_user,
+        )
+        Customer.objects.create(
+            company_name='B LTDA', email='b@clean.com', created_by=admin_user,
+        )
+        Customer.objects.create(
+            company_name='C LTDA', email='', created_by=admin_user,
+        )
+        # não levanta.
+        self._load_precheck()(apps, None)
+
+    def test_blank_emails_are_not_duplicates(self, admin_user):
+        from django.apps import apps
+        # múltiplos e-mails em branco são permitidos pela constraint parcial.
+        Customer.objects.create(
+            company_name='D LTDA', email='', created_by=admin_user,
+        )
+        Customer.objects.create(
+            company_name='E LTDA', email='', created_by=admin_user,
+        )
+        self._load_precheck()(apps, None)  # não levanta.
+
+    def test_raises_actionable_error_on_duplicate_nonblank_email(self):
+        # A constraint ativa impede inserir duplicata real no banco; testamos a
+        # LÓGICA do pré-check com um apps stub que reporta a duplicata.
+        precheck = self._load_precheck()
+
+        class _Chain(list):
+            """Lista que também aceita .order_by(...).values_list(...) na
+            cadeia, devolvendo a si mesma / os elementos."""
+            def order_by(self, *a, **k):
+                return self
+
+            def values_list(self, *a, **k):
+                return self
+
+        class _Manager:
+            def exclude(self, **k):
+                return self
+
+            def values(self, *a):
+                return self
+
+            def annotate(self, **k):
+                return self
+
+            def filter(self, **k):
+                if 'n__gt' in k:
+                    # cadeia A: lista de duplicatas
+                    return _Chain([{'email': 'dup@x.com', 'n': 2}])
+                # cadeia B: filter(email=...) -> ids da duplicata
+                return _Chain([10, 20])
+
+            def order_by(self, *a, **k):
+                return self
+
+        class _FakeApps:
+            def get_model(self, app, model):
+                class _M:
+                    objects = _Manager()
+                return _M
+
+        with pytest.raises(RuntimeError) as exc:
+            precheck(_FakeApps(), None)
+        msg = str(exc.value)
+        assert 'sales.0036' in msg
+        assert 'dup@x.com' in msg
+        assert "ids=[10, 20]" in msg
+        assert 'uniq_customer_email_not_blank' in msg
