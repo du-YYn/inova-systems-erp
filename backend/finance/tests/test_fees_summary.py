@@ -129,13 +129,31 @@ def _make_paid_invoice(contract, customer, admin_user, provider,
 @pytest.mark.django_db
 class TestFeesSummary:
 
-    def test_requires_admin_or_manager(self, viewer_client, providers, contract, customer, admin_user):
+    def test_sector_rbac_on_fees_summary(
+        self, api_client, viewer_client, providers, contract, customer, admin_user,
+    ):
+        """v32 ajustes: Financeiro usa RBAC por setor (HasSectorAccess).
+
+        - viewer LÊ globalmente (padrão F3) -> 200 num GET;
+        - quem não tem acesso de leitura ao setor financeiro (ex.: partner)
+          continua bloqueado -> 403.
+        """
         today = timezone.now().date()
         asaas, _ = providers
         _make_paid_invoice(contract, customer, admin_user, asaas,
                            Decimal('100'), Decimal('95'), today)
+        # viewer agora lê (leitura global do F3)
         r = viewer_client.get(URL, {'year': today.year, 'month': today.month})
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_200_OK
+
+        # partner não tem acesso a recurso de setor -> 403
+        partner = User.objects.create_user(
+            username='fees_partner', email='fees@partner.com',
+            password='pass12345', role='partner',
+        )
+        api_client.force_authenticate(user=partner)
+        r2 = api_client.get(URL, {'year': today.year, 'month': today.month})
+        assert r2.status_code == status.HTTP_403_FORBIDDEN
 
     def test_empty_month_returns_zeros(self, admin_client, providers):
         r = admin_client.get(URL, {'year': 2020, 'month': 1})

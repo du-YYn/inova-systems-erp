@@ -44,9 +44,10 @@ def admin_user(db):
 
 @pytest.fixture
 def manager_user(db):
+    # v32 ajustes: Financeiro usa RBAC por setor; gerente do setor financeiro.
     return User.objects.create_user(
         username='s1_mgr', email='s1@mgr.com',
-        password='pass12345', role='manager',
+        password='pass12345', role='manager', sectors=['financeiro'],
     )
 
 

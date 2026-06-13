@@ -26,11 +26,14 @@ def admin_user(db):
 
 @pytest.fixture
 def manager_user(db):
+    # v32 ajustes: Financeiro usa RBAC por setor (HasSectorAccess('financeiro')).
+    # Gerente do Financeiro precisa do setor na lista para escrever.
     return User.objects.create_user(
         username='manager',
         email='manager@test.com',
         password='manager_pass_123',
         role='manager',
+        sectors=['financeiro'],
     )
 
 
