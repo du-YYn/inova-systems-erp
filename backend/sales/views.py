@@ -493,8 +493,28 @@ class ProspectViewSet(viewsets.ModelViewSet):
             })
 
     @staticmethod
+    def _proposal_plan_exists(prospect):
+        """True se o prospect tem proposta aprovada/convertida COM plano de
+        pagamento — nesse caso o pré-cadastro F4 (a partir do
+        ProposalPaymentPlan) é a fonte da verdade dos recebíveis, e o caminho
+        legado NÃO deve gerar nada (dedupe da cobrança em dobro, doc 09 §04 E).
+        """
+        return Proposal.objects.filter(
+            prospect=prospect,
+            status__in=['approved', 'converted'],
+            payment_plan__isnull=False,
+        ).exists()
+
+    @staticmethod
     def _generate_receivables(prospect, user):
-        """Gera faturas A Receber ao fechar lead.
+        """Gera faturas A Receber ao fechar lead (CAMINHO LEGADO).
+
+        v32 ajustes (doc 09 §04 item E / cobrança em dobro do teste E2E): se
+        existe proposta com ProposalPaymentPlan, os recebíveis nascem do
+        pré-cadastro F4 (finance.services.precadastrar_invoice_da_proposta) na
+        submissão da Coleta de Dados. Para NÃO cobrar em dobro, este caminho
+        legado só roda quando NÃO há plano de pagamento na proposta (leads
+        antigos sem plano estruturado).
 
         Idempotente: se `prospect.receivables_generated_at` ja esta setado,
         nao gera de novo (evita duplicacao em won -> production -> won).
@@ -502,11 +522,22 @@ class ProspectViewSet(viewsets.ModelViewSet):
         transacao — se qualquer parcela falhar, nenhuma fica commitada.
         """
         from finance.models import Invoice
+        from finance.invoice_generator import _next_invoice_number
         from django.db import transaction as db_tx
         from datetime import date
 
         # Bug #3: idempotencia — nao re-gerar se ja rodou
         if prospect.receivables_generated_at is not None:
+            return
+
+        # Dedupe (cobrança em dobro): o pré-cadastro F4 da proposta cobre este
+        # prospect — não gerar recebíveis legados em paralelo.
+        if ProspectViewSet._proposal_plan_exists(prospect):
+            logger.info(
+                'Receivables legado pulado para prospect %s: proposta com '
+                'ProposalPaymentPlan existe — pré-cadastro F4 é a fonte.',
+                prospect.id,
+            )
             return
 
         total = float(prospect.proposal_value or prospect.estimated_value or 0)
@@ -523,21 +554,14 @@ class ProspectViewSet(viewsets.ModelViewSet):
         desc_base = f'{prospect.company_name}'
 
         def make_invoice(desc, value, due_date):
-            # select_for_update precisa estar dentro de uma transaction.atomic.
-            # O caller envolve tudo num bloco atomic mais externo (ver abaixo),
-            # entao aqui nao precisamos abrir outro.
-            last = Invoice.objects.select_for_update().filter(
-                invoice_type='receivable'
-            ).order_by('-id').first()
-            seq = 0
-            if last:
-                try:
-                    seq = int(last.number.split('-')[1])
-                except (IndexError, ValueError):
-                    seq = 0
+            # Numeração robusta via PostgreSQL sequence (invoice_seq_receivable,
+            # migration finance/0012). nextval() é atômico em nível DB — imune à
+            # colisão de REC-NNNNN que parsing do "último número" causava
+            # (IntegrityError -> 500 no teste E2E quando rodava em paralelo ao
+            # pré-cadastro F4).
             Invoice.objects.create(
                 invoice_type='receivable',
-                number=f"REC-{seq + 1:05d}",
+                number=_next_invoice_number('receivable'),
                 description=desc,
                 customer=customer,
                 value=value, discount=0, interest=0, tax=0, total=value,
@@ -983,8 +1007,99 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 f'Proposta #{proposal.number} aprovada — R$ {proposal.total_value}',
                 request.user,
             )
+            # v32 ajustes (doc 09 §04, item 01°/02°): aprovar a proposta
+            #   (a) deriva o project_type do prospect da forma de pagamento
+            #       (one_time -> fechado / recurring -> recorrente), eliminando
+            #       a duplicidade B do doc;
+            #   (b) MOVE o card do prospect para a Coleta de Dados
+            #       (status coleta_de_dados) — o fechamento (won/projeto_fechado)
+            #       NÃO é automatizado no aceite (decisão de John 2026-06-11).
+            # Isolado em try/except para não derrubar a aprovação.
+            self._on_proposal_approved(proposal, request.user)
+
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
+
+    @staticmethod
+    def _derive_project_type(plan):
+        """Deriva o project_type do Prospect a partir do plano de pagamento.
+
+        Regra (doc 09 §04 item 02°): pagamento ÚNICO -> projeto fechado;
+        qualquer recorrência (recurring_only / setup_plus_recurring) ->
+        projeto recorrente. Retorna '' se não há plano (não sobrescreve).
+        """
+        if plan is None:
+            return ''
+        if plan.plan_type == 'one_time':
+            return 'fechado'
+        if plan.plan_type in ('recurring_only', 'setup_plus_recurring'):
+            return 'recorrente'
+        return ''
+
+    def _on_proposal_approved(self, proposal, user):
+        """Efeitos colaterais da aprovação da proposta (isolados).
+
+        1. Deriva/atualiza prospect.project_type da forma de pagamento.
+        2. Move o card do prospect para `coleta_de_dados` (etapa nova).
+
+        Um erro aqui NÃO derruba a aprovação — só loga.
+        """
+        prospect = proposal.prospect
+        if prospect is None:
+            return
+        try:
+            plan = getattr(proposal, 'payment_plan', None)
+            derived = self._derive_project_type(plan)
+            update_fields = []
+            if derived and prospect.project_type != derived:
+                prospect.project_type = derived
+                update_fields.append('project_type')
+
+            # Move o card para Coleta de Dados (não rebaixa terminais nem
+            # estados já avançados do fechamento).
+            old_status = prospect.status
+            advanced = (
+                'coleta_de_dados', 'data_collection', 'projeto_fechado', 'won',
+                'em_producao', 'production', 'concluded',
+                'lost', 'disqualified', 'not_closed',
+            )
+            if old_status not in advanced:
+                prospect.status = 'coleta_de_dados'
+                update_fields.append('status')
+
+            if update_fields:
+                prospect.save(update_fields=update_fields)
+
+            if 'status' in update_fields:
+                log_crm_activity(
+                    prospect, 'data_collection',
+                    'Proposta aprovada — card movido para Coleta de Dados',
+                    user,
+                )
+                self._audit_proposal_status_move(
+                    prospect, old_status, 'coleta_de_dados', user,
+                )
+        except Exception as exc:  # noqa: BLE001 — isolamento de efeito colateral
+            logger.warning(
+                'Falha ao aplicar efeitos de aprovação na proposta %s '
+                '(prospect %s): %s', proposal.id, getattr(prospect, 'id', None), exc,
+            )
+
+    @staticmethod
+    def _audit_proposal_status_move(prospect, old_status, new_status, user):
+        """Trilha de auditoria do movimento de card disparado pela aprovação."""
+        try:
+            log_audit(
+                user,
+                action='prospect_status_change',
+                resource_type='prospect',
+                resource_id=prospect.id,
+                details=f'{old_status} -> {new_status} (origin=action:proposal_approve)',
+                old_value={'status': old_status},
+                new_value={'status': new_status},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('Falha ao auditar movimento de card: %s', exc)
 
     @staticmethod
     def _generate_commissions(proposal, user):
