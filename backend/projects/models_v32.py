@@ -44,6 +44,93 @@ ONBOARDING_FORM_BLOCKS = [
 ]
 
 
+# Ações padrão por etapa do card de Produção (doc 10 — Kanban principal).
+# {etapa_key: [texto, ...]} na ORDEM do checklist. Datas vêm do motor
+# (scheduling/substeps.py), não daqui. Chaves = Project.ETAPA_CHOICES.
+#
+# Etapas SEM ações definidas (deferidas — doc 10 "Pontos a fechar" / instrução):
+#   - etapa_9_apresentacao  → label "Reunião de Apresentação" (ações a definir)
+#   - implementacao         → label "Concluído" (coluna de controle, sem ações)
+#   - recorrencia           → label "Implementado" (coluna de controle, sem ações)
+# Elas simplesmente não constam no seed (nenhuma ação é semeada).
+ETAPA_ACTIONS_SEED = {
+    'agendar': [
+        'Agendar a reunião de Onboarding junto ao cliente',
+    ],
+    'etapa_3_preparacao': [  # Planejamento
+        'Revisar material do comercial + a proposta (escopo e prazo)',
+        'Montar o Game Plan visual',
+        'Preparar o roteiro de mapeamento',
+    ],
+    'etapa_4_onboarding': [  # Onboarding (Dia 0)
+        'Apresentar o Game Plan e confirmar prazo + marcos',
+        'Aprofundar o processo (mapeamento completo)',
+        'Validar e refinar o escopo',
+        'Alinhar o modelo de entrega',
+        'Mapear dependências do cliente',
+        'Fechamento: agendar a reunião de Documentação',
+    ],
+    'etapa_5_documentacao': [  # Documentação
+        'Revisar o material da onboarding',
+        'Preencher a documentação seção por seção (12 seções)',
+        'Definir prioridades e fases de entrega',
+        'Gerar design e wireframes no branding',
+        'Revisão interna (escopo fechado)',
+        'Preparar a apresentação da Validação',
+        'Agendar a reunião de apresentação da arquitetura',
+        'Apresentar a doc seção por seção',
+        'Validar escopo e exclusões com o cliente',
+        'Validar design, fluxos, prioridades e fases',
+        'Explicar o processo de mudança',
+    ],
+    'etapa_6_validacao_doc': [  # Validação da doc (handshake Jurídico)
+        'Ajustar a arquitetura se necessário',
+        'Enviar para o Jurídico (abre a modalidade Validação no Jurídico)',
+    ],
+    'etapa_7_desenvolvimento': [  # Desenvolvimento (gate Regra de Ouro)
+        'Aprovado para Desenvolvimento (automático quando o Jurídico libera)',
+        'Quebrar a doc em fases e tarefas',
+        'Desenvolver fase por fase',
+        'Acompanhar o progresso (doc + cronograma)',
+        'Pedido fora do escopo → processo de mudança (Solicitação de Mudança)',
+        'Concluir cada fase → encaminhar pra Auditoria',
+        'Atualização semanal (resumo + pendências, dia fixo)',
+    ],
+    'etapa_8_auditoria': [  # Auditoria interna (sem cliente)
+        'Conferir o desenvolvido contra a doc, item por item',
+        'Testar fluxos e casos de uso críticos',
+        'Testar regras, exceções, permissões e integrações',
+        'Verificar segurança, LGPD e performance',
+        'Registrar e corrigir bugs',
+        'Agendar a reunião de apresentação',
+    ],
+    # 'homologacao' = label "Janela de teste" (doc 10 §9)
+    'homologacao': [
+        'Coletar os apontamentos do cliente durante o teste '
+        '(fotos, vídeos, áudios e texto)',
+        'Organizar os apontamentos pra o Re-Update',
+    ],
+    # 'registro_entrega' = label "Re-Update" (doc 10 §10)
+    'registro_entrega': [
+        'Revisar e analisar os apontamentos do cliente',
+        'Fazer os ajustes em lote (dentro do escopo)',
+        'Atualizar e devolver pro cliente',
+        'Repetir o ciclo até o cliente aprovar',
+    ],
+    # 'etapa_10_graduacao' = label "Homologação" (doc 10 §11 — entrega oficial)
+    'etapa_10_graduacao': [
+        'Taguear a versão do código (release)',
+        'Guardar a doc aprovada como baseline',
+        'Registrar data e ambiente do deploy',
+        'Agendar a reunião com o cliente',
+        'PROJETO → Reunião de Entrega: passar a estrutura ao cliente '
+        '(servidores, domínios, código-fonte) e como manter de pé',
+        'AUTOMAÇÃO/IA → Reunião de Implementação: implementação oficial '
+        'da automação',
+    ],
+}
+
+
 class OnboardingMappingForm(models.Model):
     """Etapa 4 — roteiro de mapeamento preenchido na reunião de onboarding."""
 
@@ -329,3 +416,48 @@ class RecurrenceContract(models.Model):
 
     def __str__(self):
         return f'{self.get_kind_display()} — {self.customer} ({self.status})'
+
+
+class ProjectEtapaAction(models.Model):
+    """Ação (item de checklist) de uma etapa, exibida no card (doc 09 item 08 /
+    doc 10). Cada ação nasce DATADA pelo motor (substeps.py): `data_prevista`
+    é preenchida a partir do Dia 0 (ou da âncora provisória) — não se digita
+    data na mão. Entidade nova, somente aditiva.
+    """
+
+    project = models.ForeignKey(
+        'projects.Project', on_delete=models.CASCADE,
+        related_name='etapa_actions',
+    )
+    # Etapa dona da ação (Project.ETAPA_CHOICES). Texto livre p/ resiliência —
+    # não FK a choices, igual ao LegalCaseEvent.
+    etapa = models.CharField(max_length=30)
+    ordem = models.IntegerField(default=0)
+    texto = models.CharField(max_length=300)
+
+    feito = models.BooleanField(default=False)
+    feito_em = models.DateTimeField(null=True, blank=True)
+    feito_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='completed_etapa_actions',
+    )
+
+    # Data calculada pelo motor de cronograma (substeps.py) — read-only na API.
+    data_prevista = models.DateField(null=True, blank=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        null=True, blank=True, related_name='created_etapa_actions',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'project_etapa_actions'
+        ordering = ['project', 'etapa', 'ordem', 'id']
+        indexes = [
+            models.Index(fields=['project', 'etapa']),
+        ]
+
+    def __str__(self):
+        return f'[{self.etapa}] {self.texto[:40]} — {self.project_id}'

@@ -11,8 +11,8 @@ from .views_extra import (
 from .views_scheduling import CronogramaSimularView
 from .views_v32 import (
     OnboardingMappingFormViewSet, ProjectAuditViewSet, ProjectDocumentViewSet,
-    RecurrenceContractViewSet, ReUpdateCycleViewSet, ScheduleVersionViewSet,
-    WeeklyUpdateViewSet,
+    ProjectEtapaActionViewSet, RecurrenceContractViewSet, ReUpdateCycleViewSet,
+    ScheduleVersionViewSet, WeeklyUpdateViewSet,
 )
 
 router = DefaultRouter()
@@ -35,6 +35,7 @@ router.register(r'reupdate-cycles', ReUpdateCycleViewSet)
 router.register(r'weekly-updates', WeeklyUpdateViewSet)
 router.register(r'schedule-versions', ScheduleVersionViewSet)
 router.register(r'recurrence-contracts', RecurrenceContractViewSet)
+router.register(r'etapa-actions', ProjectEtapaActionViewSet)
 
 urlpatterns = [
     # F1: simulação stateless do Game Plan (antes do router p/ não colidir)

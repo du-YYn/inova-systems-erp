@@ -12,6 +12,7 @@ from .models_v32 import (
     OnboardingMappingForm,
     ProjectAudit,
     ProjectDocument,
+    ProjectEtapaAction,
     RecurrenceContract,
     ReUpdateCycle,
     ScheduleVersion,
@@ -135,6 +136,32 @@ class ScheduleVersionSerializer(serializers.ModelSerializer):
         ]
         # Snapshot imutável: só nasce pelo endpoint de geração do cronograma.
         read_only_fields = fields
+
+
+class ProjectEtapaActionSerializer(serializers.ModelSerializer):
+    """Ação de checklist por etapa no card (doc 09 item 08 / doc 10).
+
+    `data_prevista` vem do motor (substeps.py) — read-only. `feito_em`/
+    `feito_por` são setados pela ação `toggle` (não por PATCH direto).
+    `feito` pode ser alterado por PATCH só pra retrocompatibilidade da UI,
+    mas a forma recomendada é a ação `toggle` (registra quem/quando).
+    """
+
+    feito_por_name = serializers.CharField(
+        source='feito_por.username', read_only=True)
+
+    class Meta:
+        model = ProjectEtapaAction
+        fields = [
+            'id', 'project', 'etapa', 'ordem', 'texto',
+            'feito', 'feito_em', 'feito_por', 'feito_por_name',
+            'data_prevista', 'created_by', 'created_at', 'updated_at',
+        ]
+        # data_prevista é calculada pelo motor; feito_em/feito_por pela ação.
+        read_only_fields = [
+            'id', 'feito_em', 'feito_por', 'data_prevista',
+            'created_by', 'created_at', 'updated_at',
+        ]
 
 
 class RecurrenceContractSerializer(serializers.ModelSerializer):

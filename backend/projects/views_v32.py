@@ -16,9 +16,11 @@ from accounts.permissions import HasSectorAccess
 from core.audit import log_audit
 
 from .models_v32 import (
+    ETAPA_ACTIONS_SEED,
     OnboardingMappingForm,
     ProjectAudit,
     ProjectDocument,
+    ProjectEtapaAction,
     RecurrenceContract,
     ReUpdateCycle,
     ScheduleVersion,
@@ -28,6 +30,7 @@ from .serializers_v32 import (
     OnboardingMappingFormSerializer,
     ProjectAuditSerializer,
     ProjectDocumentSerializer,
+    ProjectEtapaActionSerializer,
     RecurrenceContractSerializer,
     ReUpdateCycleSerializer,
     ScheduleVersionSerializer,
@@ -112,6 +115,18 @@ class ProjectDocumentViewSet(_ProjectFilterMixin, viewsets.ModelViewSet):
             new_value={'status': new_status},
             request=request,
         )
+        # PRODUCER (doc 09 item 06 / doc 10 §5): enviar a doc pra validação
+        # (vira a baseline a validar) → abre LegalCase(validacao_documento) no
+        # Jurídico. Isolado: erro do producer não derruba o submit.
+        if new_status == 'pending_validation':
+            from .receivers import create_validacao_legal_case
+            try:
+                create_validacao_legal_case(document, user=request.user)
+            except Exception as exc:  # noqa: BLE001 — isolamento do producer
+                logger.exception(
+                    'Falha no producer Validação→Jurídico (doc %s): %s',
+                    document.id, exc,
+                )
         return Response(ProjectDocumentSerializer(document).data)
 
 
@@ -216,3 +231,120 @@ class RecurrenceContractViewSet(_ProjectFilterMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+@extend_schema(tags=['projects'])
+class ProjectEtapaActionViewSet(_ProjectFilterMixin, viewsets.ModelViewSet):
+    """Checklist de ações por etapa no card (doc 09 item 08 / doc 10).
+
+    Filtra por ?project=<id> e opcionalmente ?etapa=<key>. A data de cada ação
+    (`data_prevista`) é calculada pelo motor (substeps) — read-only. A ação
+    `seed` cria as ações padrão do doc 10 por etapa (idempotente); `toggle`
+    marca/desmarca registrando quem/quando.
+    """
+
+    queryset = ProjectEtapaAction.objects.select_related(
+        'project', 'created_by', 'feito_por')
+    serializer_class = ProjectEtapaActionSerializer
+    permission_classes = PRODUCAO_PERMS
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        etapa = self.request.query_params.get('etapa')
+        if etapa:
+            queryset = queryset.filter(etapa=etapa)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def toggle(self, request, pk=None):
+        """Marca/desmarca a ação como feita (registra quem/quando)."""
+        action_obj = self.get_object()
+        action_obj.feito = not action_obj.feito
+        if action_obj.feito:
+            action_obj.feito_em = timezone.now()
+            action_obj.feito_por = request.user
+        else:
+            action_obj.feito_em = None
+            action_obj.feito_por = None
+        action_obj.save(update_fields=[
+            'feito', 'feito_em', 'feito_por', 'updated_at'])
+        log_audit(
+            request.user, 'project_etapa_action_toggle',
+            'project_etapa_action', action_obj.id,
+            details=(
+                f'Ação "{action_obj.texto[:60]}" ({action_obj.etapa}) '
+                f'marcada como {"feita" if action_obj.feito else "pendente"}.'
+            ),
+            new_value={'feito': action_obj.feito},
+            request=request,
+        )
+        return Response(ProjectEtapaActionSerializer(action_obj).data)
+
+    @action(detail=False, methods=['post'])
+    def seed(self, request):
+        """Semeia as ações padrão do doc 10 num projeto (idempotente).
+
+        Body: {"project": <id>, "etapa"?: "<key>"}. Sem `etapa`, semeia todas
+        as etapas com ações definidas. Não duplica: pula (project, etapa) que
+        já tem ações. Etapas sem ações no seed (9/12/13 — a definir) são
+        ignoradas.
+        """
+        project_id = request.data.get('project')
+        if not project_id:
+            return Response(
+                {'error': 'O campo "project" é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from .models import Project
+        try:
+            project = Project.objects.get(pk=project_id)
+        except Project.DoesNotExist:
+            return Response(
+                {'error': 'Projeto não encontrado.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        only_etapa = request.data.get('etapa')
+        etapas = [only_etapa] if only_etapa else list(ETAPA_ACTIONS_SEED.keys())
+
+        created = []
+        for etapa in etapas:
+            textos = ETAPA_ACTIONS_SEED.get(etapa)
+            if not textos:
+                continue
+            if ProjectEtapaAction.objects.filter(
+                project=project, etapa=etapa,
+            ).exists():
+                continue  # idempotente: já semeado
+            for ordem, texto in enumerate(textos, start=1):
+                created.append(ProjectEtapaAction(
+                    project=project, etapa=etapa, ordem=ordem, texto=texto,
+                    created_by=request.user,
+                ))
+        if created:
+            ProjectEtapaAction.objects.bulk_create(created)
+            log_audit(
+                request.user, 'project_etapa_actions_seed',
+                'project', project.id,
+                details=(
+                    f'Semeadas {len(created)} ações padrão (doc 10) no projeto '
+                    f'{project.name}'
+                    + (f' (etapa {only_etapa})' if only_etapa else '') + '.'
+                ),
+                new_value={'project': project.id, 'count': len(created),
+                           'etapa': only_etapa},
+                request=request,
+            )
+        actions = self.get_queryset().filter(project=project)
+        if only_etapa:
+            actions = actions.filter(etapa=only_etapa)
+        return Response(
+            {
+                'seeded': len(created),
+                'actions': ProjectEtapaActionSerializer(actions, many=True).data,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
