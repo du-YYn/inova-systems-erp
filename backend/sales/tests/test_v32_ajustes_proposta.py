@@ -493,3 +493,184 @@ class TestProposalOptionalDefaults:
         )
         assert r.status_code == status.HTTP_201_CREATED, r.data
         assert r.data['valid_until'] == explicit
+
+
+# ─── H1 · falha de _ensure_customer_for_proposal fica VISÍVEL ────────────────
+
+@pytest.mark.django_db
+class TestEnsureCustomerFailureVisible:
+    """H1 (code review): se garantir o Customer falhar, a aprovação NÃO é
+    derrubada, MAS o erro não pode sumir — logger.exception + log_audit
+    (customer_autocreate_failed) + Sentry (quando configurado)."""
+
+    def _prospect_sem_customer(self, admin_user):
+        return Prospect.objects.create(
+            company_name='Falha Visivel LTDA',
+            contact_name='Contato Falha',
+            contact_email='falha@visivel.com',
+            source='website', status='proposal', created_by=admin_user,
+        )
+
+    def test_failure_logs_audit_and_keeps_approve(
+        self, admin_client, admin_user,
+    ):
+        from unittest import mock
+
+        from core.models import AuditLog
+
+        prospect = self._prospect_sem_customer(admin_user)
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+
+        # Força a falha DENTRO da resolução do Customer.
+        with mock.patch(
+            'sales.views.ProposalViewSet._resolve_or_create_customer',
+            side_effect=RuntimeError('db down'),
+        ), mock.patch('sales.views.capture_exception') as capture:
+            r = admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        # Aprovação NÃO derrubada.
+        assert r.status_code == status.HTTP_200_OK, r.data
+        proposal.refresh_from_db()
+        assert proposal.status == 'approved'
+        # Customer NÃO foi criado (a falha rolou back só o savepoint dele).
+        prospect.refresh_from_db()
+        assert prospect.customer_id is None
+        # Falha VISÍVEL: audit de falha gravado.
+        entry = AuditLog.objects.filter(
+            action='customer_autocreate_failed',
+            resource_id=str(proposal.id),
+        ).first()
+        assert entry is not None
+        assert 'db down' in entry.new_value['error']
+        # Sentry capturado (no-op se não configurado, mas chamado).
+        capture.assert_called_once()
+
+
+# ─── M1 · dedup robusto do Customer + comissão usa o vinculado ───────────────
+
+@pytest.mark.django_db
+class TestCustomerDedupRobust:
+    """M1 (code review): dedup por chave estável (e-mail/empresa), unique
+    parcial em Customer.email, e _generate_commissions usa o Customer vinculado
+    (não casa por company_name não-único)."""
+
+    def test_dedup_by_company_name_when_no_email(
+        self, admin_client, admin_user,
+    ):
+        """Lead sem e-mail reaproveita Customer existente pela empresa."""
+        existing = Customer.objects.create(
+            company_name='Sem Email LTDA', email='',
+            created_by=admin_user,
+        )
+        prospect = Prospect.objects.create(
+            company_name='Sem Email LTDA', contact_name='X', contact_email='',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        prospect.refresh_from_db()
+        assert prospect.customer_id == existing.id
+        assert Customer.objects.filter(company_name='Sem Email LTDA').count() == 1
+
+    def test_unique_email_constraint_blocks_duplicate(self, admin_user):
+        from django.db import IntegrityError
+        Customer.objects.create(
+            company_name='A', email='dup@x.com', created_by=admin_user,
+        )
+        with pytest.raises(IntegrityError):
+            Customer.objects.create(
+                company_name='B', email='dup@x.com', created_by=admin_user,
+            )
+
+    def test_unique_email_allows_multiple_blank(self, admin_user):
+        # email vazio (default PJ sem contato) PODE repetir — índice parcial.
+        Customer.objects.create(company_name='C1', email='', created_by=admin_user)
+        Customer.objects.create(company_name='C2', email='', created_by=admin_user)
+        assert Customer.objects.filter(email='').count() == 2
+
+    def test_commission_uses_linked_customer_not_homonym(
+        self, admin_client, admin_user,
+    ):
+        """Comissão vai pro Customer VINCULADO à proposta (FK estável), mesmo
+        havendo um homônimo (company_name igual) — o antigo fallback casava por
+        company_name (não-único) e podia pegar o homônimo errado."""
+        # Customer vinculado explicitamente ao prospect.
+        linked = Customer.objects.create(
+            company_name='Homonimo LTDA', email='real@homonimo.com',
+            created_by=admin_user,
+        )
+        # Homônimo criado ANTES (id menor) — o .first() por company_name pegaria
+        # este, não o vinculado.
+        homonym = Customer.objects.create(
+            company_name='Homonimo LTDA', email='outro@homonimo.com',
+            created_by=admin_user,
+        )
+        assert homonym.id != linked.id
+        prospect = Prospect.objects.create(
+            customer=linked,
+            company_name='Homonimo LTDA', contact_name='Y',
+            contact_email='real@homonimo.com',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        proposal = make_proposal(
+            prospect, admin_user, plan_type='one_time',
+            recurring_amount=Decimal('0'),
+        )
+        admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+
+        proposal.refresh_from_db()
+        assert proposal.customer_id == linked.id
+        # ClientCost no Customer vinculado, NUNCA no homônimo.
+        assert ClientCost.objects.filter(customer=homonym).count() == 0
+        assert ClientCost.objects.filter(customer=linked).count() == 2
+
+
+# ─── M2 · núcleo do approve atômico (status + customer coerentes) ────────────
+
+@pytest.mark.django_db
+class TestApproveAtomicCore:
+    """M2 (code review): status + customer commitam juntos. Falha do Customer
+    roda back só o savepoint dele (sem Customer pela metade); o status approved
+    permanece (H1). Sucesso = ambos persistidos."""
+
+    def test_success_commits_status_and_customer_together(
+        self, admin_client, admin_user,
+    ):
+        prospect = Prospect.objects.create(
+            company_name='Atomico LTDA', contact_name='Z',
+            contact_email='z@atomico.com',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+        r = admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+        assert r.status_code == status.HTTP_200_OK
+        proposal.refresh_from_db()
+        prospect.refresh_from_db()
+        assert proposal.status == 'approved'
+        assert prospect.customer_id is not None
+        assert proposal.customer_id == prospect.customer_id
+
+    def test_customer_failure_rolls_back_only_customer_savepoint(
+        self, admin_client, admin_user,
+    ):
+        from unittest import mock
+
+        prospect = Prospect.objects.create(
+            company_name='Savepoint LTDA', contact_name='W',
+            contact_email='w@savepoint.com',
+            source='website', status='proposal', created_by=admin_user,
+        )
+        proposal = make_proposal(prospect, admin_user, plan_type='one_time')
+        with mock.patch(
+            'sales.views.ProposalViewSet._resolve_or_create_customer',
+            side_effect=RuntimeError('explode no savepoint'),
+        ):
+            r = admin_client.post(f'{PROPOSALS_URL}{proposal.id}/approve/')
+        assert r.status_code == status.HTTP_200_OK
+        proposal.refresh_from_db()
+        prospect.refresh_from_db()
+        # status persistiu, customer não.
+        assert proposal.status == 'approved'
+        assert prospect.customer_id is None
+        assert proposal.customer_id is None

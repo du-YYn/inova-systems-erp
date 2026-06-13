@@ -20,7 +20,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from core.audit import log_audit
+from core.audit import capture_exception, log_audit
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
@@ -1024,15 +1024,24 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 {'error': f'Proposta não pode ser aprovada (status atual: {proposal.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        proposal.status = 'approved'
-        proposal.save()
+        # M2: núcleo atômico — a mudança de status e a garantia do Customer
+        # commitam juntos (transação coerente). _ensure_customer_for_proposal
+        # roda em SAVEPOINT (atomic aninhado) com seu próprio try/except: se a
+        # criação do Customer falhar, só o savepoint dele faz rollback (sem
+        # Customer pela metade) — o status `approved` permanece e a aprovação
+        # NÃO é derrubada (H1). O select_for_update no prospect (dentro do
+        # helper) continua intacto.
+        with transaction.atomic():
+            proposal.status = 'approved'
+            proposal.save(update_fields=['status', 'updated_at'])
 
-        # P0.1 (raiz do caminho feliz, doc 09 §T-E2E): garante o Customer do
-        # prospect ANTES de qualquer efeito que dependa dele. Sem isso, o
-        # pré-cadastro F4, o _sync_customer do onboarding e o LegalCase(contrato)
-        # abortavam calados no submit, e a comissão (abaixo) nunca era gerada.
-        # Idempotente: reaproveita o Customer existente (por FK ou e-mail).
-        self._ensure_customer_for_proposal(proposal, request.user)
+            # P0.1 (raiz do caminho feliz, doc 09 §T-E2E): garante o Customer do
+            # prospect ANTES de qualquer efeito que dependa dele. Sem isso, o
+            # pré-cadastro F4, o _sync_customer do onboarding e o
+            # LegalCase(contrato) abortavam calados no submit, e a comissão
+            # (abaixo) nunca era gerada. Idempotente: reaproveita o Customer
+            # existente (por FK / e-mail / empresa).
+            self._ensure_customer_for_proposal(proposal, request.user)
 
         # Gerar comissões automaticamente (agora com Customer garantido — P1.6)
         self._generate_commissions(proposal, request.user)
@@ -1094,61 +1103,121 @@ class ProposalViewSet(viewsets.ModelViewSet):
         prospect = proposal.prospect
         if prospect is None:
             return None
+        from django.db import DatabaseError, IntegrityError
         try:
-            with transaction.atomic():
-                # Lock no prospect para evitar corrida com outra aprovação.
-                prospect = Prospect.objects.select_for_update().get(pk=prospect.pk)
-                if prospect.customer_id:
-                    customer = prospect.customer
-                else:
-                    prospect_email = (prospect.contact_email or '').strip()
-                    prospect_company = (prospect.company_name or '').strip()
-                    customer = None
-                    if prospect_email:
-                        customer = Customer.objects.filter(
-                            email=prospect_email,
-                        ).first()
-                    if customer is None:
-                        if not prospect_company:
-                            logger.warning(
-                                'P0.1: prospect %s sem company_name — Customer '
-                                'não criado na aprovação da proposta %s.',
-                                prospect.id, proposal.number,
-                            )
-                            return None
-                        customer = Customer.objects.create(
-                            customer_type='PJ',
-                            company_name=prospect_company,
-                            name=(prospect.contact_name or '').strip(),
-                            email=prospect_email,
-                            phone=(prospect.contact_phone or '').strip(),
-                            source='crm',
-                            created_by=user,
-                        )
-                        logger.info(
-                            'P0.1: Customer %s (%s) auto-criado na aprovação da '
-                            'proposta %s.',
-                            customer.id, customer.company_name, proposal.number,
-                        )
-                    prospect.customer = customer
-                    prospect.save(update_fields=['customer'])
-                # Vincula a proposta ao Customer (sempre — idempotente).
-                if proposal.customer_id != customer.id:
-                    proposal.customer = customer
-                    proposal.save(update_fields=['customer'])
-                # Vincula o onboarding existente, se houver, ao Customer.
-                onboarding = getattr(prospect, 'onboarding', None)
-                if onboarding is not None and not onboarding.customer_id:
-                    onboarding.customer = customer
-                    onboarding.save(update_fields=['customer'])
+            try:
+                with transaction.atomic():
+                    customer = ProposalViewSet._resolve_or_create_customer(
+                        prospect, proposal, user,
+                    )
+            except IntegrityError as exc:
+                # M1: corrida cross-prospect — outra aprovação criou o Customer
+                # (unique de Customer.email) entre o nosso filter e o create.
+                # Re-resolve por e-mail e segue (sem duplicar). Se ainda assim
+                # não achar, re-levanta para o tratamento visível abaixo.
+                logger.info(
+                    'P0.1: IntegrityError ao criar Customer (proposta %s) — '
+                    'corrida concorrente; re-resolvendo por e-mail: %s',
+                    proposal.number, exc,
+                )
+                with transaction.atomic():
+                    customer = ProposalViewSet._resolve_or_create_customer(
+                        prospect, proposal, user, recreate_ok=False,
+                    )
             return customer
         except Exception as exc:  # noqa: BLE001 — isolamento de efeito colateral
-            logger.warning(
+            # H1: a falha NÃO pode sumir. Aprovação segue (não derrubada), mas
+            # o erro fica VISÍVEL: stack no log + audit de falha + Sentry.
+            logger.exception(
                 'P0.1: falha ao garantir Customer para a proposta %s '
-                '(prospect %s): %s',
-                proposal.id, getattr(prospect, 'id', None), exc,
+                '(prospect %s) — aprovação mantida, efeito colateral perdido.',
+                proposal.id, getattr(prospect, 'id', None),
             )
+            log_audit(
+                user, 'customer_autocreate_failed', 'proposal', proposal.id,
+                details=(
+                    f'Falha ao garantir Customer na aprovação da proposta '
+                    f'{proposal.number} (prospect '
+                    f'{getattr(prospect, "id", None)}): {exc!r}. '
+                    f'Pré-cadastro F4 / LegalCase(contrato) podem não disparar.'
+                ),
+                new_value={
+                    'proposal': proposal.id,
+                    'prospect': getattr(prospect, 'id', None),
+                    'error': repr(exc),
+                },
+            )
+            capture_exception(exc)
             return None
+
+    @staticmethod
+    def _resolve_or_create_customer(prospect, proposal, user, recreate_ok=True):
+        """Resolve (e vincula) o Customer do prospect numa transação coerente.
+
+        M1: dedup robusto por chave estável — reaproveita por FK do prospect,
+        depois por e-mail (chave única do Customer), e só então cria. Sempre
+        revincula proposta + onboarding ao Customer (idempotente).
+
+        `recreate_ok=False` é usado no retry pós-IntegrityError: nesse caminho
+        NÃO recriamos (a corrida já criou); se não acharmos por e-mail/empresa,
+        deixamos a exceção propagar para o tratamento visível (H1).
+        """
+        # Lock no prospect para evitar corrida com outra aprovação.
+        prospect = Prospect.objects.select_for_update().get(pk=prospect.pk)
+        if prospect.customer_id:
+            customer = prospect.customer
+        else:
+            prospect_email = (prospect.contact_email or '').strip()
+            prospect_company = (prospect.company_name or '').strip()
+            customer = None
+            if prospect_email:
+                customer = Customer.objects.filter(email=prospect_email).first()
+            # Fallback de dedup por empresa (leads sem e-mail) — chave estável
+            # o suficiente para não duplicar o mesmo cliente no funil.
+            if customer is None and prospect_company:
+                customer = Customer.objects.filter(
+                    company_name__iexact=prospect_company,
+                ).first()
+            if customer is None:
+                if not recreate_ok:
+                    # Retry pós-corrida não achou: propaga p/ tratamento visível.
+                    raise Customer.DoesNotExist(
+                        f'Customer não resolvido após IntegrityError '
+                        f'(proposta {proposal.number}).'
+                    )
+                if not prospect_company:
+                    logger.warning(
+                        'P0.1: prospect %s sem company_name — Customer '
+                        'não criado na aprovação da proposta %s.',
+                        prospect.id, proposal.number,
+                    )
+                    return None
+                customer = Customer.objects.create(
+                    customer_type='PJ',
+                    company_name=prospect_company,
+                    name=(prospect.contact_name or '').strip(),
+                    email=prospect_email,
+                    phone=(prospect.contact_phone or '').strip(),
+                    source='crm',
+                    created_by=user,
+                )
+                logger.info(
+                    'P0.1: Customer %s (%s) auto-criado na aprovação da '
+                    'proposta %s.',
+                    customer.id, customer.company_name, proposal.number,
+                )
+            prospect.customer = customer
+            prospect.save(update_fields=['customer'])
+        # Vincula a proposta ao Customer (sempre — idempotente).
+        if proposal.customer_id != customer.id:
+            proposal.customer = customer
+            proposal.save(update_fields=['customer'])
+        # Vincula o onboarding existente, se houver, ao Customer.
+        onboarding = getattr(prospect, 'onboarding', None)
+        if onboarding is not None and not onboarding.customer_id:
+            onboarding.customer = customer
+            onboarding.save(update_fields=['customer'])
+        return customer
 
     def _on_proposal_approved(self, proposal, user):
         """Efeitos colaterais da aprovação da proposta (isolados).
@@ -1242,11 +1311,18 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if total <= 0:
             return
 
+        # M1: usar o Customer JÁ vinculado à proposta (garantido por
+        # _ensure_customer_for_proposal antes desta chamada). O fallback antigo
+        # casava por company_name (NÃO único) — podia pegar o cliente errado em
+        # homônimos. Agora cai no Customer do prospect (FK estável), nunca por
+        # nome. `refresh_from_db` cobre o caso de a FK ter sido setada na mesma
+        # request (a instância em memória poderia estar defasada).
         customer = proposal.customer
         if not customer and proposal.prospect_id:
-            customer = Customer.objects.filter(
-                company_name=proposal.prospect.company_name
-            ).first() if proposal.prospect else None
+            proposal.refresh_from_db(fields=['customer'])
+            customer = proposal.customer
+        if not customer and proposal.prospect_id and proposal.prospect.customer_id:
+            customer = proposal.prospect.customer
 
         if not customer:
             logger.warning(f"Comissão não gerada — proposta #{proposal.number} sem cliente vinculado")

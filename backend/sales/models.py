@@ -74,6 +74,18 @@ class Customer(models.Model):
     class Meta:
         db_table = 'customers'
         ordering = ['-created_at']
+        constraints = [
+            # M1 (v32 ajustes): dedup robusto do Customer por e-mail. Índice
+            # único PARCIAL — só aplica quando email != '' (vazio é o default
+            # de PJ sem contato e PODE repetir). Aditivo e seguro para blanks;
+            # transforma a corrida cross-prospect de _ensure_customer_for_proposal
+            # numa colisão de banco tratável (IntegrityError -> re-resolve).
+            models.UniqueConstraint(
+                fields=['email'],
+                condition=models.Q(email__gt=''),
+                name='uniq_customer_email_not_blank',
+            ),
+        ]
 
     def __str__(self):
         return self.company_name or self.name
