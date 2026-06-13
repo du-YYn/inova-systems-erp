@@ -44,6 +44,7 @@ def operator_user(db):
     return User.objects.create_user(
         username='op_cat', email='op@cat.com',
         password='op_pass', role='operator',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 

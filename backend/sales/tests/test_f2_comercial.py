@@ -34,6 +34,7 @@ def manager_user(db):
         email='manager@f2test.com',
         password='manager_pass_123',
         role='manager',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -294,11 +295,18 @@ class TestV32Permissions:
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN,
         )
 
-    def test_viewer_cannot_read_prospects_at_all(self, viewer_client, manager_user):
-        """ProspectViewSet usa permission Strict — viewer não tem nem leitura."""
+    def test_viewer_can_read_but_not_write_prospects(self, viewer_client, manager_user):
+        """P2.8: ProspectViewSet usa HasSectorAccess('comercial') — viewer lê
+        globalmente (matriz F3) mas NÃO escreve (PATCH negado)."""
         prospect = make_prospect(manager_user, status='tech_analysis')
+        # leitura permitida (F3: viewer = leitura global)
         response = viewer_client.get(f'{URL}{prospect.id}/')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
+        # escrita negada
+        patch = viewer_client.patch(
+            f'{URL}{prospect.id}/', {'status': 'meeting_2_done'}, format='json',
+        )
+        assert patch.status_code == status.HTTP_403_FORBIDDEN
 
     def test_serializer_redacts_tech_analysis_notes_for_viewer(
         self, viewer_user, manager_user,

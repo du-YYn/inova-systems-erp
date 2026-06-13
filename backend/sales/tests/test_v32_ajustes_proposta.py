@@ -417,3 +417,79 @@ class TestApproveEnsuresCustomer:
         assert ClientCost.objects.filter(
             customer=prospect.customer, cost_category='comercial',
         ).count() == 2
+
+
+# ─── P2.9 billing_type e valid_until OPCIONAIS no POST /proposals/ ────────────
+
+@pytest.mark.django_db
+class TestProposalOptionalDefaults:
+    """P2.9 (doc 09 §T-E2E): criar proposta sem billing_type/valid_until não
+    quebra com 400 — billing_type vem da forma de pagamento, valid_until = +30d."""
+
+    def _payload(self, prospect, **overrides):
+        data = {
+            'prospect': prospect.id,
+            'title': 'Proposta Sem Campos Opcionais',
+            'proposal_type': 'software_dev',
+            'total_value': '10000.00',
+        }
+        data.update(overrides)
+        return data
+
+    def test_create_without_billing_type_and_valid_until(
+        self, admin_client, prospect,
+    ):
+        r = admin_client.post(
+            PROPOSALS_URL, self._payload(prospect), format='json',
+        )
+        assert r.status_code == status.HTTP_201_CREATED, r.data
+        body = r.data
+        # billing_type derivado: sem plano -> 'fixed'
+        assert body['billing_type'] == 'fixed'
+        # valid_until = hoje + 30 dias
+        assert body['valid_until'] == str(date.today() + timedelta(days=30))
+
+    def test_billing_type_derived_from_one_time_plan(
+        self, admin_client, prospect,
+    ):
+        payload = self._payload(prospect, payment_plan={
+            'plan_type': 'one_time',
+            'one_time_amount': '6000.00',
+            'one_time_method': 'pix',
+        })
+        r = admin_client.post(PROPOSALS_URL, payload, format='json')
+        assert r.status_code == status.HTTP_201_CREATED, r.data
+        assert r.data['billing_type'] == 'fixed'
+
+    @pytest.mark.parametrize('plan_type', ['recurring_only', 'setup_plus_recurring'])
+    def test_billing_type_derived_from_recurring_plan(
+        self, admin_client, prospect, plan_type,
+    ):
+        payload = self._payload(prospect, payment_plan={
+            'plan_type': plan_type,
+            'recurring_amount': '1500.00',
+            'recurring_method': 'boleto',
+        })
+        r = admin_client.post(PROPOSALS_URL, payload, format='json')
+        assert r.status_code == status.HTTP_201_CREATED, r.data
+        assert r.data['billing_type'] == 'monthly'
+
+    def test_explicit_billing_type_is_respected(self, admin_client, prospect):
+        """Quando informado no payload, billing_type não é sobrescrito."""
+        r = admin_client.post(
+            PROPOSALS_URL,
+            self._payload(prospect, billing_type='hourly'),
+            format='json',
+        )
+        assert r.status_code == status.HTTP_201_CREATED, r.data
+        assert r.data['billing_type'] == 'hourly'
+
+    def test_explicit_valid_until_is_respected(self, admin_client, prospect):
+        explicit = str(date.today() + timedelta(days=7))
+        r = admin_client.post(
+            PROPOSALS_URL,
+            self._payload(prospect, valid_until=explicit),
+            format='json',
+        )
+        assert r.status_code == status.HTTP_201_CREATED, r.data
+        assert r.data['valid_until'] == explicit

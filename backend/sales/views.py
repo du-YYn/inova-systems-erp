@@ -25,7 +25,7 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import (
-    IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict, IsAdminOrReadOnly,
+    HasSectorAccess, IsAdminOrReadOnly,
 )
 from .models import (
     Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason,
@@ -43,6 +43,20 @@ from .serializers import (
 )
 
 logger = logging.getLogger('sales')
+
+# v32 ajustes (doc 09 §T-E2E P2.8): o Comercial passa a usar RBAC por setor
+# (padrão F3, accounts.permissions.HasSectorAccess), espelhando o Financeiro
+# (finance.views.FinanceSectorAccess). Fecha a segregação financeiro->comercial:
+#   - operador/gerente DO setor comercial escreve no CRM (prospects/proposals/
+#     onboardings/customers/contracts);
+#   - quem é de OUTRO setor (ex.: financeiro) só LÊ — não cria/edita prospect
+#     (era o bug: fran/financeiro conseguia criar prospect);
+#   - admin mantém bypass total; viewer mantém leitura global (matriz
+#     SECTOR_ACCESS_MATRIX).
+# Endpoints PÚBLICOS (website-lead, proposal/onboarding public) e n8n NÃO usam
+# estas ViewSets — vivem em views_public.py / n8n_views.py com auth própria, e
+# ficam INTACTOS.
+CommercialSectorAccess = HasSectorAccess('comercial')
 
 
 def _apply_period_filter(queryset, request, field='created_at'):
@@ -99,7 +113,7 @@ class DynamicPageSizePagination(PageNumberPagination):
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.select_related('created_by')
     serializer_class = CustomerSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):
@@ -305,7 +319,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 class ProspectViewSet(viewsets.ModelViewSet):
     queryset = Prospect.objects.select_related('customer', 'assigned_to', 'created_by')
     serializer_class = ProspectSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
 
     # ── Transições v32 (F2) ─────────────────────────────────────────────────
@@ -923,7 +937,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
 class ProposalViewSet(viewsets.ModelViewSet):
     queryset = Proposal.objects.select_related('customer', 'prospect', 'assigned_to', 'created_by')
     serializer_class = ProposalSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1646,7 +1660,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
         } for v in views])
 
     @action(detail=True, methods=['post'], url_path='regenerate-token',
-            permission_classes=[IsAdminOrManagerOrOperatorStrict])
+            permission_classes=[CommercialSectorAccess])
     def regenerate_token(self, request, pk=None):
         """Rotaciona o public_token da proposta (F7B.6).
 
@@ -1678,7 +1692,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
 class ContractViewSet(viewsets.ModelViewSet):
     queryset = Contract.objects.select_related('customer', 'proposal', 'created_by')
     serializer_class = ContractSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -2029,7 +2043,7 @@ class ContractViewSet(viewsets.ModelViewSet):
 class ProspectActivityViewSet(viewsets.ModelViewSet):
     queryset = ProspectActivity.objects.select_related('prospect', 'created_by')
     serializer_class = ProspectActivitySerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -2056,7 +2070,7 @@ class ProspectActivityViewSet(viewsets.ModelViewSet):
 class WinLossReasonViewSet(viewsets.ModelViewSet):
     queryset = WinLossReason.objects.select_related('prospect')
     serializer_class = WinLossReasonSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [CommercialSectorAccess]
     http_method_names = ['get', 'post', 'head', 'options']
 
 
@@ -2065,7 +2079,7 @@ class ClientOnboardingViewSet(viewsets.ModelViewSet):
     """CRUD interno dos formulários de onboarding."""
     queryset = ClientOnboarding.objects.select_related('prospect', 'customer', 'created_by')
     serializer_class = ClientOnboardingInternalSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):

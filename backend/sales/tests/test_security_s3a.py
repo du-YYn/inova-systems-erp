@@ -43,6 +43,7 @@ def manager_user(db):
     return User.objects.create_user(
         username='s3a_mgr', email='s3a@mgr.com',
         password='pass12345', role='manager',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -129,15 +130,18 @@ class TestDataExport:
         assert audit is not None
         assert audit.user.username == 's3a_admin'
 
-    def test_viewer_cannot_export(self, api_client, customer, db):
+    def test_viewer_can_export_under_sector_rbac(self, api_client, customer, db):
+        """P2.8 (F3 RBAC): CustomerViewSet passou a HasSectorAccess('comercial').
+        data-export é GET (read) — viewer agora lê globalmente (matriz F3),
+        igual ao restante do Comercial. (Restringir export de PII a viewer é
+        decisão fora do escopo de P2.8 — ver campo `deferred`.)"""
         viewer = User.objects.create_user(
             username='s3a_viewer', email='v@v.com',
             password='pass', role='viewer',
         )
         api_client.force_authenticate(user=viewer)
         r = api_client.get(self.URL.format(id=customer.id))
-        # CustomerViewSet usa IsAdminOrManagerOrOperatorStrict — viewer 403
-        assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert r.status_code == status.HTTP_200_OK
 
 
 # ─── F3a: anonymize ───────────────────────────────────────────────────────

@@ -953,6 +953,30 @@ class TestCronogramaPersistente:
         # mais recente primeiro
         assert response.data[0]['params']['data_onboarding'] == '2026-06-11'
 
+    def test_get_empty_until_post_even_with_dia_zero(
+        self, producao_client, project,
+    ):
+        """P2.10 (doc 09 §T-E2E): GET cronograma vem VAZIO até o POST gerar,
+        mesmo com o Dia 0 cravado. O Game Plan NÃO é auto-materializado quando
+        dia_zero é setado — é gerado/regerado explicitamente pelo POST (assim a
+        remarcação preserva o histórico de ScheduleVersion). Era o que o E2E
+        observou ("GET vazio após âncora + Dia 0"): faltava o POST, não há gap.
+        """
+        project.dia_zero = date(2026, 6, 10)
+        project.save(update_fields=['dia_zero'])
+        # GET antes de qualquer POST: vazio (Dia 0 setado não materializa nada)
+        before = producao_client.get(self.URL.format(id=project.id))
+        assert before.status_code == status.HTTP_200_OK
+        assert before.data == []
+        assert ScheduleVersion.objects.filter(project=project).count() == 0
+        assert ProjectPhase.objects.filter(project=project).count() == 0
+        # POST gera e persiste; GET passa a refletir a versão materializada
+        post = producao_client.post(self.URL.format(id=project.id), {})
+        assert post.status_code == status.HTTP_201_CREATED, post.data
+        after = producao_client.get(self.URL.format(id=project.id))
+        assert len(after.data) == 1
+        assert ProjectPhase.objects.filter(project=project).count() == 6
+
 
 # ─── 07° Entidades novas ─────────────────────────────────────────────────────
 
