@@ -169,13 +169,57 @@ class CustomerViewSet(viewsets.ModelViewSet):
         )
         return super().destroy(request, *args, **kwargs)
 
+    @staticmethod
+    def _can_export_pii(user):
+        """H3: quem pode exportar PII de cliente (LGPD).
+
+        Permitido: admin (sempre); manager/operador DO comercial (ou sem setor
+        atribuído — fallback role-based do H2). Negado: viewer (leitura global,
+        mas PII não) e partner.
+        """
+        if not user or not user.is_authenticated:
+            return False
+        if user.role == 'admin':
+            return True
+        if user.role not in ('manager', 'operator'):
+            return False  # viewer / partner / futuros
+        user_sectors = set(user.sectors or [])
+        # Sem setor -> fallback role-based (consistente com H2). Com setor ->
+        # precisa ser do comercial (dono do recurso Customer).
+        if not user_sectors:
+            return True
+        return 'comercial' in user_sectors
+
     @action(detail=True, methods=['get'], url_path='data-export')
     def data_export(self, request, pk=None):
         """LGPD Art. 18 II — direito de acesso aos dados.
 
         Retorna JSON com todos os dados pessoais do titular (cadastro,
         contratos, invoices, propostas, prospects). Gera audit log.
+
+        H3 (code review): a permission base (CommercialSectorAccess) libera
+        leitura global ao `viewer`, então o viewer conseguiria EXPORTAR PII de
+        cliente. Esta é uma exportação de dados pessoais (LGPD) — restringe-se
+        a admin/manager/operador DO comercial (mesma lógica do H2: manager/
+        operator sem setor caem no fallback role-based). Checagem ADITIVA na
+        action, sem mexer na permission base da ViewSet.
         """
+        if not self._can_export_pii(request.user):
+            log_audit(
+                request.user, 'customer_data_export_denied', 'customer', pk,
+                details=(
+                    'Tentativa de exportar PII negada — papel/setor sem '
+                    'permissão (LGPD).'
+                ),
+                request=request,
+            )
+            return Response(
+                {'error': (
+                    'Você não tem permissão para exportar dados pessoais de '
+                    'cliente.'
+                )},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         customer = self.get_object()
         from finance.models import Invoice
 
