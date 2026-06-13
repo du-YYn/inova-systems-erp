@@ -35,6 +35,19 @@ from core.audit import log_audit
 
 logger = logging.getLogger('finance')
 
+
+def _default_bank_account():
+    """Conta bancária padrão (a principal/primeira ativa).
+
+    Usada como fallback no mark_paid (P0.3, doc 09 §T-E2E): a invoice de
+    pré-cadastro F4 nasce sem bank_account, mas a Transaction tem
+    bank_account NOT NULL. Sem fallback, mark_paid estourava 500
+    (IntegrityError). Ordering do model é ['-is_default', 'name'], então a
+    primeira ativa já é a default (is_default=True) ou a primeira pelo nome.
+    Retorna None se não houver NENHuma conta ativa (caller trata sem 500).
+    """
+    return BankAccount.objects.filter(is_active=True).first()
+
 # v32 ajustes (doc 09 §04 RBAC / gap E2E): o Financeiro passa a usar RBAC por
 # setor (padrão F3, accounts.permissions.HasSectorAccess) em vez de role-based
 # puro (IsAdminOrManager). Assim:
@@ -155,8 +168,30 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     {'error': 'Fatura já está marcada como paga'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            # P0.3 (doc 09 §T-E2E): a invoice de pré-cadastro F4 nasce sem
+            # bank_account; a Transaction tem bank_account NOT NULL. Sem
+            # fallback, copiar o NULL estourava 500 (IntegrityError). Usa a
+            # bank_account da invoice ou, na falta, a conta padrão (primeira
+            # ativa). Se NÃO houver NENHuma conta ativa, retorna 400 com
+            # mensagem clara em vez de 500.
+            bank_account = invoice.bank_account or _default_bank_account()
+            if bank_account is None:
+                return Response(
+                    {'error': (
+                        'Nenhuma conta bancária ativa cadastrada. Cadastre uma '
+                        'conta em Financeiro › Contas antes de confirmar o '
+                        'pagamento.'
+                    )},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             invoice.status = 'paid'
             invoice.paid_date = timezone.now().date()
+            # Persiste a conta usada na própria invoice (a pré-cadastrada nasce
+            # sem conta) para coerência do extrato/relatórios.
+            if invoice.bank_account_id != bank_account.id:
+                invoice.bank_account = bank_account
             invoice.save()
 
             Transaction.objects.create(
@@ -164,7 +199,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 doc_type='invoice',
                 invoice=invoice,
                 customer=invoice.customer,
-                bank_account=invoice.bank_account,
+                bank_account=bank_account,
                 category=invoice.category,
                 date=invoice.paid_date,
                 amount=invoice.total,

@@ -377,6 +377,59 @@ class TestInvoiceMarkPaid:
         tx = Transaction.objects.get(invoice=payable)
         assert tx.transaction_type == 'expense'
 
+    def test_mark_paid_invoice_without_bank_account_uses_default(
+        self, admin_client, admin_user, category,
+    ):
+        """P0.3: a invoice de pré-cadastro nasce sem bank_account. mark_paid
+        deve cair na conta padrão (primeira ativa) — sem 500 IntegrityError."""
+        from finance.models import BankAccount, Invoice, Transaction
+        default = BankAccount.objects.create(
+            name='Conta Default', bank='Itaú', account_type='checking',
+            is_default=True, is_active=True,
+        )
+        inv = Invoice.objects.create(
+            invoice_type='receivable',
+            number='REC-90001',
+            issue_date='2024-01-01',
+            due_date='2024-01-31',
+            value=Decimal('1000.00'),
+            total=Decimal('1000.00'),
+            status='pending',
+            category=category,
+            bank_account=None,  # pré-cadastro nasce sem conta
+            created_by=admin_user,
+        )
+        response = admin_client.post(f'{self.url}{inv.id}/mark_paid/')
+        assert response.status_code == status.HTTP_200_OK, response.data
+        inv.refresh_from_db()
+        assert inv.status == 'paid'
+        assert inv.bank_account_id == default.id
+        tx = Transaction.objects.get(invoice=inv)
+        assert tx.bank_account_id == default.id
+
+    def test_mark_paid_no_bank_account_returns_clear_400(
+        self, admin_client, admin_user, category,
+    ):
+        """Sem NENHuma conta ativa: 400 com mensagem clara, não 500."""
+        from finance.models import Invoice
+        inv = Invoice.objects.create(
+            invoice_type='receivable',
+            number='REC-90002',
+            issue_date='2024-01-01',
+            due_date='2024-01-31',
+            value=Decimal('1000.00'),
+            total=Decimal('1000.00'),
+            status='pending',
+            category=category,
+            bank_account=None,
+            created_by=admin_user,
+        )
+        response = admin_client.post(f'{self.url}{inv.id}/mark_paid/')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        assert 'conta bancária' in response.data['error']
+        inv.refresh_from_db()
+        assert inv.status == 'pending'  # não marcou pago
+
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 

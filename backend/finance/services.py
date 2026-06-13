@@ -152,7 +152,7 @@ def precadastrar_invoice_da_proposta(prospect, dry_run: bool = False) -> list:
         dry_run=True: lista de dicts com as parcelas que SERIAM criadas.
     """
     from .invoice_generator import _next_invoice_number
-    from .models import Invoice
+    from .models import BankAccount, Invoice
 
     if Invoice.objects.filter(precadastro_origem=prospect).exists():
         logger.info(
@@ -190,6 +190,10 @@ def precadastrar_invoice_da_proposta(prospect, dry_run: bool = False) -> list:
         return entries
 
     today = timezone.now().date()
+    # P0.3 (doc 09 §T-E2E): nasce já com a conta padrão (primeira ativa) quando
+    # houver — o mark_paid também tem fallback, mas assim a invoice já mostra a
+    # conta. Sem conta ativa fica None (mark_paid trata sem 500).
+    default_bank = BankAccount.objects.filter(is_active=True).first()
     created = []
     with transaction.atomic():
         for entry in entries:
@@ -197,6 +201,7 @@ def precadastrar_invoice_da_proposta(prospect, dry_run: bool = False) -> list:
                 invoice_type='receivable',
                 document_type='invoice',
                 customer=customer,
+                bank_account=default_bank,
                 number=_next_invoice_number('receivable'),
                 issue_date=today,
                 due_date=entry['due_date'],
