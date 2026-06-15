@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase } from 'lucide-react';
+import { UserCircle, Lock, Shield, Save, Eye, EyeOff, Briefcase, Download } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import api, { ApiError } from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
@@ -68,6 +68,9 @@ export default function PerfilPage() {
   const [loadingEmployee, setLoadingEmployee] = useState(false);
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [techInput, setTechInput] = useState('');
+
+  // Data export (admin-only)
+  const [exporting, setExporting] = useState(false);
 
   // 2FA state
   const [twoFASetup, setTwoFASetup] = useState<{ qr_code?: string; secret?: string } | null>(null);
@@ -204,6 +207,36 @@ export default function PerfilPage() {
       toast.error('Erro ao desativar 2FA. Verifique sua senha ou contate o administrador.');
     } finally {
       setDisabling2FA(false);
+    }
+  };
+
+  // Exporta os dados do ERP em PDF (admin). Endpoint exige cookie auth → usa
+  // fetch direto com credentials e cria um object URL para download do blob.
+  const handleExportData = async () => {
+    setExporting(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      const res = await fetch(`${apiUrl}/core/export-data/`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'inova-export-dados.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Exportação gerada com sucesso!');
+    } catch {
+      toast.error('Erro ao exportar os dados. Tente novamente.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -555,6 +588,32 @@ export default function PerfilPage() {
               </div>
             </div>
           </div>
+
+          {/* ─── Administração (somente admin) ──────────────────────────── */}
+          {profile?.role === 'admin' && (
+            <div className="card p-6">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-accent-gold/10">
+                  <Download className="w-5 h-5 text-accent-gold-dark" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Exportar Dados</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Baixe um PDF com os dados de negócio (clientes, leads, propostas,
+                    contratos, projetos e faturas) para guardar antes de atualizações.
+                  </p>
+                  <button
+                    onClick={handleExportData}
+                    disabled={exporting}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
+                  >
+                    <Download className="w-4 h-4" />
+                    {exporting ? 'Gerando PDF...' : 'Exportar Dados (PDF)'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
