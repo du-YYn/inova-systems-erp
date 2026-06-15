@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Search, Trash2, X, PauseCircle, XCircle
@@ -129,6 +129,36 @@ export default function ProjectsPage() {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // v32 T02: barra de rolagem horizontal sincronizada no TOPO do kanban — com
+  // colunas altas, evita ter que descer até o rodapé pra mover o board.
+  const kanbanRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [kanbanScrollW, setKanbanScrollW] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const measure = () => {
+      if (kanbanRef.current) setKanbanScrollW(kanbanRef.current.scrollWidth);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [loading, projects]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncingScroll.current || !kanbanRef.current || !topScrollRef.current) return;
+    syncingScroll.current = true;
+    kanbanRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    requestAnimationFrame(() => { syncingScroll.current = false; });
+  }, []);
+
+  const handleKanbanScroll = useCallback(() => {
+    if (syncingScroll.current || !kanbanRef.current || !topScrollRef.current) return;
+    syncingScroll.current = true;
+    topScrollRef.current.scrollLeft = kanbanRef.current.scrollLeft;
+    requestAnimationFrame(() => { syncingScroll.current = false; });
+  }, []);
 
   const isDirty = useMemo(() => {
     return formData.name !== '' || formData.customer !== '' ||
@@ -271,7 +301,22 @@ export default function ProjectsPage() {
       {loading ? (
         <KanbanSkeleton />
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4" aria-label="Kanban de Produção por etapa">
+        <>
+          {/* v32 T02: barra de rolagem horizontal no TOPO, sincronizada com o kanban */}
+          <div
+            ref={topScrollRef}
+            onScroll={handleTopScroll}
+            className="overflow-x-auto overflow-y-hidden mb-2"
+            aria-hidden="true"
+          >
+            <div style={{ width: kanbanScrollW || '100%', height: 1 }} />
+          </div>
+          <div
+            ref={kanbanRef}
+            onScroll={handleKanbanScroll}
+            className="flex gap-4 overflow-x-auto pb-4"
+            aria-label="Kanban de Produção por etapa"
+          >
           {etapaColumns.map((column) => {
             const columnProjects = getProjectsByColumn(column.key);
             return (
@@ -348,7 +393,8 @@ export default function ProjectsPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Create Modal */}

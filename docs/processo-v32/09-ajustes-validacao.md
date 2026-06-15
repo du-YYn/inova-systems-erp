@@ -443,7 +443,21 @@ Status: 🟡 aberto (coletando) · ⚙️ a corrigir · ✅ corrigido
      desenhamos no item 04, ter os 2 links (proposta + forms) acessíveis pelo card.
 - **Confirma o redesenho:** é o que o item 04 e o doc 10 já previam (2 links no card da Coleta).
 
-## T-E2E · Teste E2E por agentes (2026-06-13, branch v32-ajustes)
+## T02 · CRM de Projetos: barra de rolagem horizontal precisa ficar EM CIMA
+- **Status:** ✅ corrigido (2026-06-14) — barra sincronizada no topo (`projects/page.tsx`), tsc
+  limpo. Aguardando verificação visual de John.
+- **Tela/rota:** `/projects` (kanban de Produção por etapa)
+- **O que foi apontado:** com muitos cards, as colunas ficam altas e a **barra de rolagem
+  horizontal** (pra mover o kanban lateralmente) fica lá embaixo — o usuário precisa **descer até
+  o fim** pra alcançá-la e mexer no CRM. Precisa estar **acessível no topo**.
+- **Onde no código:** `frontend/app/(dashboard)/projects/page.tsx:274` — `<div className="flex
+  gap-4 overflow-x-auto pb-4">` (o scrollbar nasce no rodapé do container).
+- **Correção (a aplicar na fase de UI):** opção recomendada — **barra de rolagem sincronizada no
+  topo**: um `<div>` fino acima do kanban (mesma largura do conteúdo, `overflow-x-auto`, ~12px)
+  com `scrollLeft` espelhado por JS entre ele e o container do kanban (scroll de um move o outro).
+  Alternativa: dar `max-height` ao kanban + scroll vertical interno das colunas, deixando a barra
+  horizontal sempre visível. Aplicar o mesmo no CRM Jurídico (colunas por modalidade) se repetir.
+- **Escopo:** frontend, baixo risco.
 > 2 jornadas (Padaria Aurora=Fechado, TransLog=Recorrente) + RBAC. Ambas completaram ponta a
 > ponta, MAS só com 5-6 workarounds de admin cada → o caminho feliz está quebrado nos P0 abaixo.
 
@@ -541,3 +555,44 @@ billing_type/valid_until com default · P2.10 cronograma materializa on-demand.
 - **Bifurcação fechado**: terminal = `recorrencia` (label "Implementado") via `etapa_10_graduacao`
   ("Homologação"); `implementacao` ("Concluído") é rejeitado p/ fechado (guard ok). Pendência de
   NOMENCLATURA permanece: confirmar com John se o terminal do Fechado deve se chamar "Concluído".
+
+---
+
+# PARECER GO/NO-GO (correção + validação sênior — 2026-06-13, HEAD c14bf32)
+> Workflow: Sr. fixer (worklist) → Sr. code review + Sr. segurança → fixer altos → 2 jornadas
+> E2E → veredito. Worklist 8/8 FECHADO (H1/H2/H3/M1/M2/M4/L3/L4 + higiene). 1072 testes verdes,
+> tsc limpo, migrations aditivas. Ambas as revisões: aprovado-com-ressalvas. Jornadas: Fechado 0
+> workarounds; Recorrente 1 (ordem de passos — pagar entrada antes de assinar; não é bug).
+
+**RECOMENDAÇÃO: GO COM RESSALVAS** — código pronto; ressalvas são deploy-time/política.
+
+## Checklist pré-deploy (obrigatório antes de subir)
+1. [ ] **Backup do banco** antes de migrate (ERP em prod).
+2. [ ] **Dup-check de e-mail (BLOQUEADOR da migration 0036):**
+   `SELECT email, COUNT(*) FROM customers WHERE email <> '' GROUP BY email HAVING COUNT(*) > 1;`
+   Se vier linha → reconciliar (decisão de John sobre qual mantém) ANTES de migrar. 0036 falha
+   alto-e-claro se não for feito.
+3. [ ] **Backfill de `sectors`** dos usuários reais (senão a segregação por setor fica dormente).
+4. [ ] **Decisão M3** — política de comissão sobre MRR recorrente.
+5. [ ] **Decisão D2** — viewer NÃO exporta PII (já é o comportamento após H3; confirmar).
+6. [ ] **Flags AUTOMATION_*** em prod (defaults conservadores).
+7. [ ] **Smoke pós-deploy:** health 200; approve→Customer+comissões; mark_paid→Transaction c/ conta.
+8. [ ] **E-mail do domínio (ADIADO por John, 2026-06-13):** não há SMTP/serviço configurado pra
+   `@inovasystemssolutions.com`. Vão configurar depois (não agora). Consequência ATUAL:
+   - **Canal de envio dos links** (proposta + forms) = **WhatsApp / cópia manual** (o ERP gera o
+     link/token; o closer envia). Sem dependência de e-mail no fluxo principal.
+   - **Recursos que dependem de e-mail ficam desligados/pendentes até configurar:** reset de
+     senha por e-mail, 2FA por e-mail, notificações por e-mail, healthcheck de e-mail.
+   - NÃO é bloqueador do código/deploy do v32-ajustes — é item operacional separado. Quando for
+     configurar, considerar Resend/SMTP (o Resend já é usado noutro projeto do John).
+
+## Gaps funcionais (follow-up aditivo — não bloqueiam o deploy)
+- Submit do forms NÃO move o card → "Projeto Fechado" (doc §04 passo 13).
+- Cronograma/Game Plan não materializa sozinho na âncora/Dia 0 (só on-demand; Visão 2 pede automático).
+- Naming do terminal do Fechado ("Concluído"?).
+- Linkagem LegalCase(contrato).project / invoice.project_id ficam None (rastreabilidade, aditivo).
+- Tornar `entrada_paga` retentável quando o Project nasce DEPOIS do pagamento.
+
+## Estado
+Tudo na branch `v32-ajustes` LOCAL. NADA pushado/mergeado na v32. Aguarda John: rodar os 2 gates +
+tomar M3/D2, e então autorizar o push/merge → deploy.
