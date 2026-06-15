@@ -577,14 +577,12 @@ billing_type/valid_until com default · P2.10 cronograma materializa on-demand.
 5. [ ] **Decisão D2** — viewer NÃO exporta PII (já é o comportamento após H3; confirmar).
 6. [ ] **Flags AUTOMATION_*** em prod (defaults conservadores).
 7. [ ] **Smoke pós-deploy:** health 200; approve→Customer+comissões; mark_paid→Transaction c/ conta.
-8. [ ] **E-mail do domínio (ADIADO por John, 2026-06-13):** não há SMTP/serviço configurado pra
-   `@inovasystemssolutions.com`. Vão configurar depois (não agora). Consequência ATUAL:
-   - **Canal de envio dos links** (proposta + forms) = **WhatsApp / cópia manual** (o ERP gera o
-     link/token; o closer envia). Sem dependência de e-mail no fluxo principal.
-   - **Recursos que dependem de e-mail ficam desligados/pendentes até configurar:** reset de
-     senha por e-mail, 2FA por e-mail, notificações por e-mail, healthcheck de e-mail.
-   - NÃO é bloqueador do código/deploy do v32-ajustes — é item operacional separado. Quando for
-     configurar, considerar Resend/SMTP (o Resend já é usado noutro projeto do John).
+8. [x] **E-mail do domínio — CONFIGURADO E FUNCIONANDO (2026-06-15):** Resend + Hostinger.
+   Domínio `inovasystemssolutions.com` **verificado** (região sa-east-1), DNS (DKIM/SPF/MX/DMARC)
+   ok, **2 e-mails de teste entregues** (`delivered`). Falta só pôr no **env de PROD**:
+   `EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend` + `EMAIL_HOST_PASSWORD=<API key Resend>`
+   (host/port/user/from já vêm certos por default no settings.py). ⚠️ **Rotacionar a API key** que
+   foi exposta no chat — a nova vai só pro env de prod.
 
 ## Gaps funcionais (follow-up aditivo — não bloqueiam o deploy)
 - Submit do forms NÃO move o card → "Projeto Fechado" (doc §04 passo 13).
