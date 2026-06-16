@@ -101,18 +101,7 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install security tools
-        run: pip install pip-audit bandit ruff
-
-      - name: pip-audit — verifica CVEs nas dependências Python
-        run: |
-          # CVE-2026-4539 (pygments): sem versão de correção disponível ainda;
-          # dependência transitiva de drf-spectacular/sentry-sdk. Ignorado até fix oficial.
-          # PYSEC-2025-183 (pyjwt): "weak encryption" — disputado pelo supplier; é
-          # responsabilidade da aplicação usar key forte (DJANGO_SECRET_KEY ja
-          # eh validado). Sem versão de fix disponível para qualquer versão.
-          pip-audit -r requirements.txt --progress-spinner off \
-            --ignore-vuln CVE-2026-4539 \
-            --ignore-vuln PYSEC-2025-183
+        run: pip install bandit ruff
 
       - name: bandit — análise estática de segurança
         run: |
@@ -124,6 +113,44 @@ jobs:
 
       - name: ruff — linting e qualidade de código
         run: ruff check . --select E,W,F,S --ignore S101,S106 --output-format github
+
+  # ─── PIP-AUDIT (CVE GATE) ───────────────────────────────────────────────────
+  # Gate de CVE para TODOS os subprojetos Python (backend principal + apresentacao).
+  # SEC-003: a chave TOTP passou porque o apresentacao nao tinha gate. Matrix
+  # garante que cada requirements.txt e auditado. `ignore` por projeto preserva
+  # as exceções do backend principal sem aplicá-las ao apresentacao.
+  pip-audit:
+    name: pip-audit (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # CVE-2026-4539 (pygments): sem versão de correção disponível ainda;
+          # dependência transitiva de drf-spectacular/sentry-sdk. Ignorado até fix oficial.
+          # PYSEC-2025-183 (pyjwt): "weak encryption" — disputado pelo supplier; é
+          # responsabilidade da aplicação usar key forte (DJANGO_SECRET_KEY ja
+          # eh validado). Sem versão de fix disponível para qualquer versão.
+          - project: backend
+            ignore: "--ignore-vuln CVE-2026-4539 --ignore-vuln PYSEC-2025-183"
+          - project: apresentacao/backend
+            ignore: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ${{ matrix.project }}/requirements.txt
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: pip-audit — verifica CVEs nas dependências Python
+        run: pip-audit -r ${{ matrix.project }}/requirements.txt --progress-spinner off ${{ matrix.ignore }}
 
   # ─── FRONTEND ───────────────────────────────────────────────────────────────
   frontend:
@@ -147,11 +174,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: npm audit — verifica CVEs nas dependências npm
-        # F0: critical → high, restrito a deps de producao (--omit=dev).
-        # Dev-deps (eslint etc.) nao rodam em producao e nao bloqueiam.
-        run: npm audit --omit=dev --audit-level=high
-
       - name: Type check
         run: npx tsc --noEmit
 
@@ -162,6 +184,39 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+
+  # ─── NPM-AUDIT (CVE GATE) ───────────────────────────────────────────────────
+  # Gate de CVE para TODOS os subprojetos Node (frontend principal + apresentacao).
+  # SEC-003: matrix garante que cada package-lock.json passe pelo gate.
+  # critical → high, restrito a deps de producao (--omit=dev): dev-deps
+  # (eslint, vite etc.) nao rodam em producao e nao bloqueiam.
+  npm-audit:
+    name: npm audit (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [frontend, apresentacao/frontend]
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit — verifica CVEs nas dependências npm
+        run: npm audit --omit=dev --audit-level=high
 
   # ─── F0: MIGRATIONS EXPAND-ONLY ─────────────────────────────────────────────
   # Migration nova nao pode conter operacao destrutiva (RemoveField/
@@ -193,9 +248,13 @@ jobs:
           done
           exit $BAD
 
-  # ─── SECRET SCANNING ────────────────────────────────────────────────────────
+  # ─── SECRET SCANNING (DELTA DO PR) ──────────────────────────────────────────
+  # Feedback rápido por PR: varre apenas o range base..head do PR/push.
+  # NÃO substitui o scan de histórico completo, que roda no workflow separado
+  # `secret-scan-full.yml` — um secret introduzido ANTES do range do PR (foi o
+  # caso da chave TOTP) não aparece aqui; só o scan de histórico completo pega.
   secret-scan:
-    name: Secret Scan (git history)
+    name: Secret Scan (delta do PR)
     runs-on: ubuntu-latest
 
     steps:
@@ -203,7 +262,7 @@ jobs:
         with:
           fetch-depth: 0  # histórico completo para scanning de secrets
 
-      - name: TruffleHog — varre histórico git por secrets
+      - name: TruffleHog — varre o delta (base..head) por secrets
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
