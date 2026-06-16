@@ -309,7 +309,8 @@ class TwoFactorVerifyView(APIView):
 
         # F3b: get_totp_secret() decifra (com fail-safe para legado plain-text)
         totp = pyotp.TOTP(user.get_totp_secret())
-        if not totp.verify(code):
+        # valid_window=1: tolera +-1 passo (30s) de desvio de relogio (RFC 6238 5.2)
+        if not totp.verify(code, valid_window=1):
             # S7H: incrementa contador; apos 5 falhas, invalida temp_token
             # forcando novo login (e novo temp_token).
             user.temp_2fa_attempts = (user.temp_2fa_attempts or 0) + 1
@@ -434,7 +435,8 @@ class ChangePasswordView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             totp = pyotp.TOTP(user.get_totp_secret())
-            if not totp.verify(totp_code):
+            # valid_window=1: tolera +-1 passo (30s) de desvio de relogio (RFC 6238 5.2)
+            if not totp.verify(totp_code, valid_window=1):
                 logger.warning(f"ChangePassword: codigo 2FA invalido para {user.username}")
                 return Response(
                     {'error': 'Código 2FA inválido'},
