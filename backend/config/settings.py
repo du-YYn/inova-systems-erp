@@ -423,6 +423,19 @@ else:
     # Settamos None para forcar erro claro em totp_crypto.py se for usado.
     TOTP_ENCRYPTION_KEY = None
 
+# Trava anti-lockout (S2FA-safe): forcar 2FA exige a chave que cifra os
+# segredos TOTP. Sem TOTP_ENCRYPTION_KEY, o setup/verify de 2FA falha em
+# accounts/totp_crypto.py e o admin ficaria preso na tela de setup forcado.
+# Quando a chave esta ausente, desligamos o enforcement (login normal segue
+# funcionando) e ele volta a valer sozinho assim que a chave for definida.
+if ENFORCE_ADMIN_2FA and not TOTP_ENCRYPTION_KEY:
+    ENFORCE_ADMIN_2FA = False
+    logging.getLogger('django').warning(
+        'ENFORCE_ADMIN_2FA desativado automaticamente: TOTP_ENCRYPTION_KEY '
+        'ausente. Sem a chave o setup de 2FA nao conclui e prenderia o admin. '
+        'Defina TOTP_ENCRYPTION_KEY no .env para reativar o enforcement de 2FA.'
+    )
+
 # ─── N8N INTEGRATION ─────────────────────────────────────────────────────────
 N8N_API_KEY = os.environ.get('N8N_API_KEY', '')
 
