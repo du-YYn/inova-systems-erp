@@ -76,6 +76,8 @@ export default function PerfilPage() {
   const [disabling2FA, setDisabling2FA] = useState(false);
   const [showDisable2FA, setShowDisable2FA] = useState(false);
   const [disable2FAPassword, setDisable2FAPassword] = useState('');
+  const [showEnable2FA, setShowEnable2FA] = useState(false);
+  const [enable2FAPassword, setEnable2FAPassword] = useState('');
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -171,13 +173,20 @@ export default function PerfilPage() {
 
   // 2FA handlers
   const handle2FASetup = async () => {
+    if (!enable2FAPassword.trim()) { toast.error('Digite sua senha para confirmar.'); return; }
     setSetting2FA(true);
     try {
-      const data = await api.post<{ qr_code?: string; secret?: string; enabled?: boolean }>('/accounts/2fa/setup/');
+      const data = await api.post<{ qr_code?: string; secret?: string; enabled?: boolean }>('/accounts/2fa/setup/', { password: enable2FAPassword });
       setTwoFASetup(data);
       setProfile(prev => prev ? { ...prev, is_2fa_enabled: true } : prev);
-    } catch {
-      toast.error('Erro ao iniciar configuração do 2FA.');
+      setShowEnable2FA(false);
+      setEnable2FAPassword('');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 400) {
+        toast.error('Senha incorreta. Confirme sua senha.');
+      } else {
+        toast.error('Erro ao iniciar configuração do 2FA.');
+      }
     } finally {
       setSetting2FA(false);
     }
@@ -458,14 +467,43 @@ export default function PerfilPage() {
             {!profile?.is_2fa_enabled && (
               <div className="mt-4">
                 {!twoFASetup ? (
-                  <button
-                    onClick={handle2FASetup}
-                    disabled={setting2FA}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
-                  >
-                    <Shield className="w-4 h-4" />
-                    {setting2FA ? 'Aguarde...' : 'Configurar 2FA'}
-                  </button>
+                  !showEnable2FA ? (
+                    <button
+                      onClick={() => setShowEnable2FA(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
+                    >
+                      <Shield className="w-4 h-4" />
+                      Configurar 2FA
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg space-y-3">
+                      <p className="text-xs text-blue-700 font-medium">
+                        Confirme sua senha para ativar o 2FA:
+                      </p>
+                      <input
+                        type="password"
+                        placeholder="Sua senha atual"
+                        value={enable2FAPassword}
+                        onChange={e => setEnable2FAPassword(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-blue-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-gold/30 focus:border-accent-gold"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handle2FASetup}
+                          disabled={setting2FA}
+                          className="px-4 py-2 bg-accent-gold text-white text-sm rounded-lg hover:bg-accent-gold-dark transition-colors disabled:opacity-60"
+                        >
+                          {setting2FA ? 'Aguarde...' : 'Confirmar'}
+                        </button>
+                        <button
+                          onClick={() => { setShowEnable2FA(false); setEnable2FAPassword(''); }}
+                          className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )
                 ) : (
                   <div className="space-y-4">
                     <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
