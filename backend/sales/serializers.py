@@ -43,12 +43,18 @@ class CustomerSerializer(serializers.ModelSerializer):
             "is_active",
             "source",
             "notes",
+            "public_token",
             "created_by",
             "created_by_name",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_by", "created_by_name", "created_at", "updated_at"]
+        # public_token (v32 F6): gerado pelo sistema (uuid4) — read_only;
+        # equipe interna usa para montar o link do canal público de chamados.
+        read_only_fields = [
+            "id", "public_token", "created_by", "created_by_name",
+            "created_at", "updated_at",
+        ]
 
 
 class ProspectSerializer(serializers.ModelSerializer):
@@ -106,6 +112,9 @@ class ProspectSerializer(serializers.ModelSerializer):
         'payment_method', 'payment_type', 'payment_split_pct',
         'payment_installments', 'payment_monthly_value', 'payment_due_day',
         'payment_duration_months', 'payment_first_due',
+        # v32 F2: escopo/estrutura definidos pelo Dev — conteúdo livre que
+        # pode conter detalhes comerciais sensíveis (mesma lógica do transcript)
+        'tech_analysis_notes',
     )
 
     def to_representation(self, instance):
@@ -191,6 +200,13 @@ class ProspectSerializer(serializers.ModelSerializer):
             # pós-agendamento
             "ebook_sent_at",
             "meeting_transcript",
+            # reunião 2 + análise técnica (v32 F2)
+            "project_type",
+            "meeting_2_scheduled_at",
+            "meeting_2_link",
+            "meeting_2_attended",
+            "tech_analysis_notes",
+            "estimated_deadline_days",
             # follow-up
             "follow_up_reason",
             "follow_up_count",
@@ -348,6 +364,21 @@ class ProposalSerializer(serializers.ModelSerializer):
         child=serializers.IntegerField(),
         write_only=True, required=False,
     )
+    # P2.9 (doc 09 §T-E2E): billing_type e valid_until OPCIONAIS no payload
+    # (antes o POST quebrava com 400 quando faltavam). billing_type é derivado
+    # da forma de pagamento (payment_plan) no create; valid_until = hoje + 30d.
+    billing_type = serializers.ChoiceField(
+        choices=Proposal.BILLING_TYPE_CHOICES, required=False,
+    )
+    valid_until = serializers.DateField(required=False)
+
+    # Mapa forma de pagamento (ProposalPaymentPlan.plan_type) → billing_type.
+    # one_time → fixed (preço fechado); recorrências → monthly (mensal).
+    _PLAN_TO_BILLING = {
+        'one_time': 'fixed',
+        'recurring_only': 'monthly',
+        'setup_plus_recurring': 'monthly',
+    }
 
     def get_customer_name(self, obj):
         if obj.customer_id:
@@ -432,9 +463,33 @@ class ProposalSerializer(serializers.ModelSerializer):
         else:
             validated_data['total_value'] = one_time
 
+    def _apply_optional_defaults(self, validated_data, payment_plan_data):
+        """P2.9: preenche billing_type e valid_until quando omitidos no payload.
+
+        - billing_type: derivado da forma de pagamento (payment_plan.plan_type)
+          via _PLAN_TO_BILLING; sem plano, cai em 'fixed' (preço fechado).
+        - valid_until: hoje + 30 dias.
+
+        Só atua no CREATE (campos ausentes do payload). No UPDATE não força
+        defaults — preserva o valor já gravado na instância.
+        """
+        from datetime import timedelta
+        from django.utils import timezone
+
+        if not validated_data.get('billing_type'):
+            plan_type = (payment_plan_data or {}).get('plan_type', 'one_time')
+            validated_data['billing_type'] = self._PLAN_TO_BILLING.get(
+                plan_type, 'fixed',
+            )
+        if not validated_data.get('valid_until'):
+            validated_data['valid_until'] = (
+                timezone.now().date() + timedelta(days=30)
+            )
+
     def create(self, validated_data):
         service_ids = validated_data.pop('service_ids', None)
         payment_plan_data = validated_data.pop('payment_plan', None)
+        self._apply_optional_defaults(validated_data, payment_plan_data)
         self._enforce_commercial_total(validated_data, payment_plan_data)
         proposal = super().create(validated_data)
         if service_ids is not None:

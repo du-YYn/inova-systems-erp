@@ -4,6 +4,7 @@ from rest_framework.decorators import api_view, permission_classes, throttle_cla
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.throttling import AnonRateThrottle
 from django.conf import settings as django_settings
 from django.db import connection, transaction
 from django.core.cache import cache
@@ -13,9 +14,14 @@ from accounts.permissions import IsAdmin
 logger = logging.getLogger('core')
 
 
+class HealthRateThrottle(AnonRateThrottle):
+    """F0: health era ilimitado; 60/min por IP cobre smoke do CD e monitores."""
+    scope = 'health'
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
-@throttle_classes([])
+@throttle_classes([HealthRateThrottle])
 def health_check(request):
     health = {'status': 'ok', 'services': {}}
 
@@ -53,6 +59,13 @@ def system_info(request):
 @permission_classes([IsAdmin])
 def reset_data(request):
     """Reseta todos os dados de teste. Mantém config do sistema e usuários."""
+    # F0: em producao com dados reais este endpoint e uma arma engatilhada
+    # (admin comprometido ou clique errado apaga a base inteira). Fora de
+    # DEBUG so existe se RESET_DATA_ENABLED=true for setado conscientemente;
+    # caso contrario responde como rota inexistente.
+    if not getattr(django_settings, 'RESET_DATA_ENABLED', False):
+        return Response(status=status.HTTP_404_NOT_FOUND)
+
     confirm = request.data.get('confirm', '')
     if confirm != 'RESETAR':
         return Response(

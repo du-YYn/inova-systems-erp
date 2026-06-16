@@ -1,20 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { Target, FileText, ScrollText, Clock, UserCheck } from 'lucide-react';
+import { Target, FileText, Clock } from 'lucide-react';
 import FunilTab from './FunilTab';
 import PropostasTab from './PropostasTab';
-import ContratosTab from './ContratosTab';
 import AtividadesTab from './AtividadesTab';
-import OnboardingTab from './OnboardingTab';
 
-type Tab = 'funil' | 'propostas' | 'contratos' | 'cadastros' | 'atividades';
+// Abas Contratos (contrato é responsabilidade do CRM Jurídico/LegalCase) e
+// Cadastros (onboarding migra para o popup do card na Coleta de Dados) foram
+// removidas do CRM Comercial — doc processo-v32/09 §01. Componentes ContratosTab
+// e OnboardingTab ficam órfãos (regra expand/contract) até a fase de limpeza.
+type Tab = 'funil' | 'propostas' | 'atividades';
 
 const tabs: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: 'funil', label: 'Funil', icon: Target },
   { key: 'propostas', label: 'Propostas', icon: FileText },
-  { key: 'contratos', label: 'Contratos', icon: ScrollText },
-  { key: 'cadastros', label: 'Cadastros', icon: UserCheck },
   { key: 'atividades', label: 'Histórico', icon: Clock },
 ];
 
@@ -57,8 +57,6 @@ export default function CRMPage() {
       {/* Tab content */}
       {activeTab === 'funil' && <FunilTab />}
       {activeTab === 'propostas' && <PropostasTab />}
-      {activeTab === 'contratos' && <ContratosTab />}
-      {activeTab === 'cadastros' && <OnboardingTab />}
       {activeTab === 'atividades' && <AtividadesTab />}
     </div>
   );

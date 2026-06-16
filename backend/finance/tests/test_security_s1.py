@@ -44,9 +44,15 @@ def admin_user(db):
 
 @pytest.fixture
 def manager_user(db):
+    # v32 ajustes: Financeiro e Comercial usam RBAC por setor. Este gerente
+    # exercita recursos dos dois setores neste arquivo de mass-assignment
+    # (invoice do Financeiro + contract do Comercial), então precisa de ambos
+    # para alcançar a camada do serializer onde o teste valida campos
+    # read_only (P2.8 adicionou HasSectorAccess('comercial') ao sales/).
     return User.objects.create_user(
         username='s1_mgr', email='s1@mgr.com',
         password='pass12345', role='manager',
+        sectors=['financeiro', 'comercial'],
     )
 
 

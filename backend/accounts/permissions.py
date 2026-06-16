@@ -76,6 +76,101 @@ class IsPartner(BasePermission):
         )
 
 
+# ─── v32 F3: RBAC por setor (doc 08 §7.2) ────────────────────────────────────
+#
+# Matriz de acesso: chave = setor dono do recurso; valores = setores do
+# usuário com leitura (read) e escrita (write). Regras fora da matriz:
+#   - admin: bypass total (ignora a matriz)
+#   - viewer: leitura global (SAFE_METHODS em qualquer recurso)
+#   - manager/operator: precisam de interseção entre User.sectors e o set
+#   - partner: nunca acessa recursos internos de setor
+SECTOR_ACCESS_MATRIX = {
+    'comercial': {
+        'read': {'comercial', 'juridico', 'financeiro', 'producao', 'suporte', 'diretoria'},
+        'write': {'comercial'},
+    },
+    'juridico': {
+        'read': {'comercial', 'juridico', 'financeiro', 'producao', 'diretoria'},
+        'write': {'juridico'},
+    },
+    'financeiro': {
+        'read': {'comercial', 'juridico', 'financeiro', 'producao', 'diretoria'},
+        'write': {'financeiro'},
+    },
+    'producao': {
+        'read': {'comercial', 'juridico', 'financeiro', 'producao', 'suporte', 'diretoria'},
+        'write': {'producao'},
+    },
+    'suporte': {
+        'read': {'comercial', 'financeiro', 'producao', 'suporte', 'diretoria'},
+        'write': {'suporte'},
+    },
+    'diretoria': {
+        'read': {'suporte', 'diretoria'},
+        'write': {'diretoria'},
+    },
+}
+
+
+def HasSectorAccess(sector, access_map=None):
+    """Factory de permission class por setor (v32 F3, doc 08 §7.2).
+
+    Uso: ``permission_classes = [HasSectorAccess('juridico')]``
+
+    Args:
+        sector: setor dono do recurso ('juridico', 'comercial', ...)
+        access_map: mapa {setor: {'read': set, 'write': set}} — default
+            SECTOR_ACCESS_MATRIX. Injetável para testes/extensões.
+
+    Retorna uma subclasse de BasePermission (DRF instancia por view).
+    """
+    matrix = access_map or SECTOR_ACCESS_MATRIX
+    if sector not in matrix:
+        raise ValueError(f'Setor desconhecido para HasSectorAccess: {sector!r}')
+    read_set = set(matrix[sector]['read'])
+    write_set = set(matrix[sector]['write'])
+
+    class _HasSectorAccess(BasePermission):
+        message = 'Acesso negado para o seu setor.'
+
+        def has_permission(self, request, view):
+            user = request.user
+            if not user or not user.is_authenticated:
+                return False
+            if user.role == 'admin':
+                return True
+            if user.role == 'viewer':
+                return request.method in SAFE_METHODS
+            if user.role not in ('manager', 'operator'):
+                # partner (e papéis futuros) não acessam recursos de setor
+                return False
+            user_sectors = set(user.sectors or [])
+            # H2 (code review) — FALLBACK ROLE-BASED PARA PROD:
+            # aplicar RBAC por setor sobre uma base que NÃO tem o campo
+            # `sectors` preenchido (ERP em produção) trancaria os usuários
+            # reais (403 em toda escrita). Como NÃO há mapeamento confiável
+            # role->setor no modelo de dados (role é admin/manager/operator/
+            # viewer; setor é comercial/juridico/...), um backfill seria um
+            # chute e poderia conceder o setor errado. Em vez disso: se o
+            # usuário não tem NENHUM setor, cai no comportamento legado
+            # role-based (= IsAdminOrManagerOrOperator: leitura p/ todos,
+            # escrita p/ manager/operator). Ninguém é trancado no deploy; à
+            # medida que John atribui `sectors`, a regra por setor passa a
+            # valer para aquele usuário (a interseção abaixo). Idempotente e
+            # reversível, sem tocar dados.
+            if not user_sectors:
+                if request.method in SAFE_METHODS:
+                    return True
+                return user.role in ('manager', 'operator')
+            if request.method in SAFE_METHODS:
+                return bool(user_sectors & read_set)
+            return bool(user_sectors & write_set)
+
+    _HasSectorAccess.__name__ = f'HasSectorAccess_{sector}'
+    _HasSectorAccess.__qualname__ = _HasSectorAccess.__name__
+    return _HasSectorAccess
+
+
 class IsOwnerOrAdmin(BasePermission):
     """Dono do objeto ou admin pode modificar."""
     message = 'Você não tem permissão para modificar este objeto.'

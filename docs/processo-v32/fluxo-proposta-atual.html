@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inova · Fluxo Proposta + Jurídico</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+:root{--bg:#08080E;--panel:#14141d;--gold:#D4AF37;--gold-b:#F0D060;--gold-grad:linear-gradient(135deg,#C9A227,#F0D060 50%,#D4AF37);--ink:#ECECEF;--muted:#8A8A95;--line-soft:rgba(255,255,255,.07);--err:#FF6B6B;--ok:#56B97D;--warn:#E0A845;--cyan:#46B7C9;--violet:#B98AE6}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font-family:'Outfit',system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden;-webkit-font-smoothing:antialiased}
+#bar{position:fixed;top:0;left:0;right:0;height:56px;z-index:40;display:flex;align-items:center;gap:13px;padding:0 18px;background:rgba(10,10,16,.9);backdrop-filter:blur(12px);border-bottom:1px solid rgba(212,175,55,.16)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--gold-grad);box-shadow:0 0 12px rgba(212,175,55,.6)}
+.brand small{display:block;font-weight:400;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:1px}
+.spacer{flex:1}
+button.btn{font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--panel);border:1px solid var(--line-soft);padding:8px 13px;border-radius:9px;cursor:pointer}
+button.btn:hover{border-color:var(--gold);color:#fff}
+.zoomlbl{min-width:44px;text-align:center;font-size:12px;color:var(--muted)}
+#stage{position:fixed;inset:56px 320px 0 0;overflow:hidden;cursor:grab;background:var(--bg)}
+#stage.grab{cursor:grabbing}
+#world{position:absolute;top:0;left:0;transform-origin:0 0;background-image:radial-gradient(rgba(212,175,55,.08) 1.1px,transparent 1.2px);background-size:32px 32px}
+#lanes{position:absolute;left:0;top:0}
+.title{position:absolute;font-size:17px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--gold);white-space:nowrap}
+.subtitle{position:absolute;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.phase{position:absolute;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;font-size:12.5px;letter-spacing:.8px;text-transform:uppercase;text-align:center;padding:0 8px}
+.phase .pn{font-size:10px;min-width:20px;height:20px;padding:0 4px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25)}
+.lane{position:absolute;border-radius:14px;border:1px solid rgba(255,255,255,.05)}
+.lane-lbl{position:absolute;left:18px;top:50%;transform:translateY(-50%);font-size:13.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.36;max-width:132px;line-height:1.2}
+.gutter-rule{position:absolute;width:1px;background:linear-gradient(180deg,transparent,rgba(212,175,55,.18),transparent)}
+svg#edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+#nodes{position:absolute;left:0;top:0}
+.node{position:absolute;width:212px;min-height:66px;background:linear-gradient(180deg,#181820,#131319);border:1px solid rgba(255,255,255,.09);border-radius:12px;box-shadow:0 6px 16px rgba(0,0,0,.4);padding:11px 13px 11px 15px;cursor:pointer;transition:transform .12s,border-color .12s}
+.node:hover{border-color:var(--gold);transform:translateY(-2px);z-index:5}
+.node .acc{position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px}
+.node .t{font-size:12.5px;font-weight:700;line-height:1.25;color:#fff}
+.node .s{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.35}
+.node .step{position:absolute;top:8px;right:10px;font-size:9px;font-weight:800;color:var(--muted);opacity:.6}
+.node.funil{border-color:rgba(212,175,55,.55);background:linear-gradient(180deg,#1d1a10,#15130c)}
+.node.funil .t{color:var(--gold-b)}
+.node.fix{border-color:rgba(86,185,125,.5)}
+.node.alert{border:1px dashed rgba(255,107,107,.75);background:linear-gradient(180deg,#1e1414,#160f0f)}
+.node.alert .t{color:#ffb3b3}
+.node.automacao{border-color:rgba(224,168,69,.55);background:linear-gradient(180deg,#1d1a12,#15120c)}
+.node.automacao .t{color:#f0cf8a}
+.node.okstep{border-color:rgba(86,185,125,.45)}
+.node .badge{position:absolute;top:-9px;right:-9px;min-width:22px;height:21px;padding:0 7px;border-radius:11px;background:var(--warn);color:#1a1405;font-size:9.5px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:2px;box-shadow:0 2px 8px rgba(224,168,69,.5)}
+.node .tagk{display:inline-block;margin-top:6px;font-size:8.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--gold);background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.3);padding:1px 6px;border-radius:5px}
+#side{position:fixed;top:56px;right:0;bottom:0;width:320px;background:rgba(12,12,18,.97);border-left:1px solid rgba(212,175,55,.16);overflow-y:auto;padding:16px;z-index:30}
+#side h3{font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);margin:16px 0 10px}
+#side h3:first-child{margin-top:0}
+.col-row{display:flex;align-items:flex-start;gap:9px;background:var(--panel);border:1px solid var(--line-soft);border-radius:9px;padding:8px 11px;margin-bottom:7px}
+.col-row .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.col-row .ct{font-weight:700;font-size:11.5px}
+.col-row .cs{font-size:10px;color:var(--muted);margin-top:1px;line-height:1.35}
+.legend{margin-top:12px;border-top:1px solid var(--line-soft);padding-top:12px;font-size:11.5px;color:var(--muted)}
+.legend .row{display:flex;align-items:center;gap:8px;margin:5px 0}
+.legend .sw{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.legend .ln{width:22px;height:0;border-top:2px solid;flex-shrink:0}
+.hint{position:fixed;left:14px;bottom:12px;z-index:30;font-size:11px;color:var(--muted);background:rgba(15,15,22,.8);border:1px solid var(--line-soft);border-radius:20px;padding:6px 14px}
+.hint b{color:var(--gold)}
+.ov{position:fixed;inset:0;z-index:60;background:rgba(4,4,8,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:20px}
+.ov.open{display:flex}
+.modal{width:min(470px,94vw);background:var(--panel);border:1px solid rgba(212,175,55,.2);border-radius:16px}
+.modal h4{margin:0;padding:15px 18px;font-size:14px;border-bottom:1px solid var(--line-soft)}
+.modal .pad{padding:15px 18px;font-size:13px;line-height:1.6}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--line-soft);text-align:right}
+</style>
+</head>
+<body>
+<div id="bar">
+  <div class="brand"><span class="dot"></span><div>Inova<small>Fluxo Proposta + Setor Jurídico</small></div></div>
+  <div class="spacer"></div>
+  <button class="btn" id="zo">−</button><span class="zoomlbl" id="zl">100%</span><button class="btn" id="zi">+</button>
+  <button class="btn" id="fit">Ajustar</button>
+</div>
+<div id="stage"><div id="world"><div id="lanes"></div><svg id="edges"></svg><div id="nodes"></div></div></div>
+
+<div id="side">
+  <h3>Colunas do funil (proposta)</h3>
+  <div class="col-row"><span class="dot" style="background:#D4AF37"></span><div><div class="ct">1 · Proposta</div><div class="cs">cria e envia a proposta</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#46B7C9"></span><div><div class="ct">2 · Coleta de Dados</div><div class="cs">aprovou → entra aqui · alerta 3 dias</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#56B97D"></span><div><div class="ct">3 · Projeto Fechado</div><div class="cs">cliente envia o forms</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#B98AE6"></span><div><div class="ct">4 · Em Produção</div><div class="cs">assina + paga (Jur+Fin ok)</div></div></div>
+
+  <h3>Jurídico · de qual setor entra <span style="color:#E0A845">⬅</span></h3>
+  <div class="col-row"><span class="dot" style="background:#D4AF37"></span><div><div class="ct">Contrato</div><div class="cs">⬅ Comercial · forms enviado (Coleta)</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#46B7C9"></span><div><div class="ct">Validação</div><div class="cs">⬅ Produção · Dev põe o card em validação</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#B98AE6"></span><div><div class="ct">Aditivo</div><div class="cs">⬅ Produção · Solicitação de Mudança (Dev)</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#FF8FA3"></span><div><div class="ct">Encerramento</div><div class="cs">✋ manual no Jurídico · seleciona o cliente</div></div></div>
+
+  <h3>Jurídico · pra qual setor sai <span style="color:#E0A845">➡</span></h3>
+  <div class="col-row"><span class="dot" style="background:#D4AF37"></span><div><div class="ct">Contrato assinado</div><div class="cs">➡ Financeiro libera cobrança · pago → Produção</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#46B7C9"></span><div><div class="ct">Validação → "Aprovado p/ Desenv."</div><div class="cs">➡ Produção: card do Dev p/ Desenvolvimento</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#B98AE6"></span><div><div class="ct">Aditivo assinado/recusado</div><div class="cs">➡ Produção (Mudança Aprov/Recus) + Financeiro cobra</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#FF8FA3"></span><div><div class="ct">Encerramento assinado</div><div class="cs">➡ Dev "Encerrados" + Financeiro encerra cobrança</div></div></div>
+
+  <h3>Entrada de cliente novo (Jurídico) <span style="color:#E0A845">⚡</span></h3>
+  <div class="col-row"><span class="dot" style="background:#46B7C9"></span><div><div class="ct">Forms (imutável) + Proposta</div><div class="cs">o gatilho vincula os dois ao caso, por referência (aponta, não copia)</div></div></div>
+  <div class="col-row"><span class="dot" style="background:#B98AE6"></span><div><div class="ct">Card abre com 2 painéis</div><div class="cs">Dados do Cliente (forms) + Proposta fechada (doc + valor/forma de pgto)</div></div></div>
+
+  <div class="legend">
+    <div class="row"><span class="sw" style="background:#D4AF37"></span> Coluna do funil</div>
+    <div class="row"><span class="sw" style="background:#E0A845"></span> Automação (entrada/saída)</div>
+    <div class="row"><span class="sw" style="background:#56B97D"></span> Assinado / correção</div>
+    <div class="row"><span class="sw" style="background:#A7ADBF"></span> Ação manual</div>
+    <div class="row"><span class="ln" style="border-color:rgba(201,210,225,.6)"></span> Passo do processo</div>
+    <div class="row"><span class="ln" style="border-color:#56B97D"></span> Automação / move card</div>
+    <div class="row"><span class="ln" style="border-color:#FF6B6B;border-top-style:dashed"></span> Alerta (3 dias)</div>
+  </div>
+</div>
+
+<div class="hint">Arraste o <b>fundo</b> · <b>scroll</b> zoom · clique numa <b>caixa</b> pra detalhe</div>
+<div class="ov" id="ov"><div class="modal"><h4 id="mt"></h4><div class="pad" id="mb"></div><div class="modal-foot"><button class="btn" onclick="document.getElementById('ov').classList.remove('open')">Fechar</button></div></div></div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+function hex(c,a){const n=parseInt(c.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+const KIND={acao:'#A7ADBF',doc:'#56B97D',decisao:'#E0A845',fix:'#56B97D',cliente:'#46B7C9',saidas:'#B98AE6',funil:'#D4AF37',alert:'#FF6B6B',automacao:'#E0A845',okstep:'#56B97D'};
+
+/* ============ BLOCO 1 · FLUXO DA PROPOSTA ============ */
+const B1_LANES=[
+ {name:'Funil / Closer',color:'#D4AF37'},
+ {name:'Aba Propostas',color:'#56B97D'},
+ {name:'Cliente (link / forms)',color:'#46B7C9'},
+ {name:'Jurídico / Financeiro',color:'#B98AE6'},
+];
+const B1_PHASES=[
+ {name:'Proposta',n:'1',from:0,to:7,color:'#D4AF37'},
+ {name:'Coleta de Dados',n:'2',from:8,to:10,color:'#46B7C9'},
+ {name:'Projeto Fechado',n:'3',from:11,to:12,color:'#56B97D'},
+ {name:'Em Produção',n:'4',from:13,to:13,color:'#B98AE6'},
+];
+const B1_N=[
+ {id:'c0',col:0,lane:0,kind:'funil',step:'1',tag:'Coluna 1',t:'Lead na coluna "Proposta"',s:'o closer coloca o lead aqui',d:'O processo começa com o lead posicionado na coluna Proposta do funil.'},
+ {id:'c1',col:1,lane:0,kind:'acao',step:'2',t:'Clica no card → "Nova Proposta"',s:'popup do lead abre',d:'O closer clica no card do lead; o popup abre e ele clica em "Nova Proposta".'},
+ {id:'c2',col:2,lane:0,kind:'acao',step:'3',t:'Preenche a proposta',s:'serviços + forma de pagamento',d:'Marca os serviços e a forma de pagamento (define o valor e o tipo do projeto) e salva.'},
+ {id:'c3',col:7,lane:0,kind:'decisao',step:'8',t:'Closer APROVA a proposta',s:'depois que o cliente retorna',d:'O cliente lê e retorna o interesse; o closer vai no card e aprova a proposta. Aprovação manual.'},
+ {id:'c4',col:8,lane:0,kind:'funil',step:'9',tag:'Coluna 2',t:'Card → "Coleta de Dados"',s:'2 links no card: proposta + forms',d:'Proposta aprovada → o card move sozinho. No card: link da proposta (botão "Aceito Investimento") + link do FORMS de coleta. Esse popup SUBSTITUI a aba "Cadastros" (removida).'},
+ {id:'a1',col:9,lane:0,kind:'alert',t:'Alerta · 3 dias sem preencher',s:'card fica VERMELHO + notifica',d:'Se em até 3 dias (a partir da entrada em Coleta — a confirmar) o cliente não enviar o forms, o card fica vermelho e o closer é notificado. Tarefa diária (padrão SLA do Suporte).'},
+ {id:'c5',col:11,lane:0,kind:'funil',step:'13',tag:'Coluna 3',t:'Card → "Projeto Fechado"',s:'quando o cliente envia o forms',d:'O lead preenche e envia o formulário → o card move pra Projeto Fechado. Em paralelo, os dados seguem pro Jurídico e Financeiro.'},
+ {id:'c6',col:13,lane:0,kind:'funil',step:'15',tag:'Coluna 4',t:'Card → "Em Produção"',s:'última coluna',d:'Jurídico (assinado) + Financeiro (pago) → o card move pra Em Produção.'},
+ {id:'d0',col:3,lane:1,kind:'doc',step:'4',t:'Vai na aba "Propostas"',s:'clica no card do cliente',d:'Troca pra tela de Propostas e abre o card do cliente.'},
+ {id:'d1',col:4,lane:1,kind:'doc',step:'5',t:'Sobe o arquivo → gera link',s:'popup de upload',d:'Sobe o arquivo; o sistema sanitiza e gera o link público.'},
+ {id:'d2',col:5,lane:1,kind:'doc',step:'6',t:'Envia o link pro cliente',s:'WhatsApp / e-mail',d:'O link da proposta é enviado ao cliente.'},
+ {id:'e0',col:6,lane:2,kind:'cliente',step:'7',t:'Cliente lê a proposta',s:'rastreio de aberturas',d:'O cliente acessa e lê. O sistema registra as aberturas.'},
+ {id:'e1',col:9,lane:2,kind:'cliente',step:'10',t:'Cliente abre o FORMS',s:'rastreio visível no card',d:'Pelo card (sem ir pra tela de cadastro): se o forms foi aberto, quantas vezes, dispositivo (mobile/desktop) e data de cada abertura.'},
+ {id:'e2',col:10,lane:2,kind:'fix',step:'11',t:'Cliente PREENCHE e envia',s:'★ gatilho que move o card',d:'Envia o formulário → manda os dados pro Jurídico e Financeiro e move o card pra Projeto Fechado.'},
+ {id:'f0',col:11,lane:3,kind:'saidas',step:'12',t:'Jurídico: contrato',s:'→ veja o bloco do Jurídico abaixo',d:'O Jurídico recebe os dados do forms e abre o LegalCase(contrato). O processo completo está no bloco de baixo.'},
+ {id:'f1',col:12,lane:3,kind:'saidas',step:'14',t:'Financeiro: cobrança',s:'confirma o pagamento',d:'O Financeiro cobra pela forma de pagamento e confirma o pagamento da entrada.'},
+];
+const B1_E=[
+ ['c0','c1','step'],['c1','c2','step'],['c2','d0','step','vai p/ Propostas'],
+ ['d0','d1','step'],['d1','d2','step'],['d2','e0','step','envia o link'],
+ ['e0','c3','step','cliente retorna'],['c3','c4','move','aprovou → move'],
+ ['c4','e1','step','link do forms'],['e1','e2','step'],['c4','a1','alert','3 dias'],
+ ['e2','c5','move','preencheu → move'],['e2','f0','step','dados'],['e2','f1','step','dados'],
+ ['f0','c6','step'],['f1','c6','move','assina + paga'],
+];
+
+/* ============ BLOCO 2 · SETOR JURÍDICO (modalidades · colunas · setores) ============ */
+const B2_LANES=[
+ {name:'Contrato',color:'#D4AF37'},
+ {name:'Validação',color:'#46B7C9'},
+ {name:'Aditivo',color:'#B98AE6'},
+ {name:'Encerramento',color:'#FF8FA3'},
+];
+const B2_PHASES=[
+ {name:'Entrada (de qual setor)',n:'⬅',from:0,to:0,color:'#E0A845'},
+ {name:'Processo · colunas próprias da modalidade',n:'▦',from:1,to:5,color:'#9AA7BD'},
+ {name:'Saída (pra qual setor)',n:'➡',from:6,to:6,color:'#E0A845'},
+];
+const B2_N=[
+ // ── Contrato ──
+ {id:'jc_in',col:0,lane:0,kind:'automacao',badge:'⚡',t:'⬅ Comercial',s:'forms enviado (Coleta)',d:'Entrada do Contrato: quando o cliente envia a Coleta, o card do cliente entra na modalidade Contrato (automação, em paralelo ao Financeiro que pré-cadastra).'},
+ {id:'jc_1',col:1,lane:0,kind:'acao',t:'Preparação',s:'elaborar contrato + Autentique',d:'Monta o contrato e sobe no Autentique na transição p/ Envio.'},
+ {id:'jc_2',col:2,lane:0,kind:'acao',t:'Envio p/ assinatura',s:'',d:'Envia pelo Autentique.'},
+ {id:'jc_3',col:3,lane:0,kind:'acao',t:'Aguardando',s:'assinatura',d:'Aguardando o cliente assinar.'},
+ {id:'jc_4',col:4,lane:0,kind:'okstep',t:'Assinado',s:'signed_at',d:'Cliente assinou.'},
+ {id:'jc_out',col:6,lane:0,kind:'automacao',badge:'⚡',t:'Financeiro + Produção ➡',s:'libera cobrança · pago→Produção',d:'Saída: contrato assinado libera a cobrança no Financeiro (Regra de Ouro); quando pago, o projeto inicia e vai pra Produção.'},
+ // ── Validação ──
+ {id:'jv_in',col:0,lane:1,kind:'automacao',badge:'⚡',t:'⬅ Produção (Dev)',s:'Dev põe o card em validação',d:'Entrada da Validação: o Dev move o card pra coluna validação no board dele → o card no Jurídico entra na modalidade Validação. (Preenche o gap do produtor que faltava no código.)'},
+ {id:'jv_1',col:1,lane:1,kind:'acao',t:'Preparação',s:'anexar termo + Autentique',d:'Anexa o termo e sobe no Autentique.'},
+ {id:'jv_2',col:2,lane:1,kind:'acao',t:'Envio',s:'',d:'Envia pro cliente.'},
+ {id:'jv_3',col:3,lane:1,kind:'acao',t:'Aguardando',s:'assinatura',d:'Aguardando assinatura.'},
+ {id:'jv_4',col:4,lane:1,kind:'okstep',t:'Assinado',s:'',d:'Cliente assinou a validação.'},
+ {id:'jv_5',col:5,lane:1,kind:'funil',t:'Aprovado p/ Desenvolvimento',s:'coluna nova (só na Validação)',d:'Coluna extra que só existe na Validação. Ao chegar aqui, libera o Dev a iniciar o desenvolvimento.'},
+ {id:'jv_out',col:6,lane:1,kind:'automacao',badge:'⚡',t:'Produção (Dev) ➡',s:'card vai p/ Desenvolvimento',d:'Saída: o card do cliente no board do Dev vai pra coluna Desenvolvimento. O Dev sabe que pode iniciar.'},
+ // ── Aditivo ──
+ {id:'ja_in',col:0,lane:2,kind:'automacao',badge:'⚡',t:'⬅ Produção · Nova solicitação',s:'Dev solicita · ⚡ avisa o Financeiro',d:'Entrada do Aditivo: o Dev abre a Solicitação de Mudança (botão). Chega o card novo na coluna "Nova solicitação" e ⚡ avisa o Financeiro, que PRÉ-CADASTRA o valor adicional (pendente, em paralelo — como no Contrato).'},
+ {id:'ja_1',col:1,lane:2,kind:'acao',t:'Preparação',s:'doc + Autentique + envia',d:'Prepara o documento do aditivo, sobe no Autentique e envia ao cliente (o "Envio" fica embutido aqui, não é coluna separada).'},
+ {id:'ja_2',col:2,lane:2,kind:'acao',t:'Aguardando',s:'assinatura',d:'Aguardando a assinatura do cliente.'},
+ {id:'ja_3',col:3,lane:2,kind:'decisao',t:'Assinado / Recusado',s:'2 colunas terminais',d:'Dois desfechos (no kanban são duas colunas): Assinado (cliente aprovou) ou Recusado.'},
+ {id:'ja_out',col:6,lane:2,kind:'automacao',badge:'⚡',t:'Produção + Financeiro ➡',s:'Assinou→Aprovada+cobra · Recusou→cancela',d:'Saída: Assinado → Dev "Mudança Aprovada" + Financeiro ATIVA a cobrança (que estava pré-cadastrada) → libera a nova fase. Recusado → Dev "Mudança Recusada" + Financeiro CANCELA o pré-cadastro.'},
+ // ── Encerramento ──
+ {id:'je_in',col:0,lane:3,kind:'acao',t:'✋ Início MANUAL',s:'Jurídico seleciona o cliente',d:'Entrada do Encerramento: a única manual. Na tela de Encerramento, seleciona o cliente e inicia o processo. Aplica-se a projeto de receita recorrente.'},
+ {id:'je_1',col:1,lane:3,kind:'acao',t:'Análise / Pendências',s:'',d:'Analisa pendências do cliente.'},
+ {id:'je_2',col:2,lane:3,kind:'acao',t:'Distrato',s:'elabora + Autentique',d:'Elabora o distrato e sobe no Autentique.'},
+ {id:'je_3',col:3,lane:3,kind:'acao',t:'Envio',s:'',d:'Envia o distrato pro cliente.'},
+ {id:'je_4',col:4,lane:3,kind:'acao',t:'Aguardando',s:'assinatura',d:'Aguardando.'},
+ {id:'je_5',col:5,lane:3,kind:'okstep',t:'Assinado / Encerrado',s:'',d:'Cliente assina o distrato.'},
+ {id:'je_out',col:6,lane:3,kind:'automacao',badge:'⚡',t:'Dev + Financeiro ➡',s:'Dev "Encerrados" · encerra cobrança',d:'Saída: o card vai pra coluna "Encerrados" no board de recorrentes do Dev (com instruções de offboarding) + o Financeiro faz o acerto final e encerra a cobrança recorrente.'},
+];
+const B2_E=[
+ ['jc_in','jc_1','move'],['jc_1','jc_2','step'],['jc_2','jc_3','step'],['jc_3','jc_4','step'],['jc_4','jc_out','move','assinado'],
+ ['jv_in','jv_1','move'],['jv_1','jv_2','step'],['jv_2','jv_3','step'],['jv_3','jv_4','step'],['jv_4','jv_5','move','assina'],['jv_5','jv_out','move','libera Dev'],
+ ['ja_in','ja_1','move'],['ja_1','ja_2','step'],['ja_2','ja_3','step'],['ja_3','ja_out','move','desfecho'],
+ ['je_in','je_1','step'],['je_1','je_2','step'],['je_2','je_3','step'],['je_3','je_4','step'],['je_4','je_5','step'],['je_5','je_out','move','encerrado'],
+];
+
+/* ============ BLOCO 3 · ENTRADA DE CLIENTE NOVO NO JURÍDICO ============ */
+const B3_LANES=[
+ {name:'Origem (Comercial)',color:'#D4AF37'},
+ {name:'Automação',color:'#E0A845'},
+ {name:'Card do Jurídico',color:'#B98AE6'},
+];
+const B3_PHASES=[
+ {name:'Entradas',n:'•',from:0,to:1,color:'#D4AF37'},
+ {name:'Gatilho',n:'⚡',from:2,to:2,color:'#E0A845'},
+ {name:'Card do Jurídico',n:'•',from:3,to:5,color:'#B98AE6'},
+];
+const B3_N=[
+ {id:'k0',col:0,lane:0,kind:'cliente',t:'Forms enviado (Coleta)',s:'dados imutáveis do cliente',d:'O cliente envia o formulário e NÃO pode mais editar — o dado nasce congelado. Contém empresa (razão social, CNPJ, endereço), representante/signatário (nome, estado civil, profissão, CPF, endereço) e contato financeiro.'},
+ {id:'k1',col:1,lane:0,kind:'doc',t:'Proposta fechada (aprovada)',s:'documento + termos',d:'A proposta aprovada daquele cliente (no nosso fluxo ela é aprovada ANTES do forms): o documento que o cliente recebeu + os termos (valor, forma de pagamento, serviços).'},
+ {id:'k2',col:2,lane:1,kind:'automacao',badge:'⚡ AUTO',t:'Cria o LegalCase + VINCULA',s:'onboarding + proposal (por referência)',d:'O gatilho (ClientOnboarding submitted) cria o caso de contrato e o VINCULA ao forms e à proposta aprovada POR REFERÊNCIA (aponta, não copia — os dados são imutáveis). Flag AUTOMATION_JURIDICO_CONTRATO (off/dry_run/on). Idempotente: não duplica caso de contrato já aberto. Se não houver proposta vinculável, cria mesmo assim só com os dados do cliente.'},
+ {id:'k3',col:3,lane:2,kind:'saidas',t:'Card novo · LegalCase (contrato)',s:'abre com 2 painéis',d:'Entra um card novo no Jurídico (modalidade contrato), já com tudo que o jurídico precisa pra montar o contrato — sem sair do card.'},
+ {id:'k4',col:4,lane:2,kind:'acao',t:'📋 Painel: Dados do Cliente',s:'do forms · só leitura',d:'Razão social, CNPJ, endereço; representante (nome, estado civil, profissão, CPF, endereço); contato financeiro. Só leitura (cliente não edita, jurídico não altera o declarado).'},
+ {id:'k5',col:5,lane:2,kind:'acao',t:'📄 Painel: Proposta fechada',s:'documento + valor/forma de pagamento',d:'Link/arquivo da proposta + os termos destacados (valor, forma de pagamento, serviços) prontos pra transcrever no contrato. + campo de notas pro jurídico anotar.'},
+];
+const B3_E=[
+ ['k0','k2','step','forms'],['k1','k2','step','proposta'],
+ ['k2','k3','move','cria + vincula'],
+ ['k3','k4','step'],['k4','k5','step'],
+];
+
+const BLOCKS=[
+ {title:'Fluxo da Proposta · processo atualizado',sub:'',lanes:B1_LANES,phases:B1_PHASES,N:B1_N,E:B1_E},
+ {title:'Setor Jurídico · modalidades, colunas e ligações entre setores',sub:'o MESMO card do cliente circula entre as modalidades (fica no histórico) · ⬅ entra de um setor · ➡ sai p/ outro(s) · ⚡ automático · ✋ manual',lanes:B2_LANES,phases:B2_PHASES,N:B2_N,E:B2_E},
+ {title:'Entrada de cliente novo no Jurídico · automação',sub:'como o card recebe os dados pra montar o contrato (vínculo por referência — forms imutável)',lanes:B3_LANES,phases:B3_PHASES,N:B3_N,E:B3_E},
+];
+
+/* ===== layout ===== */
+const NW=212,NH=82,COLW=320,LANEH=166,LGUT=170,X0=LGUT+22;
+const TITLE_OFF=0, PHASE_OFF=34, LANE_OFF=118, BLOCK_GAP=66;
+const pos={};
+const lanes=$('lanes'),svg=$('edges'),nodesEl=$('nodes'),world=$('world');
+let maxCol=0; BLOCKS.forEach(B=>B.N.forEach(n=>maxCol=Math.max(maxCol,n.col)));
+const worldW=X0+(maxCol+1)*COLW+40;
+let cursorY=22;
+let lanesHTML='', nodesHTML='';
+for(const B of BLOCKS){
+  const titleY=cursorY, phaseY=cursorY+PHASE_OFF, blockY=cursorY+LANE_OFF;
+  lanesHTML += `<div class="title" style="left:20px;top:${titleY}px">${B.title}</div>`;
+  if(B.sub) lanesHTML += `<div class="subtitle" style="left:20px;top:${titleY+22}px">${B.sub}</div>`;
+  for(const P of B.phases){
+    const x0=X0+P.from*COLW, x1=X0+P.to*COLW+NW;
+    lanesHTML += `<div class="phase" style="left:${x0}px;top:${phaseY}px;width:${x1-x0}px;background:${hex(P.color,.14)};border:1px solid ${hex(P.color,.45)};color:${P.color}"><span class="pn" style="color:${P.color}">${P.n}</span>${P.name}</div>`;
+  }
+  B.lanes.forEach((L,i)=>{ lanesHTML += `<div class="lane" style="left:14px;top:${blockY+i*LANEH-14}px;width:${worldW-28}px;height:${LANEH-12}px;background:${hex(L.color,.05)}"><div class="lane-lbl" style="color:${L.color}">${L.name}</div></div>`; });
+  lanesHTML += `<div class="gutter-rule" style="left:${LGUT}px;top:${blockY-14}px;height:${B.lanes.length*LANEH-12}px"></div>`;
+  for(const n of B.N){
+    pos[n.id]={x:X0+n.col*COLW, y:blockY+n.lane*LANEH+22};
+    const p=pos[n.id],c=KIND[n.kind];
+    const cls='node'+(n.kind==='funil'?' funil':'')+(n.kind==='fix'?' fix':'')+(n.kind==='alert'?' alert':'')+(n.kind==='automacao'?' automacao':'')+(n.kind==='okstep'?' okstep':'');
+    nodesHTML += `<div class="${cls}" data-id="${n.id}" style="left:${p.x}px;top:${p.y}px">
+      <span class="acc" style="background:${c}"></span>
+      ${n.badge?`<span class="badge">${n.badge}</span>`:''}
+      ${n.step?`<span class="step">${n.step}</span>`:''}
+      <div class="t">${n.t}</div><div class="s">${n.s}</div>
+      ${n.tag?`<span class="tagk">${n.tag}</span>`:''}</div>`;
+  }
+  cursorY = blockY + B.lanes.length*LANEH + BLOCK_GAP;
+}
+const worldH=cursorY+10;
+world.style.width=worldW+'px';world.style.height=worldH+'px';svg.setAttribute('width',worldW);svg.setAttribute('height',worldH);
+lanes.innerHTML=lanesHTML; nodesEl.innerHTML=nodesHTML;
+const ALLN=[...B1_N,...B2_N,...B3_N], E=[...B1_E,...B2_E,...B3_E];
+
+function port(id,side){const p=pos[id];return {x:p.x+(side==='out'?NW:0),y:p.y+NH/2};}
+function epath(a,b){const dx=Math.min(150,Math.max(36,Math.abs(b.x-a.x)*0.42));return `M ${a.x} ${a.y} C ${a.x+dx} ${a.y}, ${b.x-dx} ${b.y}, ${b.x} ${b.y}`;}
+let eh=`<defs>
+ <marker id="ag" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(201,210,225,.6)"/></marker>
+ <marker id="ao" markerWidth="9" markerHeight="9" refX="7.5" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="rgba(86,185,125,.95)"/></marker>
+ <marker id="aa" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#FF6B6B"/></marker>
+</defs>`;
+for(const [from,to,kind,lbl] of E){
+  const a=port(from,'out'),b=port(to,'in');
+  let stroke='rgba(201,210,225,.45)',w='2.2',mk='ag',lblColor='#cfd6e4',dash='';
+  if(kind==='move'){stroke='rgba(86,185,125,.95)';w='3';mk='ao';lblColor='#7fd6a0';}
+  if(kind==='alert'){stroke='#FF6B6B';w='2.2';mk='aa';lblColor='#ff9b9b';dash='stroke-dasharray="6 5"';}
+  eh+=`<path d="${epath(a,b)}" fill="none" stroke="${stroke}" stroke-width="${w}" ${dash} marker-end="url(#${mk})"/>`;
+  if(lbl){
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2, tw=lbl.length*5.6+14;
+    const ty=(Math.abs(a.y-b.y)<8)?my-15:my-7;
+    eh+=`<rect x="${mx-tw/2}" y="${ty-10}" width="${tw}" height="16" rx="8" fill="rgba(14,14,20,.96)" stroke="${stroke}"/><text x="${mx}" y="${ty+1}" text-anchor="middle" style="font:700 9.5px Outfit" fill="${lblColor}">${lbl}</text>`;
+  }
+}
+svg.innerHTML=eh;
+
+nodesEl.addEventListener('click',e=>{const el=e.target.closest('.node');if(!el)return;const n=ALLN.find(x=>x.id===el.dataset.id);
+  $('mt').textContent=(n.step?('Passo '+n.step+' · '):'')+n.t;$('mb').innerHTML=`<b>${n.s||''}</b><br><br>${n.d}`;$('ov').classList.add('open');});
+$('ov').addEventListener('mousedown',e=>{if(e.target===$('ov'))$('ov').classList.remove('open');});
+
+const stage=$('stage');let view={x:30,y:20,s:.8},pan=null;
+function apply(){world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;$('zl').textContent=Math.round(view.s*100)+'%';}
+stage.addEventListener('mousedown',e=>{if(e.target.closest('.node'))return;pan={sx:e.clientX,sy:e.clientY,ox:view.x,oy:view.y};stage.classList.add('grab');document.addEventListener('mousemove',onPan);document.addEventListener('mouseup',endPan);});
+function onPan(e){view.x=pan.ox+(e.clientX-pan.sx);view.y=pan.oy+(e.clientY-pan.sy);apply();}
+function endPan(){document.removeEventListener('mousemove',onPan);document.removeEventListener('mouseup',endPan);stage.classList.remove('grab');}
+stage.addEventListener('wheel',e=>{e.preventDefault();const r=stage.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,o=view.s;let s=Math.min(2,Math.max(.22,o*(e.deltaY<0?1.1:1/1.1)));view.x=mx-((mx-view.x)/o)*s;view.y=my-((my-view.y)/o)*s;view.s=s;apply();},{passive:false});
+function fit(){const r=stage.getBoundingClientRect(),p=36,s=Math.min(1.05,Math.min((r.width-p*2)/worldW,(r.height-p*2)/worldH));view={x:p,y:p,s:Math.max(.22,s)};apply();}
+$('zi').onclick=()=>{view.s=Math.min(2,view.s*1.15);apply();};$('zo').onclick=()=>{view.s=Math.max(.22,view.s/1.15);apply();};$('fit').onclick=fit;
+fit();
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Plus, Search, Edit, Trash2, FileText, TrendingUp, CheckCircle,
-  X, Send, ThumbsUp, ThumbsDown, ArrowRight, ChevronUp, ChevronDown,
+  X, Send, ThumbsUp, ThumbsDown, ChevronUp, ChevronDown,
   Upload, Download, Link, Eye, Copy,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
@@ -177,14 +177,14 @@ export default function PropostasTab() {
     setShowModal(true);
   };
 
-  const handleAction = async (proposal: Proposal, action: 'send' | 'approve' | 'reject' | 'convert_to_contract') => {
+  const handleAction = async (proposal: Proposal, action: 'send' | 'approve' | 'reject') => {
     const actionKey = `${proposal.id}-${action}`;
     setPerformingAction(actionKey);
     try {
       await api.post(`/sales/proposals/${proposal.id}/${action}/`);
       const labels: Record<string, string> = {
         send: 'Proposta enviada!', approve: 'Proposta aprovada!',
-        reject: 'Proposta rejeitada.', convert_to_contract: 'Contrato criado!',
+        reject: 'Proposta rejeitada.',
       };
       toast.success(labels[action]);
       fetchData();
@@ -354,14 +354,8 @@ export default function PropostasTab() {
                             </button>
                           </>
                         )}
-                        {p.status === 'approved' && (
-                          <button onClick={() => handleAction(p, 'convert_to_contract')} disabled={!!performingAction}
-                            title="Converter em Contrato"
-                            aria-label="Converter em Contrato"
-                            className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors rounded-lg hover:bg-accent-gold/5 disabled:opacity-50">
-                            <ArrowRight className="w-4 h-4" />
-                          </button>
-                        )}
+                        {/* "Converter em Contrato" removido do Comercial (doc 09 §04):
+                            contrato nasce no CRM Jurídico (LegalCase) a partir da Coleta. */}
                         {/* Upload PDF */}
                         <label className={`p-1.5 transition-colors cursor-pointer ${p.proposal_file ? 'text-blue-400 hover:text-blue-500' : 'text-gray-300 hover:text-blue-500'}`}
                           title={p.proposal_file ? 'Substituir PDF' : 'Anexar PDF'}>
@@ -426,7 +420,6 @@ export default function PropostasTab() {
         <div className="flex items-center gap-1"><Send className="w-3.5 h-3.5 text-blue-400" /> Enviar</div>
         <div className="flex items-center gap-1"><ThumbsUp className="w-3.5 h-3.5 text-emerald-500" /> Aprovar</div>
         <div className="flex items-center gap-1"><ThumbsDown className="w-3.5 h-3.5 text-red-400" /> Rejeitar</div>
-        <div className="flex items-center gap-1"><ArrowRight className="w-3.5 h-3.5 text-accent-gold" /> Converter em Contrato</div>
       </div>
 
       {/* Modal compartilhado */}
@@ -660,13 +653,8 @@ export default function PropostasTab() {
                       <ThumbsDown className="w-4 h-4" /> Rejeitar
                     </button>
                   )}
-                  {viewingProposal.status === 'approved' && (
-                    <button onClick={() => { handleAction(viewingProposal, 'convert_to_contract'); setViewingProposal(null); }}
-                      disabled={performingAction === `${viewingProposal.id}-convert_to_contract`}
-                      className="w-full flex items-center justify-center gap-2 py-2 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark disabled:opacity-50 transition-colors">
-                      <ArrowRight className="w-4 h-4" /> Converter em Contrato
-                    </button>
-                  )}
+                  {/* "Converter em Contrato" removido do Comercial (doc 09 §04):
+                      contrato passa a nascer no CRM Jurídico (LegalCase). */}
                   {/* Editar / Excluir */}
                   <div className="flex gap-2 pt-1">
                     <button onClick={() => { openEditModal(viewingProposal); setViewingProposal(null); }}

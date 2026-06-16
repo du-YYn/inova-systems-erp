@@ -43,6 +43,7 @@ def manager_user(db):
     return User.objects.create_user(
         username='s3a_mgr', email='s3a@mgr.com',
         password='pass12345', role='manager',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -129,15 +130,62 @@ class TestDataExport:
         assert audit is not None
         assert audit.user.username == 's3a_admin'
 
-    def test_viewer_cannot_export(self, api_client, customer, db):
+    def test_viewer_cannot_export_pii(self, api_client, customer, db):
+        """H3 (code review): export de PII (LGPD) NÃO é leitura comum. Apesar
+        de o viewer ler globalmente sob o RBAC por setor, ele NÃO pode exportar
+        os dados pessoais do cliente — 403 + audit de negação."""
         viewer = User.objects.create_user(
             username='s3a_viewer', email='v@v.com',
             password='pass', role='viewer',
         )
         api_client.force_authenticate(user=viewer)
         r = api_client.get(self.URL.format(id=customer.id))
-        # CustomerViewSet usa IsAdminOrManagerOrOperatorStrict — viewer 403
         assert r.status_code == status.HTTP_403_FORBIDDEN
+        assert AuditLog.objects.filter(
+            action='customer_data_export_denied',
+            resource_id=str(customer.id),
+        ).exists()
+        # Não gerou o audit de export bem-sucedido.
+        assert not AuditLog.objects.filter(
+            action='customer_data_export', resource_id=str(customer.id),
+        ).exists()
+
+    def test_comercial_operator_can_export_pii(self, api_client, customer, db):
+        """Operador DO comercial exporta PII (dono do recurso)."""
+        op = User.objects.create_user(
+            username='s3a_com_op', email='comop@x.com', password='pass',
+            role='operator', sectors=['comercial'],
+        )
+        api_client.force_authenticate(user=op)
+        r = api_client.get(self.URL.format(id=customer.id))
+        assert r.status_code == status.HTTP_200_OK
+        assert r.data['customer']['email'] == 'titular@lgpd.com'
+
+    def test_other_sector_operator_cannot_export_pii(
+        self, api_client, customer, db,
+    ):
+        """Operador de OUTRO setor (ex.: financeiro) lê o Customer pela matriz,
+        mas NÃO exporta PII."""
+        op = User.objects.create_user(
+            username='s3a_fin_op', email='finop@x.com', password='pass',
+            role='operator', sectors=['financeiro'],
+        )
+        api_client.force_authenticate(user=op)
+        r = api_client.get(self.URL.format(id=customer.id))
+        assert r.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_operator_without_sector_can_export_pii_fallback(
+        self, api_client, customer, db,
+    ):
+        """H2/H3 consistente: operador SEM setor cai no fallback role-based e
+        pode exportar (até John atribuir setores)."""
+        op = User.objects.create_user(
+            username='s3a_nosec_op', email='nosec@x.com', password='pass',
+            role='operator', sectors=[],
+        )
+        api_client.force_authenticate(user=op)
+        r = api_client.get(self.URL.format(id=customer.id))
+        assert r.status_code == status.HTTP_200_OK
 
 
 # ─── F3a: anonymize ───────────────────────────────────────────────────────

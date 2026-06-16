@@ -75,6 +75,13 @@ interface Prospect {
   // post-meeting
   ebook_sent_at: string | null;
   meeting_transcript: string;
+  // v32 F2 — Reunião 2 + análise técnica
+  project_type: string;
+  meeting_2_scheduled_at: string | null;
+  meeting_2_link: string;
+  meeting_2_attended: boolean | null;
+  tech_analysis_notes: string;
+  estimated_deadline_days: number | null;
   // follow-up
   follow_up_reason: string;
   // pre-meeting
@@ -114,6 +121,13 @@ interface ProspectForm {
   meeting_scheduled_at: string;
   meeting_link: string;
   meeting_transcript: string;
+  // Seção 5 — Análise Técnica & Reunião 2 (v32 F2)
+  project_type: string;
+  estimated_deadline_days: string;
+  tech_analysis_notes: string;
+  meeting_2_scheduled_at: string;
+  meeting_2_link: string;
+  meeting_2_attended: boolean | null;
 }
 
 type ViewMode = 'list' | 'pipeline';
@@ -124,35 +138,56 @@ type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'purple' | 'gold'
 const PAGE_SIZE = 10;
 
 const statusLabels: Record<string, string> = {
+  // Caminho principal v32 (12 etapas — doc processo-v32/01-comercial)
   new: 'Lead Recebido',
   qualifying: 'Em Qualificação',
   qualified: 'Qualificado',
-  disqualified: 'Não Qualificado',
+  meeting_invite: 'Convite para Reunião',
   scheduled: 'Agendado',
   pre_meeting: 'Pré-Reunião',
-  no_show: 'Não Compareceu',
-  meeting_done: 'Reunião Realizada',
+  meeting_1_done: 'Reunião 1 Realizada',
+  tech_analysis: 'Análise Técnica e Proposta',
+  meeting_2_done: 'Reunião 2 Realizada',
   proposal: 'Proposta Enviada',
-  won: 'Fechado',
-  production: 'Em Produção',
-  concluded: 'Concluído',
-  not_closed: 'Não Fechou',
-  lost: 'Perdido',
+  // v32 ajustes (doc 09 §04/§05) — funil otimizado alinhado ao backend b1.
+  coleta_de_dados: 'Coleta de Dados',
+  projeto_fechado: 'Projeto Fechado',
+  em_producao: 'Em Produção',
+  // Ramos
+  disqualified: 'Não Qualificado',
+  no_show: 'No-Show',
   follow_up: 'Follow-Up',
+  // Equivalentes legados v32 (registros antigos seguem; rotulados como os novos)
+  won: 'Projeto Fechado',
+  data_collection: 'Coleta de Dados',
+  production: 'Em Produção',
+  // Legados (deprecados — registros antigos seguem até fecharem)
+  meeting_done: 'Reunião Realizada (legado)',
+  concluded: 'Concluído (legado)',
+  not_closed: 'Não Fechou (legado)',
+  lost: 'Perdido (legado)',
 };
 
 const statusColors: Record<string, string> = {
   new: 'bg-blue-100 text-blue-800',
   qualifying: 'bg-yellow-100 text-yellow-800',
   qualified: 'bg-purple-100 text-purple-800',
+  meeting_invite: 'bg-violet-100 text-violet-800',
   disqualified: 'bg-red-100 text-red-800',
   scheduled: 'bg-indigo-100 text-indigo-800',
   pre_meeting: 'bg-cyan-100 text-cyan-800',
   no_show: 'bg-rose-100 text-rose-800',
   meeting_done: 'bg-teal-100 text-teal-800',
+  meeting_1_done: 'bg-teal-100 text-teal-800',
+  tech_analysis: 'bg-fuchsia-100 text-fuchsia-800',
+  meeting_2_done: 'bg-lime-100 text-lime-800',
   proposal: 'bg-amber-100 text-amber-800',
+  coleta_de_dados: 'bg-emerald-100 text-emerald-800',
+  projeto_fechado: 'bg-green-100 text-green-800',
+  em_producao: 'bg-teal-100 text-teal-800',
   won: 'bg-green-100 text-green-800',
-  production: 'bg-emerald-100 text-emerald-800',
+  data_collection: 'bg-emerald-100 text-emerald-800',
+  production: 'bg-teal-100 text-teal-800',
   concluded: 'bg-sky-100 text-sky-800',
   not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
@@ -163,13 +198,21 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   new: 'info',
   qualifying: 'warning',
   qualified: 'purple',
+  meeting_invite: 'purple',
   disqualified: 'error',
   scheduled: 'info',
   pre_meeting: 'info',
   no_show: 'error',
   meeting_done: 'success',
+  meeting_1_done: 'success',
+  tech_analysis: 'purple',
+  meeting_2_done: 'success',
   proposal: 'gold',
+  coleta_de_dados: 'gold',
+  projeto_fechado: 'success',
+  em_producao: 'success',
   won: 'success',
+  data_collection: 'gold',
   production: 'success',
   concluded: 'info',
   not_closed: 'warning',
@@ -177,28 +220,56 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   follow_up: 'warning',
 };
 
+const PROJECT_TYPE_LABELS: Record<string, string> = {
+  fechado: 'Fechado',
+  recorrente: 'Recorrente',
+};
+
 const FOLLOW_UP_REASONS = [
   { value: 'nao_agendou', label: 'Não Agendou', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'nao_compareceu', label: 'Não Compareceu', color: 'bg-orange-100 text-orange-700' },
+  { value: 'nao_compareceu', label: 'No-Show', color: 'bg-orange-100 text-orange-700' },
   { value: 'nao_fechou', label: 'Não Fechou', color: 'bg-red-100 text-red-700' },
 ];
 
-// Colunas do kanban — Perdido/Desqualificado/Não Qualificado só na lista
+// Colunas do kanban — caminho principal v32 + funil otimizado da proposta
+// (doc 09 §04/§05) alinhado ao backend b1: Proposta → Coleta de Dados →
+// Projeto Fechado → Em Produção. Ramos no_show/follow_up. Desqualificado só na
+// lista; legados na coluna "Legados".
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
   'qualified',
+  'meeting_invite',
   'scheduled',
   'pre_meeting',
-  'no_show',
-  'meeting_done',
+  'meeting_1_done',
+  'tech_analysis',
+  'meeting_2_done',
   'proposal',
-  'won',
-  'production',
-  'concluded',
-  'not_closed',
+  'coleta_de_dados',
+  'projeto_fechado',
+  'em_producao',
+  'no_show',
   'follow_up',
 ];
+
+// Equivalência status legado → coluna nova (doc 09 §04). Cards antigos em
+// produção (won/data_collection/production) seguem aparecendo na coluna nova
+// correspondente, sem perder visibilidade nem precisar de migração de dados.
+const COLUMN_STATUS_ALIASES: Record<string, string[]> = {
+  coleta_de_dados: ['coleta_de_dados', 'data_collection'],
+  projeto_fechado: ['projeto_fechado', 'won'],
+  em_producao: ['em_producao', 'production'],
+};
+
+// Resolve quais status um card precisa ter para cair numa coluna do kanban.
+const columnStatuses = (columnId: string): string[] =>
+  COLUMN_STATUS_ALIASES[columnId] ?? [columnId];
+
+// Status deprecados na v32 — agrupados numa coluna "Legados" read-only.
+// production saiu daqui: vira o equivalente legado da coluna "Em Produção".
+const LEGACY_STATUSES = ['meeting_done', 'concluded', 'not_closed', 'lost'];
+const LEGACY_COLUMN_ID = '__legacy__';
 
 const sourceOptions = [
   { value: 'website', label: 'Website' },
@@ -265,6 +336,13 @@ const EMPTY_FORM: ProspectForm = {
   meeting_scheduled_at: '',
   meeting_link: '',
   meeting_transcript: '',
+  // Seção 5
+  project_type: '',
+  estimated_deadline_days: '',
+  tech_analysis_notes: '',
+  meeting_2_scheduled_at: '',
+  meeting_2_link: '',
+  meeting_2_attended: null,
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -622,10 +700,16 @@ export default function FunilTab() {
       targetStatus = targetProspect.status;
     }
 
-    if (!PIPELINE_COLUMNS.includes(targetStatus)) return;
-    if (prospect.status === targetStatus) return;
+    // Card legado (won/data_collection/production) resolve para a coluna nova
+    // equivalente; assim soltar numa coluna nova grava sempre o status novo.
+    const targetColumn =
+      PIPELINE_COLUMNS.find(col => columnStatuses(col).includes(targetStatus)) ?? targetStatus;
 
-    handleStatusChange(prospect, targetStatus);
+    if (!PIPELINE_COLUMNS.includes(targetColumn)) return;
+    // Já está nesta coluna (mesmo status ou equivalente legado) → nada a fazer.
+    if (columnStatuses(targetColumn).includes(prospect.status)) return;
+
+    handleStatusChange(prospect, targetColumn);
   };
 
   // ─── KPI computations (from full dataset) ────────────────────────────────
@@ -637,14 +721,18 @@ export default function FunilTab() {
   ).length;
 
   const kpiAgendados = kpiSource.filter(p =>
-    p.status === 'scheduled' || p.status === 'pre_meeting'
+    p.status === 'meeting_invite' || p.status === 'scheduled' || p.status === 'pre_meeting'
   ).length;
 
   const kpiEmAndamento = kpiSource.filter(p =>
-    p.status === 'scheduled' || p.status === 'pre_meeting' || p.status === 'meeting_done' || p.status === 'proposal'
+    ['scheduled', 'pre_meeting', 'meeting_done', 'meeting_1_done',
+     'tech_analysis', 'meeting_2_done', 'proposal'].includes(p.status)
   ).length;
 
-  const wonProspects = kpiSource.filter(p => p.status === 'won');
+  const wonProspects = kpiSource.filter(p => [
+    'coleta_de_dados', 'projeto_fechado', 'em_producao',
+    'won', 'data_collection', 'production',
+  ].includes(p.status));
   const kpiWonCount = wonProspects.length;
   const kpiWonValue = wonProspects.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
 
@@ -683,6 +771,12 @@ export default function FunilTab() {
       meeting_scheduled_at: p.meeting_scheduled_at || '',
       meeting_link: p.meeting_link || '',
       meeting_transcript: p.meeting_transcript || '',
+      project_type: p.project_type || '',
+      estimated_deadline_days: p.estimated_deadline_days != null ? String(p.estimated_deadline_days) : '',
+      tech_analysis_notes: p.tech_analysis_notes || '',
+      meeting_2_scheduled_at: p.meeting_2_scheduled_at || '',
+      meeting_2_link: p.meeting_2_link || '',
+      meeting_2_attended: p.meeting_2_attended ?? null,
     });
     setShowModal(true);
   };
@@ -724,6 +818,13 @@ export default function FunilTab() {
       if (formData.meeting_scheduled_at) payload.meeting_scheduled_at = formData.meeting_scheduled_at;
       if (formData.meeting_link) payload.meeting_link = formData.meeting_link;
       if (formData.meeting_transcript) payload.meeting_transcript = formData.meeting_transcript;
+      // Seção 5 — Análise Técnica & Reunião 2 (v32 F2)
+      if (formData.project_type) payload.project_type = formData.project_type;
+      if (formData.estimated_deadline_days) payload.estimated_deadline_days = parseInt(formData.estimated_deadline_days, 10);
+      if (formData.tech_analysis_notes) payload.tech_analysis_notes = formData.tech_analysis_notes;
+      if (formData.meeting_2_scheduled_at) payload.meeting_2_scheduled_at = formData.meeting_2_scheduled_at;
+      if (formData.meeting_2_link) payload.meeting_2_link = formData.meeting_2_link;
+      if (formData.meeting_2_attended !== null) payload.meeting_2_attended = formData.meeting_2_attended;
 
       if (editingProspect) {
         await api.patch(`/sales/prospects/${editingProspect.id}/`, payload);
@@ -961,7 +1062,7 @@ export default function FunilTab() {
       const updated = await api.post<Prospect>(`/sales/prospects/${prospect.id}/${action}/`, {});
       const labels: Record<string, string> = {
         mark_attended: 'Reunião marcada como realizada.',
-        mark_no_show: 'Lead marcado como não compareceu.',
+        mark_no_show: 'Lead marcado como No-Show.',
         mark_ebook_sent: 'E-book marcado como enviado.',
       };
       toast.success(labels[action]);
@@ -1384,7 +1485,8 @@ export default function FunilTab() {
               para compatibilidade com CSP nonce-based (sem unsafe-inline). */}
           <div className="flex gap-3 min-w-max" style={{ transform: 'rotateX(180deg)' }}>
             {PIPELINE_COLUMNS.map((status) => {
-              const col = allProspects.filter(p => p.status === status);
+              const accepted = columnStatuses(status);
+              const col = allProspects.filter(p => accepted.includes(p.status));
               const colValue = col.reduce((acc, p) => acc + (p.estimated_value || 0), 0);
               const colIds = col.map(p => `prospect-${p.id}`);
               return (
@@ -1530,6 +1632,43 @@ export default function FunilTab() {
                 </DroppableColumn>
               );
             })}
+
+            {/* ── Coluna "Legados" (read-only) — status deprecados na v32 ── */}
+            {(() => {
+              const legacyCol = allProspects.filter(p => LEGACY_STATUSES.includes(p.status));
+              if (legacyCol.length === 0) return null;
+              return (
+                <div key={LEGACY_COLUMN_ID} className="w-60 flex flex-col gap-2 rounded-xl opacity-80">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-gray-800/60 rounded-xl border border-dashed border-gray-300 dark:border-gray-600">
+                    <Badge variant="neutral" dot>Legados</Badge>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-semibold">{legacyCol.length}</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-gray-500 px-1 leading-tight">
+                    Status antigos (somente leitura) — seguem até fecharem
+                  </p>
+                  <div className="flex flex-col gap-2 min-h-[60px]">
+                    {legacyCol.map(prospect => (
+                      <div
+                        key={prospect.id}
+                        className="card p-3 cursor-pointer animate-stagger-in"
+                        onClick={() => setViewingProspect(prospect)}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100"><Sensitive>{prospect.company_name}</Sensitive></p>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${statusColors[prospect.status] || 'bg-gray-100 text-gray-600'}`}>
+                            {statusLabels[prospect.status] || prospect.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1"><Sensitive>{prospect.contact_name}</Sensitive></p>
+                        <span className="text-xs font-bold text-accent-gold tabular-nums">
+                          <Sensitive>{formatCurrency(prospect.estimated_value)}</Sensitive>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {/* Drag overlay — ghost card while dragging */}
@@ -1768,6 +1907,56 @@ export default function FunilTab() {
                 </Section>
               )}
 
+              {/* ══════════ SEÇÃO 5 — ANÁLISE TÉCNICA & REUNIÃO 2 (v32) ══════════ */}
+              {editingProspect && (
+                <Section title="Seção 5 — Análise Técnica & Reunião 2" color="purple" defaultOpen={false}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelInput}>Tipo do Projeto</label>
+                      <select value={formData.project_type}
+                        onChange={(e) => setField('project_type', e.target.value)}
+                        className="input-field bg-white dark:bg-gray-800">
+                        <option value="">Selecionar</option>
+                        <option value="fechado">Fechado</option>
+                        <option value="recorrente">Recorrente</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelInput}>Prazo Estimado (dias)</label>
+                      <input type="number" min="1" value={formData.estimated_deadline_days}
+                        onChange={(e) => setField('estimated_deadline_days', e.target.value)}
+                        className="input-field" placeholder="Ex: 45" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelInput}>Notas da Análise Técnica</label>
+                    <textarea value={formData.tech_analysis_notes} rows={3}
+                      onChange={(e) => setField('tech_analysis_notes', e.target.value)}
+                      className={`input-field resize-none ${isDemoMode ? 'sensitive-blur' : ''}`}
+                      placeholder="Escopo macro, estrutura, premissas do Dev..." />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelInput}>Data da Reunião 2</label>
+                      <input type="datetime-local" value={formData.meeting_2_scheduled_at}
+                        onChange={(e) => setField('meeting_2_scheduled_at', e.target.value)}
+                        className="input-field" />
+                    </div>
+                    <div>
+                      <label className={labelInput}>Link da Reunião 2</label>
+                      <input type="url" value={formData.meeting_2_link}
+                        onChange={(e) => setField('meeting_2_link', e.target.value)}
+                        className={`input-field ${isDemoMode ? 'sensitive-blur' : ''}`} placeholder="https://meet.google.com/..." />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={labelInput}>Compareceu à Reunião 2?</label>
+                    <TriCheckbox label="Lead compareceu à Reunião 2" value={formData.meeting_2_attended}
+                      onChange={(v) => setField('meeting_2_attended', v)} />
+                  </div>
+                </Section>
+              )}
+
               {/* ── Chat History ── */}
               {editingProspect && (
                 <button
@@ -1872,8 +2061,12 @@ export default function FunilTab() {
             {/* ── Conteúdo rolável ─────────────────────────────────────────── */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-              {/* Cadastro do Cliente (Onboarding) — banner no topo para leads fechados */}
-              {(viewingProspect.status === 'won' || viewingProspect.status === 'production') && (
+              {/* Cadastro do Cliente (Onboarding) — banner para leads em Coleta
+                  de Dados ou fechados. v32 (doc 09 §T-E2E P0.2/T01): aprovar a
+                  proposta move o card para coleta_de_dados — é aí que o link do
+                  forms precisa aparecer pro closer enviar ao cliente. */}
+              {['coleta_de_dados', 'data_collection', 'projeto_fechado',
+                'won', 'em_producao', 'production'].includes(viewingProspect.status) && (
                 <section>
                   <OnboardingLinkSection prospectId={viewingProspect.id} />
                 </section>
@@ -2025,10 +2218,10 @@ export default function FunilTab() {
                 </section>
               )}
 
-              {/* Reunião */}
+              {/* Reunião 1 (reusa campos meeting_* — v32 só muda o label) */}
               {(viewingProspect.closer_name || viewingProspect.meeting_scheduled_at || viewingProspect.meeting_transcript) && (
                 <section>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Reunião / Closer</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Reunião 1 / Closer</h3>
                   <div className="space-y-2">
                     {viewingProspect.closer_name && (
                       <div className="flex items-center gap-2 text-sm">
@@ -2067,6 +2260,69 @@ export default function FunilTab() {
                 </section>
               )}
 
+              {/* Análise Técnica (v32 F2) */}
+              {(viewingProspect.project_type || viewingProspect.estimated_deadline_days != null || viewingProspect.tech_analysis_notes) && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Análise Técnica</h3>
+                  <div className="space-y-2">
+                    {viewingProspect.project_type && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Tipo</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          viewingProspect.project_type === 'recorrente'
+                            ? 'bg-violet-100 text-violet-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {PROJECT_TYPE_LABELS[viewingProspect.project_type] || viewingProspect.project_type}
+                        </span>
+                      </div>
+                    )}
+                    {viewingProspect.estimated_deadline_days != null && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Prazo est.</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{viewingProspect.estimated_deadline_days} dias</span>
+                      </div>
+                    )}
+                  </div>
+                  {viewingProspect.tech_analysis_notes && (
+                    <div className="mt-3 text-sm text-gray-700 dark:text-gray-200 bg-fuchsia-50 dark:bg-fuchsia-900/10 border border-fuchsia-100 dark:border-fuchsia-800/30 rounded-xl p-3 leading-relaxed">
+                      <Sensitive>{viewingProspect.tech_analysis_notes}</Sensitive>
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {/* Reunião 2 (v32 F2) */}
+              {(viewingProspect.meeting_2_scheduled_at || viewingProspect.meeting_2_link || viewingProspect.meeting_2_attended !== null) && (
+                <section>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3">Reunião 2</h3>
+                  <div className="space-y-2">
+                    {viewingProspect.meeting_2_scheduled_at && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Data</span>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateShort(viewingProspect.meeting_2_scheduled_at)}</span>
+                      </div>
+                    )}
+                    {safeHref(viewingProspect.meeting_2_link) && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Link</span>
+                        <a href={safeHref(viewingProspect.meeting_2_link)} target="_blank" rel="noopener noreferrer" className="text-accent-gold hover:underline truncate">
+                          Abrir link
+                        </a>
+                      </div>
+                    )}
+                    {viewingProspect.meeting_2_attended !== null && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">Compareceu</span>
+                        <span className={`font-semibold ${viewingProspect.meeting_2_attended ? 'text-green-600' : 'text-red-500'}`}>
+                          {viewingProspect.meeting_2_attended ? 'Sim' : 'Não'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
               {/* Follow-up */}
               {viewingProspect.follow_up_reason && (
                 <section>
@@ -2096,7 +2352,7 @@ export default function FunilTab() {
                       className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/30 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                     >
                       {markingAction === 'mark_no_show' ? <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                      Não Compareceu
+                      No-Show
                     </button>
                   </div>
                 </section>

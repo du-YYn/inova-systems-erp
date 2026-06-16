@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Plus, Search, Circle, PlayCircle, CheckCircle2, Trash2, X
+  Plus, Search, Trash2, X, PauseCircle, XCircle
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -18,6 +18,9 @@ interface Project {
   description: string;
   customer_name: string | null;
   status: string;
+  etapa_atual: string;
+  situacao: 'ativo' | 'em_espera' | 'cancelado';
+  tipo: '' | 'fechado' | 'recorrente';
   progress: number;
   start_date: string | null;
   end_date: string | null;
@@ -31,25 +34,59 @@ interface Customer {
   name: string;
 }
 
-const planningStatuses = ['planning', 'kickoff', 'requirements'];
-const executionStatuses = ['development', 'testing', 'deployment'];
-const completedStatuses = ['completed'];
-
-const statusColumns = [
-  { key: 'planning', label: 'Planejamento', icon: Circle, color: 'bg-gray-50 dark:bg-gray-700/50' },
-  { key: 'execution', label: 'Em Execução', icon: PlayCircle, color: 'bg-blue-50 dark:bg-blue-900/30' },
-  { key: 'completed', label: 'Concluído', icon: CheckCircle2, color: 'bg-green-50 dark:bg-green-900/30' },
+// v32 F5 (doc 10 — kanban principal): 13 colunas por etapa_atual, na ordem e
+// com os rótulos do doc 10 (Agendar … Concluído, Implementado). As CHAVES são
+// as de Project.ETAPA_CHOICES — NÃO renomear (produção com dados reais); só os
+// LABELS acompanham o doc 10.
+const etapaColumns: { key: string; label: string; accent: string }[] = [
+  { key: 'agendar', label: '1 · Agendar', accent: 'border-t-gray-400' },
+  { key: 'etapa_3_preparacao', label: '2 · Planejamento', accent: 'border-t-slate-400' },
+  { key: 'etapa_4_onboarding', label: '3 · Onboarding', accent: 'border-t-purple-400' },
+  { key: 'etapa_5_documentacao', label: '4 · Documentação', accent: 'border-t-amber-400' },
+  { key: 'etapa_6_validacao_doc', label: '5 · Validação da doc', accent: 'border-t-violet-500' },
+  { key: 'etapa_7_desenvolvimento', label: '6 · Desenvolvimento', accent: 'border-t-yellow-500' },
+  { key: 'etapa_8_auditoria', label: '7 · Auditoria interna', accent: 'border-t-emerald-500' },
+  { key: 'etapa_9_apresentacao', label: '8 · Reunião de Apresentação', accent: 'border-t-cyan-500' },
+  { key: 'homologacao', label: '9 · Janela de teste', accent: 'border-t-sky-500' },
+  { key: 'registro_entrega', label: '10 · Re-Update', accent: 'border-t-orange-400' },
+  { key: 'etapa_10_graduacao', label: '11 · Homologação', accent: 'border-t-green-500' },
+  { key: 'implementacao', label: '12 · Concluído', accent: 'border-t-teal-500' },
+  { key: 'recorrencia', label: '13 · Implementado', accent: 'border-t-accent-gold' },
 ];
+
+const tipoLabels: Record<string, string> = {
+  fechado: 'Fechado',
+  recorrente: 'Recorrente',
+};
 
 const formatCurrency = (value: string | number | null) => {
   if (!value) return null;
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value));
 };
 
+function SituacaoBadge({ situacao }: { situacao: Project['situacao'] }) {
+  if (situacao === 'em_espera') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+        <PauseCircle className="w-3 h-3" aria-hidden /> Em espera
+      </span>
+    );
+  }
+  if (situacao === 'cancelado') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300">
+        <XCircle className="w-3 h-3" aria-hidden /> Cancelado
+      </span>
+    );
+  }
+  return null;
+}
+
 const EMPTY_FORM = {
   name: '',
   description: '',
   project_type: 'custom_dev',
+  tipo: '',
   billing_type: 'fixed',
   start_date: '',
   end_date: '',
@@ -60,9 +97,9 @@ const EMPTY_FORM = {
 };
 
 const KanbanSkeleton = () => (
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-    {Array.from({ length: 3 }).map((_, col) => (
-      <div key={col} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+  <div className="flex gap-4 overflow-x-auto pb-4">
+    {Array.from({ length: 5 }).map((_, col) => (
+      <div key={col} className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 w-72 shrink-0">
         <div className="h-5 bg-gray-200 dark:bg-gray-600 rounded w-32 mb-4 animate-pulse" />
         <div className="space-y-3">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -92,6 +129,36 @@ export default function ProjectsPage() {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // v32 T02: barra de rolagem horizontal sincronizada no TOPO do kanban — com
+  // colunas altas, evita ter que descer até o rodapé pra mover o board.
+  const kanbanRef = useRef<HTMLDivElement>(null);
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const [kanbanScrollW, setKanbanScrollW] = useState(0);
+  const syncingScroll = useRef(false);
+
+  useEffect(() => {
+    const measure = () => {
+      if (kanbanRef.current) setKanbanScrollW(kanbanRef.current.scrollWidth);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [loading, projects]);
+
+  const handleTopScroll = useCallback(() => {
+    if (syncingScroll.current || !kanbanRef.current || !topScrollRef.current) return;
+    syncingScroll.current = true;
+    kanbanRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+    requestAnimationFrame(() => { syncingScroll.current = false; });
+  }, []);
+
+  const handleKanbanScroll = useCallback(() => {
+    if (syncingScroll.current || !kanbanRef.current || !topScrollRef.current) return;
+    syncingScroll.current = true;
+    topScrollRef.current.scrollLeft = kanbanRef.current.scrollLeft;
+    requestAnimationFrame(() => { syncingScroll.current = false; });
+  }, []);
 
   const isDirty = useMemo(() => {
     return formData.name !== '' || formData.customer !== '' ||
@@ -153,14 +220,8 @@ export default function ProjectsPage() {
     p.customer_name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getProjectsByColumn = (columnKey: string) => {
-    const map: Record<string, string[]> = {
-      planning: planningStatuses,
-      execution: executionStatuses,
-      completed: completedStatuses,
-    };
-    return filteredProjects.filter(p => map[columnKey]?.includes(p.status));
-  };
+  const getProjectsByColumn = (columnKey: string) =>
+    filteredProjects.filter(p => p.etapa_atual === columnKey);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,6 +236,7 @@ export default function ProjectsPage() {
         notes: formData.notes,
       };
       if (formData.customer) body.customer = Number(formData.customer);
+      if (formData.tipo) body.tipo = formData.tipo;
       if (formData.start_date) body.start_date = formData.start_date;
       if (formData.end_date) body.end_date = formData.end_date;
       if (formData.budget_value) body.budget_value = formData.budget_value;
@@ -239,17 +301,32 @@ export default function ProjectsPage() {
       {loading ? (
         <KanbanSkeleton />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {statusColumns.map((column) => {
+        <>
+          {/* v32 T02: barra de rolagem horizontal no TOPO, sincronizada com o kanban */}
+          <div
+            ref={topScrollRef}
+            onScroll={handleTopScroll}
+            className="overflow-x-auto overflow-y-hidden mb-2"
+            aria-hidden="true"
+          >
+            <div style={{ width: kanbanScrollW || '100%', height: 1 }} />
+          </div>
+          <div
+            ref={kanbanRef}
+            onScroll={handleKanbanScroll}
+            className="flex gap-4 overflow-x-auto pb-4"
+            aria-label="Kanban de Produção por etapa"
+          >
+          {etapaColumns.map((column) => {
             const columnProjects = getProjectsByColumn(column.key);
             return (
-              <div key={column.key} className={`${column.color} rounded-lg p-4`}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <column.icon className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                    <h2 className="font-medium text-gray-900 dark:text-gray-100">{column.label}</h2>
-                  </div>
-                  <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-700 text-sm rounded-full">
+              <div
+                key={column.key}
+                className={`bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 w-72 shrink-0 border-t-4 ${column.accent}`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-medium text-sm text-gray-900 dark:text-gray-100">{column.label}</h2>
+                  <span className="px-2 py-0.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs rounded-full">
                     {columnProjects.length}
                   </span>
                 </div>
@@ -261,13 +338,15 @@ export default function ProjectsPage() {
                     columnProjects.map((project) => (
                       <div
                         key={project.id}
-                        className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-accent-gold transition-colors group cursor-pointer"
+                        className={`bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-accent-gold transition-colors group cursor-pointer ${
+                          project.situacao !== 'ativo' ? 'opacity-70' : ''
+                        }`}
                         onClick={() => router.push(`/projects/${project.id}`)}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-1 flex-1"><Sensitive>{project.name}</Sensitive></h3>
                           <button
-                            onClick={() => setDeleteTarget(project)}
+                            onClick={(e) => { e.stopPropagation(); setDeleteTarget(project); }}
                             className="p-1 text-gray-300 dark:text-gray-500 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
                             title="Remover projeto"
                             aria-label="Excluir"
@@ -276,8 +355,17 @@ export default function ProjectsPage() {
                           </button>
                         </div>
                         {project.customer_name && (
-                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3"><Sensitive>{project.customer_name}</Sensitive></p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2"><Sensitive>{project.customer_name}</Sensitive></p>
                         )}
+
+                        <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                          <SituacaoBadge situacao={project.situacao} />
+                          {project.tipo && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                              {tipoLabels[project.tipo]}
+                            </span>
+                          )}
+                        </div>
 
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -305,7 +393,8 @@ export default function ProjectsPage() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Create Modal */}
@@ -393,6 +482,19 @@ export default function ProjectsPage() {
                     <option value="not_billed">Não Faturado</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Modelo (v32)</label>
+                <select
+                  value={formData.tipo}
+                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                  className="input-field bg-white dark:bg-gray-800"
+                >
+                  <option value="">Não definido</option>
+                  <option value="fechado">Fechado (entrega + graduação)</option>
+                  <option value="recorrente">Recorrente (implementação + operação)</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

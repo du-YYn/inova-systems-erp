@@ -2,21 +2,21 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  Plus, Search, Filter, Tag, Clock, AlertTriangle,
-  CheckCircle2, MessageSquare, BookOpen, BarChart2,
-  X, ChevronDown, Send, User
+  Plus, Search, AlertTriangle, MessageSquare, BookOpen, BarChart2,
+  X, Send, User, Columns3, ArrowUpRight, Link2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { Sensitive } from '@/components/ui/Sensitive';
 import { useDemoMode } from '@/components/ui/DemoContext';
-import api from '@/lib/api';
+import api, { ApiError } from '@/lib/api';
 
 interface Ticket {
   id: number; number: string; title: string; description: string;
-  customer_name: string | null; priority: string; status: string;
-  ticket_type: string; assigned_to_name: string | null;
+  customer: number | null; customer_name: string | null; priority: string; status: string;
+  ticket_type: string; conclusao: string; contexto: string;
+  project_tipo: string | null; assigned_to_name: string | null;
   sla_resolution_deadline: string | null; is_sla_breached: boolean;
   comments_count: number; created_at: string; contact_name: string;
   contact_email: string;
@@ -32,10 +32,12 @@ interface KBArticle {
 }
 
 interface DashboardStats {
-  total: number; open: number; in_progress: number; pending_client: number;
-  resolved: number; sla_breached: number;
+  total: number; aberto: number; triagem: number; analise: number;
+  correcao: number; resolvido: number; fechado: number; sla_breached: number;
   by_priority: { priority: string; count: number }[];
 }
+
+interface CustomerOption { id: number; company_name: string; name: string; public_token?: string }
 
 const priorityConfig: Record<string, { label: string; color: string; dot: string }> = {
   low: { label: 'Baixa', color: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300', dot: 'bg-gray-400' },
@@ -44,30 +46,66 @@ const priorityConfig: Record<string, { label: string; color: string; dot: string
   critical: { label: 'Crítica', color: 'bg-red-100 text-red-700', dot: 'bg-red-500' },
 };
 
+// v32 F6 (doc 05 §2): fluxo novo. Statuses legados são agrupados nas
+// colunas equivalentes até a data migration realinhar tudo (F8 remove).
+const STATUS_FLOW = ['aberto', 'triagem', 'analise', 'correcao', 'resolvido', 'fechado'] as const;
+
+const LEGACY_STATUS_MAP: Record<string, string> = {
+  open: 'aberto', in_progress: 'analise', pending_client: 'resolvido',
+  resolved: 'resolvido', closed: 'fechado',
+};
+
 const statusConfig: Record<string, { label: string; color: string }> = {
-  open: { label: 'Aberto', color: 'bg-blue-100 text-blue-700' },
-  in_progress: { label: 'Em Atendimento', color: 'bg-yellow-100 text-yellow-700' },
-  pending_client: { label: 'Aguardando Cliente', color: 'bg-purple-100 text-purple-700' },
-  resolved: { label: 'Resolvido', color: 'bg-green-100 text-green-700' },
-  closed: { label: 'Fechado', color: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400' },
+  aberto: { label: 'Aberto', color: 'bg-blue-100 text-blue-700' },
+  triagem: { label: 'Triagem', color: 'bg-cyan-100 text-cyan-700' },
+  analise: { label: 'Análise', color: 'bg-yellow-100 text-yellow-700' },
+  correcao: { label: 'Correção', color: 'bg-orange-100 text-orange-700' },
+  resolvido: { label: 'Resolvido', color: 'bg-green-100 text-green-700' },
+  fechado: { label: 'Fechado', color: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400' },
+  // Legados (convivência de release)
+  open: { label: 'Aberto (legado)', color: 'bg-blue-100 text-blue-700' },
+  in_progress: { label: 'Em Atendimento (legado)', color: 'bg-yellow-100 text-yellow-700' },
+  pending_client: { label: 'Aguardando Cliente (legado)', color: 'bg-purple-100 text-purple-700' },
+  resolved: { label: 'Resolvido (legado)', color: 'bg-green-100 text-green-700' },
+  closed: { label: 'Fechado (legado)', color: 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400' },
+};
+
+const typeConfig: Record<string, string> = {
+  bug: 'Bug', duvida: 'Dúvida', mudanca: 'Mudança',
+  feature: 'Feature (legado)', question: 'Dúvida (legado)',
+  performance: 'Performance (legado)', integration: 'Integração (legado)',
+  other: 'Outro (legado)',
+};
+
+const conclusaoConfig: Record<string, { label: string; color: string }> = {
+  garantia: { label: 'Garantia', color: 'bg-emerald-100 text-emerald-700' },
+  orcamento: { label: 'Orçamento', color: 'bg-amber-100 text-amber-700' },
+  inconclusivo: { label: 'Inconclusivo → Diretoria', color: 'bg-purple-100 text-purple-700' },
+  recorrente_corrige: { label: 'Recorrente — Corrige', color: 'bg-teal-100 text-teal-700' },
+};
+
+const contextoConfig: Record<string, string> = {
+  homologacao: 'Homologação', suporte: 'Suporte',
 };
 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('pt-BR');
 const formatDateTime = (d: string) => new Date(d).toLocaleString('pt-BR');
 
+const boardColumn = (status: string) => LEGACY_STATUS_MAP[status] || status;
+
 const EMPTY_TICKET_FORM = {
   title: '', description: '', ticket_type: 'bug', priority: 'medium',
-  customer: '', contact_name: '', contact_email: '', tags: '',
+  customer: '', contact_name: '', contact_email: '', tags: '', contexto: 'suporte',
 };
 
 export default function SuportePage() {
   const toast = useToast();
   const { isDemoMode } = useDemoMode();
-  const [activeTab, setActiveTab] = useState('tickets');
+  const [activeTab, setActiveTab] = useState('board');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [kbArticles, setKbArticles] = useState<KBArticle[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [customers, setCustomers] = useState<{ id: number; company_name: string; name: string }[]>([]);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -90,7 +128,7 @@ export default function SuportePage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, string> = { page_size: '50' };
+      const params: Record<string, string> = { page_size: '100' };
       if (search) params.search = search;
       if (filterStatus) params.status = filterStatus;
       if (filterPriority) params.priority = filterPriority;
@@ -99,16 +137,16 @@ export default function SuportePage() {
         api.get<{ results?: Ticket[] }>('/support/tickets/', params).catch(() => ({ results: [] })),
         api.get<DashboardStats>('/support/tickets/dashboard/').catch(() => null),
         api.get<{ results?: KBArticle[] }>('/support/kb/', { page_size: '50' }).catch(() => ({ results: [] })),
-        api.get<{ results?: { id: number; company_name: string; name: string }[] }>('/sales/customers/', { page_size: '200' }).catch(() => ({ results: [] })),
+        api.get<{ results?: CustomerOption[] }>('/sales/customers/', { page_size: '200' }).catch(() => ({ results: [] })),
       ]);
 
       setTickets(ticketsData.results || ticketsData as unknown as Ticket[]);
       if (statsData) setStats(statsData);
       setKbArticles(kbData.results || kbData as unknown as KBArticle[]);
-      setCustomers(customersData.results || customersData as unknown as { id: number; company_name: string; name: string }[]);
+      setCustomers(customersData.results || customersData as unknown as CustomerOption[]);
     } catch { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
-  }, [search, filterStatus, filterPriority]);
+  }, [search, filterStatus, filterPriority]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -129,8 +167,8 @@ export default function SuportePage() {
 
     try {
       await api.post('/support/tickets/', body);
-      toast.success('Ticket criado!'); setShowCreateTicket(false); setTicketForm({ ...EMPTY_TICKET_FORM }); fetchAll();
-    } catch { toast.error('Erro ao criar ticket'); }
+      toast.success('Chamado criado!'); setShowCreateTicket(false); setTicketForm({ ...EMPTY_TICKET_FORM }); fetchAll();
+    } catch { toast.error('Erro ao criar chamado'); }
   };
 
   const addComment = async () => {
@@ -143,27 +181,102 @@ export default function SuportePage() {
     } catch { /* silently fail */ }
   };
 
-  const changeTicketStatus = async (action: string) => {
+  const transitionTicket = async (status: string) => {
     if (!selectedTicket) return;
     try {
-      const d = await api.post<Ticket>(`/support/tickets/${selectedTicket.id}/${action}/`);
-      toast.success('Status atualizado'); setSelectedTicket(d); fetchAll();
-    } catch { /* silently fail */ }
+      const d = await api.post<Ticket>(`/support/tickets/${selectedTicket.id}/transition/`, { status });
+      toast.success(`Movido para ${statusConfig[status]?.label || status}`);
+      setSelectedTicket(d); fetchAll();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao mover chamado');
+    }
   };
 
-  const createKBArticle = async () => {
-    if (!kbForm.title.trim()) { toast.error('Título obrigatório'); return; }
+  const analyzeTicket = async (conclusao: string) => {
+    if (!selectedTicket) return;
     try {
-      await api.post('/support/kb/', kbForm);
-      toast.success('Artigo criado!'); setShowCreateKB(false); setKbForm({ title: '', summary: '', content: '', is_public: false }); fetchAll();
-    } catch { toast.error('Erro ao criar artigo'); }
+      const d = await api.post<Ticket & { conclusao_forcada?: boolean }>(
+        `/support/tickets/${selectedTicket.id}/analyze/`, { conclusao },
+      );
+      if (d.conclusao_forcada) {
+        toast.warning('Projeto recorrente: conclusão forçada para "Recorrente — Corrige"');
+      } else {
+        toast.success('Conclusão registrada');
+      }
+      setSelectedTicket(d); fetchAll();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao registrar conclusão');
+    }
+  };
+
+  const updateContexto = async (contexto: string) => {
+    if (!selectedTicket) return;
+    try {
+      const d = await api.patch<Ticket>(`/support/tickets/${selectedTicket.id}/`, { contexto });
+      setSelectedTicket(d); fetchAll();
+    } catch { toast.error('Erro ao atualizar contexto'); }
+  };
+
+  const createPedidoUpdate = async () => {
+    if (!selectedTicket) return;
+    try {
+      await api.post(`/support/tickets/${selectedTicket.id}/pedido-update/`, {});
+      toast.success('Pedido de update criado! O Comercial recebe na fila de promoção.');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Erro ao criar pedido de update');
+    }
+  };
+
+  const copyPublicLink = async () => {
+    if (!selectedTicket?.customer) { toast.error('Chamado sem cliente vinculado'); return; }
+    const customer = customers.find(c => c.id === selectedTicket.customer);
+    if (!customer?.public_token) { toast.error('Cliente sem token público'); return; }
+    const link = `${window.location.origin}/chamado/${customer.public_token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success('Link público copiado!');
+    } catch { toast.error('Não foi possível copiar o link'); }
   };
 
   const tabs = [
-    { key: 'tickets', label: `Tickets (${tickets.length})`, icon: MessageSquare },
+    { key: 'board', label: 'Board', icon: Columns3 },
+    { key: 'tickets', label: `Chamados (${tickets.length})`, icon: MessageSquare },
     { key: 'kb', label: 'Base de Conhecimento', icon: BookOpen },
     { key: 'dashboard', label: 'Dashboard', icon: BarChart2 },
   ];
+
+  const ticketCard = (ticket: Ticket) => (
+    <div key={ticket.id}
+      onClick={() => openTicketDetail(ticket)}
+      className="bg-white dark:bg-gray-800 rounded-xl p-3 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-accent-gold/40 cursor-pointer transition-all">
+      <div className="flex items-start gap-2">
+        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${priorityConfig[ticket.priority]?.dot || 'bg-gray-300'}`} />
+        <div className="flex-1 min-w-0">
+          <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">#<Sensitive>{ticket.number}</Sensitive></span>
+          <p className="font-medium text-gray-800 dark:text-gray-100 text-sm leading-tight truncate"><Sensitive>{ticket.title}</Sensitive></p>
+          {ticket.customer_name && <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate mt-0.5"><Sensitive>{ticket.customer_name}</Sensitive></p>}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+              {typeConfig[ticket.ticket_type] || ticket.ticket_type}
+            </span>
+            {ticket.conclusao && (
+              <span className={`px-1.5 py-0.5 text-[10px] rounded-full ${conclusaoConfig[ticket.conclusao]?.color || 'bg-gray-100 text-gray-600'}`}>
+                {conclusaoConfig[ticket.conclusao]?.label || ticket.conclusao}
+              </span>
+            )}
+            {ticket.contexto === 'homologacao' && (
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-indigo-100 text-indigo-700">Homologação</span>
+            )}
+            {ticket.is_sla_breached && (
+              <span className="flex items-center gap-0.5 text-[10px] text-red-500 font-medium">
+                <AlertTriangle className="w-3 h-3" /> SLA
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -171,12 +284,12 @@ export default function SuportePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Suporte</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Help Desk e Base de Conhecimento</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">CRM de chamados, triagem e base de conhecimento</p>
         </div>
-        {activeTab === 'tickets' && (
+        {(activeTab === 'tickets' || activeTab === 'board') && (
           <button onClick={() => setShowCreateTicket(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-accent-gold text-white rounded-xl text-sm font-medium hover:bg-accent-gold-dark">
-            <Plus className="w-4 h-4" /> Novo Ticket
+            <Plus className="w-4 h-4" /> Novo Chamado
           </button>
         )}
         {activeTab === 'kb' && (
@@ -203,6 +316,34 @@ export default function SuportePage() {
         })}
       </div>
 
+      {/* BOARD TAB (v32 F6: colunas do fluxo novo) */}
+      {activeTab === 'board' && (
+        <div className="overflow-x-auto pb-2">
+          <div className="flex gap-3 min-w-[1100px]">
+            {STATUS_FLOW.map(col => {
+              const colTickets = tickets.filter(t => boardColumn(t.status) === col);
+              return (
+                <div key={col} className="flex-1 min-w-[170px]">
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${statusConfig[col].color}`}>
+                      {statusConfig[col].label}
+                    </span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 font-medium">{colTickets.length}</span>
+                  </div>
+                  <div className="space-y-2 bg-gray-50 dark:bg-gray-800/40 rounded-xl p-2 min-h-[120px]">
+                    {loading && <div className="h-20 bg-white dark:bg-gray-800 rounded-xl animate-pulse" />}
+                    {!loading && colTickets.map(ticketCard)}
+                    {!loading && colTickets.length === 0 && (
+                      <p className="text-center text-xs text-gray-300 dark:text-gray-600 py-6">Vazio</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* TICKETS TAB */}
       {activeTab === 'tickets' && (
         <div className="space-y-4">
@@ -211,12 +352,12 @@ export default function SuportePage() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <input className="pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm w-full outline-none focus:border-accent-gold"
-                placeholder="Buscar tickets..." value={search} onChange={e => setSearch(e.target.value)} />
+                placeholder="Buscar chamados..." value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <select className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm outline-none"
               value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
               <option value="">Todos os status</option>
-              {Object.entries(statusConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              {STATUS_FLOW.map(s => <option key={s} value={s}>{statusConfig[s].label}</option>)}
             </select>
             <select className="px-3 py-2 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl text-sm outline-none"
               value={filterPriority} onChange={e => setFilterPriority(e.target.value)}>
@@ -236,16 +377,8 @@ export default function SuportePage() {
                       <div className="flex-1 min-w-0 space-y-2">
                         <div className="h-3 w-20 bg-gray-200 rounded" />
                         <div className="h-4 w-3/4 bg-gray-200 rounded" />
-                        <div className="flex gap-3 mt-2">
-                          <div className="h-3 w-16 bg-gray-100 dark:bg-gray-700 rounded" />
-                          <div className="h-3 w-12 bg-gray-100 dark:bg-gray-700 rounded" />
-                          <div className="h-3 w-20 bg-gray-100 dark:bg-gray-700 rounded" />
-                        </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <div className="h-5 w-20 bg-gray-200 rounded-full" />
-                        <div className="h-5 w-14 bg-gray-100 dark:bg-gray-700 rounded-full" />
-                      </div>
+                      <div className="h-5 w-20 bg-gray-200 rounded-full" />
                     </div>
                   </div>
                 ))}
@@ -274,6 +407,7 @@ export default function SuportePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-400 dark:text-gray-500">
+                      <span className="px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700">{typeConfig[ticket.ticket_type] || ticket.ticket_type}</span>
                       {ticket.assigned_to_name && <span className="flex items-center gap-1"><User className="w-3 h-3" /><Sensitive>{ticket.assigned_to_name}</Sensitive></span>}
                       <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" />{ticket.comments_count}</span>
                       <span>{formatDate(ticket.created_at)}</span>
@@ -289,7 +423,7 @@ export default function SuportePage() {
             ))}
             {!loading && tickets.length === 0 && (
               <div className="text-center py-16 bg-white dark:bg-gray-800 rounded-xl text-gray-400 dark:text-gray-500">
-                Nenhum ticket encontrado.
+                Nenhum chamado encontrado.
               </div>
             )}
           </div>
@@ -303,11 +437,6 @@ export default function SuportePage() {
             <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 animate-pulse space-y-3">
               <div className="h-5 w-3/4 bg-gray-200 rounded" />
               <div className="h-3 w-full bg-gray-100 dark:bg-gray-700 rounded" />
-              <div className="h-3 w-1/2 bg-gray-100 dark:bg-gray-700 rounded" />
-              <div className="flex gap-3">
-                <div className="h-3 w-16 bg-gray-100 dark:bg-gray-700 rounded" />
-                <div className="h-3 w-20 bg-gray-100 dark:bg-gray-700 rounded" />
-              </div>
             </div>
           ))}
           {!loading && kbArticles.map(article => (
@@ -340,33 +469,20 @@ export default function SuportePage() {
 
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && loading && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {Array.from({ length: 6 }).map((_, i) => <CardSkeleton key={i} />)}
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 animate-pulse">
-            <div className="h-5 w-32 bg-gray-200 rounded mb-4" />
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="h-5 w-20 bg-gray-200 rounded-full" />
-                  <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-2" />
-                  <div className="h-4 w-6 bg-gray-100 dark:bg-gray-700 rounded" />
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          {Array.from({ length: 7 }).map((_, i) => <CardSkeleton key={i} />)}
         </div>
       )}
       {activeTab === 'dashboard' && !loading && stats && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {[
               { label: 'Total', value: stats.total, color: 'text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-700/50' },
-              { label: 'Abertos', value: stats.open, color: 'text-blue-700 bg-blue-50' },
-              { label: 'Em Atendimento', value: stats.in_progress, color: 'text-yellow-700 bg-yellow-50' },
-              { label: 'Aguardando', value: stats.pending_client, color: 'text-purple-700 bg-purple-50' },
-              { label: 'Resolvidos', value: stats.resolved, color: 'text-green-700 bg-green-50' },
+              { label: 'Abertos', value: stats.aberto, color: 'text-blue-700 bg-blue-50' },
+              { label: 'Triagem', value: stats.triagem, color: 'text-cyan-700 bg-cyan-50' },
+              { label: 'Análise', value: stats.analise, color: 'text-yellow-700 bg-yellow-50' },
+              { label: 'Correção', value: stats.correcao, color: 'text-orange-700 bg-orange-50' },
+              { label: 'Resolvidos', value: stats.resolvido, color: 'text-green-700 bg-green-50' },
               { label: 'SLA Violado', value: stats.sla_breached, color: 'text-red-700 bg-red-50' },
             ].map(s => (
               <div key={s.label} className={`rounded-xl p-4 ${s.color}`}>
@@ -399,13 +515,13 @@ export default function SuportePage() {
         </div>
       )}
 
-      {/* Modal: Criar Ticket */}
+      {/* Modal: Criar Chamado */}
       {showCreateTicket && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <FocusTrap onClose={() => setShowCreateTicket(false)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white dark:bg-gray-800 z-10">
-              <h2 className="font-semibold text-gray-800 dark:text-gray-100">Novo Ticket de Suporte</h2>
+              <h2 className="font-semibold text-gray-800 dark:text-gray-100">Novo Chamado de Suporte</h2>
               <button onClick={() => setShowCreateTicket(false)} aria-label="Fechar"><X className="w-5 h-5 text-gray-400 dark:text-gray-500" /></button>
             </div>
             <div className="p-5 space-y-4">
@@ -414,13 +530,13 @@ export default function SuportePage() {
                 <input className="input-field mt-1" value={ticketForm.title}
                   onChange={e => setTicketForm(f => ({ ...f, title: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Tipo</label>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Tipo (triagem)</label>
                   <select className="input-field mt-1" value={ticketForm.ticket_type}
                     onChange={e => setTicketForm(f => ({ ...f, ticket_type: e.target.value }))}>
-                    {['bug', 'feature', 'question', 'performance', 'integration', 'other'].map(t => (
-                      <option key={t} value={t}>{t}</option>
+                    {['bug', 'duvida', 'mudanca'].map(t => (
+                      <option key={t} value={t}>{typeConfig[t]}</option>
                     ))}
                   </select>
                 </div>
@@ -430,6 +546,15 @@ export default function SuportePage() {
                     onChange={e => setTicketForm(f => ({ ...f, priority: e.target.value }))}>
                     {['low', 'medium', 'high', 'critical'].map(p => (
                       <option key={p} value={p}>{priorityConfig[p].label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 dark:text-gray-300">Contexto</label>
+                  <select className="input-field mt-1" value={ticketForm.contexto}
+                    onChange={e => setTicketForm(f => ({ ...f, contexto: e.target.value }))}>
+                    {Object.entries(contextoConfig).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
                     ))}
                   </select>
                 </div>
@@ -468,18 +593,18 @@ export default function SuportePage() {
             </div>
             <div className="p-5 border-t flex justify-end gap-3">
               <button onClick={() => setShowCreateTicket(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancelar</button>
-              <button onClick={createTicket} className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark">Criar Ticket</button>
+              <button onClick={createTicket} className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark">Criar Chamado</button>
             </div>
           </div>
           </FocusTrap>
         </div>
       )}
 
-      {/* Modal: Detalhe do Ticket */}
+      {/* Drawer: Detalhe do Chamado */}
       {selectedTicket && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex justify-end">
           <FocusTrap onClose={() => setSelectedTicket(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+          <div className="bg-white dark:bg-gray-800 w-full max-w-xl h-full shadow-2xl flex flex-col">
             <div className="flex items-center justify-between p-5 border-b">
               <div>
                 <span className="text-xs font-mono text-gray-400 dark:text-gray-500">#<Sensitive>{selectedTicket.number}</Sensitive></span>
@@ -492,11 +617,19 @@ export default function SuportePage() {
               {/* Status badges */}
               <div className="flex gap-2 flex-wrap">
                 <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${statusConfig[selectedTicket.status]?.color}`}>
-                  {statusConfig[selectedTicket.status]?.label}
+                  {statusConfig[selectedTicket.status]?.label || selectedTicket.status}
                 </span>
                 <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${priorityConfig[selectedTicket.priority]?.color}`}>
                   {priorityConfig[selectedTicket.priority]?.label}
                 </span>
+                <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                  {typeConfig[selectedTicket.ticket_type] || selectedTicket.ticket_type}
+                </span>
+                {selectedTicket.conclusao && (
+                  <span className={`px-2.5 py-0.5 text-xs font-medium rounded-full ${conclusaoConfig[selectedTicket.conclusao]?.color}`}>
+                    {conclusaoConfig[selectedTicket.conclusao]?.label || selectedTicket.conclusao}
+                  </span>
+                )}
                 {selectedTicket.is_sla_breached && (
                   <span className="px-2.5 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700 flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" /> SLA Violado
@@ -509,21 +642,70 @@ export default function SuportePage() {
                 <p><Sensitive>{selectedTicket.description}</Sensitive></p>
               </div>
 
-              {/* Quick actions */}
-              <div className="flex gap-2">
-                {selectedTicket.status !== 'resolved' && selectedTicket.status !== 'closed' && (
-                  <button onClick={() => changeTicketStatus('resolve')}
-                    className="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-medium">
-                    Resolver
-                  </button>
-                )}
-                {selectedTicket.status === 'resolved' && (
-                  <button onClick={() => changeTicketStatus('close')}
-                    className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-200 font-medium">
-                    Fechar
-                  </button>
+              {/* Contexto (doc 05 §5) */}
+              <div className="flex items-center gap-3">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">Contexto</label>
+                <select
+                  className="px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-lg outline-none"
+                  value={selectedTicket.contexto}
+                  onChange={e => updateContexto(e.target.value)}>
+                  {Object.entries(contextoConfig).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </select>
+                {selectedTicket.project_tipo && (
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
+                    Projeto: {selectedTicket.project_tipo === 'recorrente' ? 'Recorrente' : 'Fechado'}
+                  </span>
                 )}
               </div>
+
+              {/* Mover no fluxo */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-2">Mover para</h3>
+                <div className="flex gap-1.5 flex-wrap">
+                  {STATUS_FLOW.filter(s => s !== boardColumn(selectedTicket.status)).map(s => (
+                    <button key={s} onClick={() => transitionTicket(s)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-medium hover:opacity-80 ${statusConfig[s].color}`}>
+                      {statusConfig[s].label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conclusão da Análise (doc 05 §3/§4) */}
+              {boardColumn(selectedTicket.status) === 'analise' && (
+                <div className="border border-yellow-200 dark:border-yellow-900/50 bg-yellow-50/50 dark:bg-yellow-900/10 rounded-xl p-3">
+                  <h3 className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase mb-1">Conclusão da Análise</h3>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+                    Projeto recorrente sempre corrige (contrato mensal). Inconclusivo escala para a Diretoria.
+                  </p>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {Object.entries(conclusaoConfig).map(([k, v]) => (
+                      <button key={k} onClick={() => analyzeTicket(k)}
+                        className={`px-2.5 py-1 text-xs rounded-lg font-medium hover:opacity-80 ${v.color}`}>
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Pedido de update (doc 05 §6) */}
+              {(selectedTicket.ticket_type === 'mudanca' || selectedTicket.ticket_type === 'feature') && (
+                <button onClick={createPedidoUpdate}
+                  className="flex items-center gap-2 px-3 py-2 text-xs bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 font-medium">
+                  <ArrowUpRight className="w-3.5 h-3.5" /> Virar pedido de update (Comercial)
+                </button>
+              )}
+
+              {/* Link público */}
+              {selectedTicket.customer && (
+                <button onClick={copyPublicLink}
+                  className="flex items-center gap-2 px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 font-medium">
+                  <Link2 className="w-3.5 h-3.5" /> Copiar link público do cliente
+                </button>
+              )}
 
               {/* Comments */}
               <div>
@@ -600,7 +782,13 @@ export default function SuportePage() {
             </div>
             <div className="p-5 border-t flex justify-end gap-3">
               <button onClick={() => setShowCreateKB(false)} className="px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">Cancelar</button>
-              <button onClick={createKBArticle} className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark">Criar Artigo</button>
+              <button onClick={async () => {
+                if (!kbForm.title.trim()) { toast.error('Título obrigatório'); return; }
+                try {
+                  await api.post('/support/kb/', kbForm);
+                  toast.success('Artigo criado!'); setShowCreateKB(false); setKbForm({ title: '', summary: '', content: '', is_public: false }); fetchAll();
+                } catch { toast.error('Erro ao criar artigo'); }
+              }} className="px-4 py-2 text-sm bg-accent-gold text-white rounded-lg hover:bg-accent-gold-dark">Criar Artigo</button>
             </div>
           </div>
           </FocusTrap>

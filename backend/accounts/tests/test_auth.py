@@ -263,18 +263,18 @@ class TestChangePassword:
     def test_change_password_success(self, auth_client, regular_user):
         response = auth_client.post(self.url, {
             'old_password': 'operator_pass_123',
-            'new_password': 'new_secure_pass_456',
-            'new_password_confirm': 'new_secure_pass_456',
+            'new_password': 'New#SecurePass456',
+            'new_password_confirm': 'New#SecurePass456',
         })
         assert response.status_code == status.HTTP_200_OK
         regular_user.refresh_from_db()
-        assert regular_user.check_password('new_secure_pass_456')
+        assert regular_user.check_password('New#SecurePass456')
 
     def test_change_password_wrong_old(self, auth_client):
         response = auth_client.post(self.url, {
             'old_password': 'wrong_old_pass',
-            'new_password': 'new_secure_pass_456',
-            'new_password_confirm': 'new_secure_pass_456',
+            'new_password': 'New#SecurePass456',
+            'new_password_confirm': 'New#SecurePass456',
         })
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -308,11 +308,11 @@ class TestPasswordReset:
 
         response = api_client.post(self.confirm_url, {
             'token': token,
-            'new_password': 'brand_new_pass_789',
+            'new_password': 'Brand#NewPass789',
         })
         assert response.status_code == status.HTTP_200_OK
         regular_user.refresh_from_db()
-        assert regular_user.check_password('brand_new_pass_789')
+        assert regular_user.check_password('Brand#NewPass789')
         assert regular_user.password_reset_token is None
 
     def test_reset_confirm_expired_token(self, api_client, regular_user):
@@ -324,14 +324,14 @@ class TestPasswordReset:
 
         response = api_client.post(self.confirm_url, {
             'token': 'expired_token',
-            'new_password': 'brand_new_pass_789',
+            'new_password': 'Brand#NewPass789',
         })
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_reset_confirm_invalid_token(self, api_client):
         response = api_client.post(self.confirm_url, {
             'token': 'nonexistent_token',
-            'new_password': 'brand_new_pass_789',
+            'new_password': 'Brand#NewPass789',
         })
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 

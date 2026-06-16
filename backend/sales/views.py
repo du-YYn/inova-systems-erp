@@ -20,12 +20,12 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from core.audit import log_audit
+from core.audit import capture_exception, log_audit
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from accounts.permissions import (
-    IsAdminOrManagerOrOperator, IsAdminOrManagerOrOperatorStrict, IsAdminOrReadOnly,
+    HasSectorAccess, IsAdminOrReadOnly,
 )
 from .models import (
     Customer, Prospect, Proposal, Contract, ProspectActivity, WinLossReason,
@@ -43,6 +43,20 @@ from .serializers import (
 )
 
 logger = logging.getLogger('sales')
+
+# v32 ajustes (doc 09 §T-E2E P2.8): o Comercial passa a usar RBAC por setor
+# (padrão F3, accounts.permissions.HasSectorAccess), espelhando o Financeiro
+# (finance.views.FinanceSectorAccess). Fecha a segregação financeiro->comercial:
+#   - operador/gerente DO setor comercial escreve no CRM (prospects/proposals/
+#     onboardings/customers/contracts);
+#   - quem é de OUTRO setor (ex.: financeiro) só LÊ — não cria/edita prospect
+#     (era o bug: fran/financeiro conseguia criar prospect);
+#   - admin mantém bypass total; viewer mantém leitura global (matriz
+#     SECTOR_ACCESS_MATRIX).
+# Endpoints PÚBLICOS (website-lead, proposal/onboarding public) e n8n NÃO usam
+# estas ViewSets — vivem em views_public.py / n8n_views.py com auth própria, e
+# ficam INTACTOS.
+CommercialSectorAccess = HasSectorAccess('comercial')
 
 
 def _apply_period_filter(queryset, request, field='created_at'):
@@ -99,7 +113,7 @@ class DynamicPageSizePagination(PageNumberPagination):
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.select_related('created_by')
     serializer_class = CustomerSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):
@@ -155,13 +169,57 @@ class CustomerViewSet(viewsets.ModelViewSet):
         )
         return super().destroy(request, *args, **kwargs)
 
+    @staticmethod
+    def _can_export_pii(user):
+        """H3: quem pode exportar PII de cliente (LGPD).
+
+        Permitido: admin (sempre); manager/operador DO comercial (ou sem setor
+        atribuído — fallback role-based do H2). Negado: viewer (leitura global,
+        mas PII não) e partner.
+        """
+        if not user or not user.is_authenticated:
+            return False
+        if user.role == 'admin':
+            return True
+        if user.role not in ('manager', 'operator'):
+            return False  # viewer / partner / futuros
+        user_sectors = set(user.sectors or [])
+        # Sem setor -> fallback role-based (consistente com H2). Com setor ->
+        # precisa ser do comercial (dono do recurso Customer).
+        if not user_sectors:
+            return True
+        return 'comercial' in user_sectors
+
     @action(detail=True, methods=['get'], url_path='data-export')
     def data_export(self, request, pk=None):
         """LGPD Art. 18 II — direito de acesso aos dados.
 
         Retorna JSON com todos os dados pessoais do titular (cadastro,
         contratos, invoices, propostas, prospects). Gera audit log.
+
+        H3 (code review): a permission base (CommercialSectorAccess) libera
+        leitura global ao `viewer`, então o viewer conseguiria EXPORTAR PII de
+        cliente. Esta é uma exportação de dados pessoais (LGPD) — restringe-se
+        a admin/manager/operador DO comercial (mesma lógica do H2: manager/
+        operator sem setor caem no fallback role-based). Checagem ADITIVA na
+        action, sem mexer na permission base da ViewSet.
         """
+        if not self._can_export_pii(request.user):
+            log_audit(
+                request.user, 'customer_data_export_denied', 'customer', pk,
+                details=(
+                    'Tentativa de exportar PII negada — papel/setor sem '
+                    'permissão (LGPD).'
+                ),
+                request=request,
+            )
+            return Response(
+                {'error': (
+                    'Você não tem permissão para exportar dados pessoais de '
+                    'cliente.'
+                )},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         customer = self.get_object()
         from finance.models import Invoice
 
@@ -305,8 +363,41 @@ class CustomerViewSet(viewsets.ModelViewSet):
 class ProspectViewSet(viewsets.ModelViewSet):
     queryset = Prospect.objects.select_related('customer', 'assigned_to', 'created_by')
     serializer_class = ProspectSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
+
+    # ── Transições v32 (F2) ─────────────────────────────────────────────────
+    # Os 4 status NOVOS só podem ser alcançados a partir dos status abaixo
+    # (caminho principal do doc processo-v32/01-comercial §3). Transições para
+    # status pré-existentes seguem permissivas (fluxos vivos em produção);
+    # sair de um status novo também é livre (escape hatch operacional).
+    V32_TRANSITIONS_INTO_NEW = {
+        # qualified ──[SDR envia convite]──► meeting_invite
+        # follow_up(nao_agendou) pode ser reativado com novo convite
+        'meeting_invite': {'qualified', 'follow_up'},
+        # meeting_1_done ──[closer aciona Dev]──► tech_analysis
+        # meeting_done (legado) aceito durante a convivência de 1 release
+        'tech_analysis': {'meeting_1_done', 'meeting_done'},
+        # tech_analysis ──[Dev define escopo/prazo/valor]──► meeting_2_done
+        'meeting_2_done': {'tech_analysis'},
+        # Coleta de Dados: no fluxo v32, a APROVAÇÃO DA PROPOSTA (status
+        # proposal) move o card para coleta_de_dados — não mais "won ->
+        # data_collection". data_collection é o sinônimo legado de
+        # coleta_de_dados; ambos compartilham os mesmos origens válidos
+        # (doc 09 §T-E2E P0.2). won/proposal continuam aceitos pra não
+        # quebrar registros e fluxos vivos.
+        'data_collection': {'won', 'proposal', 'coleta_de_dados'},
+    }
+
+    # Subject da ProspectActivity automática criada ao entrar num status novo.
+    # O activity_type é o próprio código do status (ver ACTIVITY_TYPE_CHOICES).
+    V32_STATUS_ACTIVITY_SUBJECT = {
+        'meeting_invite': 'Convite para Reunião enviado',
+        'meeting_1_done': 'Reunião 1 realizada',
+        'tech_analysis': 'Análise técnica e proposta iniciada',
+        'meeting_2_done': 'Reunião 2 realizada',
+        'data_collection': 'Coleta de dados iniciada',
+    }
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -318,6 +409,33 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         prospect = serializer.save(created_by=self.request.user)
         log_crm_activity(prospect, 'lead_created', f'Lead recebido — {prospect.company_name}', self.request.user)
+
+    def _audit_status_change(self, prospect, old_status, new_status, origin='ui'):
+        """Trilha de auditoria de TODA transição de status (v32 §7.1)."""
+        log_audit(
+            self.request.user,
+            action='prospect_status_change',
+            resource_type='prospect',
+            resource_id=prospect.id,
+            details=f'{old_status} -> {new_status} (origin={origin})',
+            old_value={'status': old_status},
+            new_value={'status': new_status},
+            request=self.request,
+        )
+
+    def _log_status_activity(self, prospect, old_status, new_status):
+        """ProspectActivity automática: tipo específico para status novos v32,
+        genérica (status_changed) para os demais."""
+        if new_status in self.V32_STATUS_ACTIVITY_SUBJECT:
+            log_crm_activity(
+                prospect, new_status,
+                self.V32_STATUS_ACTIVITY_SUBJECT[new_status],
+                self.request.user,
+            )
+        else:
+            from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
+            to_label = dict(Prospect.STATUS_CHOICES).get(new_status, new_status)
+            log_crm_activity(prospect, 'status_changed', f'{from_label} → {to_label}', self.request.user)
 
     def perform_update(self, serializer):
         from rest_framework.exceptions import ValidationError as DRFValidationError
@@ -340,18 +458,45 @@ class ProspectViewSet(viewsets.ModelViewSet):
                     )
                 })
 
+        # v32 F2: transição inválida para status novo retorna 400 sem mudar estado
+        if (
+            new_status != old_status
+            and new_status in self.V32_TRANSITIONS_INTO_NEW
+            and old_status not in self.V32_TRANSITIONS_INTO_NEW[new_status]
+        ):
+            allowed = ', '.join(sorted(self.V32_TRANSITIONS_INTO_NEW[new_status]))
+            raise DRFValidationError({
+                'status': (
+                    f'Transição inválida: {old_status} → {new_status}. '
+                    f'"{new_status}" só pode ser alcançado a partir de: {allowed}.'
+                )
+            })
+
         instance = serializer.save()
-        # Log status change
+        # Log status change (atividade CRM + trilha de auditoria)
         if old_status and old_status != instance.status:
-            from_label = dict(Prospect.STATUS_CHOICES).get(old_status, old_status)
-            to_label = dict(Prospect.STATUS_CHOICES).get(instance.status, instance.status)
-            log_crm_activity(instance, 'status_changed', f'{from_label} → {to_label}', self.request.user)
-        hot_statuses = ('scheduled', 'pre_meeting', 'meeting_done', 'proposal', 'won', 'production')
+            self._log_status_activity(instance, old_status, instance.status)
+            self._audit_status_change(instance, old_status, instance.status)
+        hot_statuses = (
+            'scheduled', 'pre_meeting', 'meeting_done', 'meeting_1_done',
+            'tech_analysis', 'meeting_2_done', 'proposal', 'won',
+            'data_collection', 'production',
+        )
         if instance.status in hot_statuses and instance.temperature != 'hot':
             instance.temperature = 'hot'
             instance.save(update_fields=['temperature'])
-        # Gerar faturas ao fechar lead
-        if old_status != 'won' and instance.status == 'won':
+        # Gerar faturas/comissão ao fechar lead.
+        # v32: o funil novo fecha o card pela coluna "Projeto Fechado"
+        # (status `projeto_fechado`) — não mais por `won` (que virou apenas o
+        # alias legado, ver frontend COLUMN_STATUS_ALIASES). O gate exclusivo
+        # em `won` deixava o caminho PRIMÁRIO de fechamento (drag → projeto_fechado)
+        # sem gerar PartnerCommission/recebíveis (perda silenciosa de comissão do
+        # parceiro indicador). Tratamos os status de fechamento como equivalentes.
+        # Idempotente: _generate_partner_commission deduplica via
+        # PartnerCommission.filter(prospect=...).exists(); _generate_receivables
+        # via prospect.receivables_generated_at.
+        CLOSING_STATUSES = ('won', 'projeto_fechado')
+        if old_status not in CLOSING_STATUSES and instance.status in CLOSING_STATUSES:
             self._generate_receivables(instance, self.request.user)
             self._generate_partner_commission(instance)
         # Marcar entrada como paga ao ir para produção
@@ -421,8 +566,28 @@ class ProspectViewSet(viewsets.ModelViewSet):
             })
 
     @staticmethod
+    def _proposal_plan_exists(prospect):
+        """True se o prospect tem proposta aprovada/convertida COM plano de
+        pagamento — nesse caso o pré-cadastro F4 (a partir do
+        ProposalPaymentPlan) é a fonte da verdade dos recebíveis, e o caminho
+        legado NÃO deve gerar nada (dedupe da cobrança em dobro, doc 09 §04 E).
+        """
+        return Proposal.objects.filter(
+            prospect=prospect,
+            status__in=['approved', 'converted'],
+            payment_plan__isnull=False,
+        ).exists()
+
+    @staticmethod
     def _generate_receivables(prospect, user):
-        """Gera faturas A Receber ao fechar lead.
+        """Gera faturas A Receber ao fechar lead (CAMINHO LEGADO).
+
+        v32 ajustes (doc 09 §04 item E / cobrança em dobro do teste E2E): se
+        existe proposta com ProposalPaymentPlan, os recebíveis nascem do
+        pré-cadastro F4 (finance.services.precadastrar_invoice_da_proposta) na
+        submissão da Coleta de Dados. Para NÃO cobrar em dobro, este caminho
+        legado só roda quando NÃO há plano de pagamento na proposta (leads
+        antigos sem plano estruturado).
 
         Idempotente: se `prospect.receivables_generated_at` ja esta setado,
         nao gera de novo (evita duplicacao em won -> production -> won).
@@ -430,14 +595,43 @@ class ProspectViewSet(viewsets.ModelViewSet):
         transacao — se qualquer parcela falhar, nenhuma fica commitada.
         """
         from finance.models import Invoice
+        from finance.invoice_generator import _next_invoice_number
         from django.db import transaction as db_tx
         from datetime import date
+        from decimal import Decimal, ROUND_HALF_UP
 
         # Bug #3: idempotencia — nao re-gerar se ja rodou
         if prospect.receivables_generated_at is not None:
             return
 
-        total = float(prospect.proposal_value or prospect.estimated_value or 0)
+        # Dedupe (cobrança em dobro): o pré-cadastro F4 da proposta cobre este
+        # prospect — não gerar recebíveis legados em paralelo.
+        #
+        # CORREÇÃO (deploy v32 sobre prod): o dedupe só é válido quando o F4
+        # REALMENTE gera as invoices, i.e. AUTOMATION_FIN_PRECADASTRO == 'on'.
+        # Com a flag em 'off'/'dry_run' (DEFAULT = dry_run) o signal F4 só loga e
+        # NÃO cria nada; suprimir o legado nesse caso deixaria o deal SEM nenhum
+        # recebível (perda silenciosa de faturamento). Só desligamos o legado
+        # quando a automação F4 está ativa de fato.
+        from finance.flags import get_automation_flag
+        f4_active = get_automation_flag('AUTOMATION_FIN_PRECADASTRO') == 'on'
+        if f4_active and ProspectViewSet._proposal_plan_exists(prospect):
+            logger.info(
+                'Receivables legado pulado para prospect %s: proposta com '
+                'ProposalPaymentPlan existe e F4 ativo — pré-cadastro F4 é a fonte.',
+                prospect.id,
+            )
+            return
+
+        # L4 (code review): valores monetários em Decimal (não float). Os campos
+        # de Invoice são DecimalField; float introduzia erro de ponto flutuante
+        # (ex.: 0.1+0.2) que se acumula em parcelas e diverge do total.
+        def _money(amount):
+            return Decimal(str(amount or 0)).quantize(
+                Decimal('0.01'), rounding=ROUND_HALF_UP,
+            )
+
+        total = _money(prospect.proposal_value or prospect.estimated_value or 0)
         if total <= 0:
             return
 
@@ -451,21 +645,14 @@ class ProspectViewSet(viewsets.ModelViewSet):
         desc_base = f'{prospect.company_name}'
 
         def make_invoice(desc, value, due_date):
-            # select_for_update precisa estar dentro de uma transaction.atomic.
-            # O caller envolve tudo num bloco atomic mais externo (ver abaixo),
-            # entao aqui nao precisamos abrir outro.
-            last = Invoice.objects.select_for_update().filter(
-                invoice_type='receivable'
-            ).order_by('-id').first()
-            seq = 0
-            if last:
-                try:
-                    seq = int(last.number.split('-')[1])
-                except (IndexError, ValueError):
-                    seq = 0
+            # Numeração robusta via PostgreSQL sequence (invoice_seq_receivable,
+            # migration finance/0012). nextval() é atômico em nível DB — imune à
+            # colisão de REC-NNNNN que parsing do "último número" causava
+            # (IntegrityError -> 500 no teste E2E quando rodava em paralelo ao
+            # pré-cadastro F4).
             Invoice.objects.create(
                 invoice_type='receivable',
-                number=f"REC-{seq + 1:05d}",
+                number=_next_invoice_number('receivable'),
                 description=desc,
                 customer=customer,
                 value=value, discount=0, interest=0, tax=0, total=value,
@@ -485,8 +672,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
             elif pay_type == 'split':
                 pct = prospect.payment_split_pct or 50
-                entrada = round(total * pct / 100, 2)
-                entrega = round(total - entrada, 2)
+                entrada = _money(total * Decimal(pct) / Decimal('100'))
+                entrega = _money(total - entrada)
                 make_invoice(f'{desc_base} — Entrada ({pct}%)', entrada, due)
                 # Entrega: 3 meses depois
                 em = due.month + 3
@@ -500,22 +687,25 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
             elif pay_type == 'installments':
                 n = prospect.payment_installments or 1
-                parcela = round(total / n, 2)
+                parcela = _money(total / Decimal(n))
                 for i in range(n):
                     m = due.month + i
                     y = due.year + (m - 1) // 12
                     m = (m - 1) % 12 + 1
                     d = min(due.day, 28)
-                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', parcela,
+                    # Última parcela absorve a diferença de arredondamento para
+                    # o somatório bater com o total exatamente.
+                    value = parcela if i < n - 1 else total - parcela * (n - 1)
+                    make_invoice(f'{desc_base} — Parcela {i + 1}/{n}', value,
                                  date(y, m, d))
 
             elif pay_type == 'monthly':
-                mv = float(prospect.payment_monthly_value or total)
+                mv = _money(prospect.payment_monthly_value or total)
                 make_invoice(f'{desc_base} — Mensalidade', mv, due)
 
             elif pay_type == 'setup_monthly':
-                setup = float(prospect.estimated_value or total)
-                mv = float(prospect.payment_monthly_value or 0)
+                setup = _money(prospect.estimated_value or total)
+                mv = _money(prospect.payment_monthly_value or 0)
                 make_invoice(f'{desc_base} — Setup', setup, due)
                 if mv > 0:
                     m2 = due.month + 1
@@ -531,9 +721,21 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
     @staticmethod
     def _mark_entry_paid(prospect, user):
-        """Marca primeira fatura A Receber como paga ao ir para produção."""
+        """Marca primeira fatura A Receber como paga ao ir para produção.
+
+        CAMINHO LEGADO (v32 F4, doc 08 §12.1): a transição para o status
+        deprecado `production` continua marcando a entrada como paga durante
+        a convivência de 1 release. O caminho novo é o evento entrada_paga
+        do Financeiro (finance/events.py, via Invoice da entrada -> paid).
+        Desativação prevista na F5.
+        """
         from finance.models import Invoice
         from django.utils import timezone
+        logger.info(
+            'CAMINHO LEGADO _mark_entry_paid: prospect %s movido para '
+            'production — substituido pelo evento entrada_paga do Financeiro '
+            '(F4); convivencia ate a F5.', prospect.id,
+        )
         inv = Invoice.objects.filter(
             invoice_type='receivable', status='pending',
             description__icontains=prospect.company_name,
@@ -601,6 +803,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
                 customer.save(update_fields=['is_active'])
 
         # Mover para concluído
+        old_status = prospect.status
         prospect.status = 'concluded'
         prospect.save(update_fields=['status'])
         log_crm_activity(
@@ -608,6 +811,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
             f'Projeto concluído — {prospect.company_name}',
             request.user,
         )
+        self._audit_status_change(prospect, old_status, 'concluded', origin='action:conclude')
         return Response(ProspectSerializer(prospect).data)
 
     @action(detail=True, methods=['get'], url_path='pending-invoices')
@@ -624,10 +828,14 @@ class ProspectViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def pipeline(self, request):
         STATUS_ORDER = [
-            'new', 'qualifying', 'qualified', 'disqualified',
-            'scheduled', 'pre_meeting', 'no_show', 'meeting_done',
-            'proposal', 'won', 'production', 'concluded',
-            'not_closed', 'lost', 'follow_up',
+            # caminho principal v32 (12 etapas)
+            'new', 'qualifying', 'qualified', 'meeting_invite',
+            'scheduled', 'pre_meeting', 'meeting_1_done', 'tech_analysis',
+            'meeting_2_done', 'proposal', 'won', 'data_collection',
+            # ramos
+            'disqualified', 'no_show', 'follow_up',
+            # legados
+            'meeting_done', 'production', 'concluded', 'not_closed', 'lost',
         ]
         pipeline = self.get_queryset().values('status').annotate(
             count=Count('id'),
@@ -653,6 +861,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
             bool(has_operation), bool(has_budget),
             bool(is_decision_maker), bool(has_urgency),
         ])
+        old_status = prospect.status
         prospect.has_operation    = has_operation
         prospect.has_budget       = has_budget
         prospect.is_decision_maker = is_decision_maker
@@ -662,6 +871,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.save()
         act_type = 'qualified' if score >= 3 else 'disqualified'
         log_crm_activity(prospect, act_type, f'Score {score}/4', request.user)
+        if old_status != prospect.status:
+            self._audit_status_change(prospect, old_status, prospect.status, origin='action:qualify')
         logger.info(f"Prospect {prospect.id} qualificado (score {score}/4) por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -674,6 +885,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
         meeting_link = request.data.get('meeting_link', '')
         if not meeting_scheduled_at:
             return Response({'error': 'meeting_scheduled_at é obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        old_status = prospect.status
         prospect.closer_name = closer_name
         prospect.meeting_scheduled_at = meeting_scheduled_at
         prospect.meeting_link = meeting_link
@@ -681,6 +893,8 @@ class ProspectViewSet(viewsets.ModelViewSet):
         prospect.temperature = 'hot'
         prospect.save()
         log_crm_activity(prospect, 'meeting_scheduled', f'Reunião agendada — {meeting_scheduled_at}', request.user)
+        if old_status != 'scheduled':
+            self._audit_status_change(prospect, old_status, 'scheduled', origin='action:schedule_meeting')
         logger.info(f"Prospect {prospect.id} agendado para {meeting_scheduled_at} por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -688,22 +902,28 @@ class ProspectViewSet(viewsets.ModelViewSet):
     def mark_no_show(self, request, pk=None):
         """Lead não compareceu à reunião."""
         prospect = self.get_object()
+        old_status = prospect.status
         prospect.meeting_attended = False
         prospect.status = 'no_show'
         prospect.follow_up_reason = 'nao_compareceu'
         prospect.save()
         log_crm_activity(prospect, 'no_show', 'Não compareceu à reunião', request.user)
+        if old_status != 'no_show':
+            self._audit_status_change(prospect, old_status, 'no_show', origin='action:mark_no_show')
         logger.info(f"Prospect {prospect.id} marcado como no-show por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
     @action(detail=True, methods=['post'])
     def mark_attended(self, request, pk=None):
-        """Lead compareceu à reunião."""
+        """Lead compareceu à reunião (v32: Reunião 1 → meeting_1_done)."""
         prospect = self.get_object()
+        old_status = prospect.status
         prospect.meeting_attended = True
-        prospect.status = 'meeting_done'
+        prospect.status = 'meeting_1_done'
         prospect.save()
-        log_crm_activity(prospect, 'meeting_done', 'Reunião realizada', request.user)
+        log_crm_activity(prospect, 'meeting_1_done', 'Reunião 1 realizada', request.user)
+        if old_status != 'meeting_1_done':
+            self._audit_status_change(prospect, old_status, 'meeting_1_done', origin='action:mark_attended')
         logger.info(f"Prospect {prospect.id} marcado como reunião realizada por {request.user.username}")
         return Response(ProspectSerializer(prospect).data)
 
@@ -734,9 +954,21 @@ class ProspectViewSet(viewsets.ModelViewSet):
         from django.db import IntegrityError
 
         prospect = self.get_object()
-        if prospect.status not in ('won', 'production'):
+        # v32 ajustes (doc 09 §T-E2E P0.2 / T01): aprovar a proposta move o card
+        # para `coleta_de_dados` — é AÍ que o link do forms precisa estar
+        # disponível. Aceitamos os status novos (coleta_de_dados/projeto_fechado/
+        # em_producao) além dos legados equivalentes (won/data_collection/
+        # production). Status nessa lista são "fechados ou em coleta".
+        ONBOARDING_ALLOWED_STATUSES = (
+            'won', 'data_collection', 'production',           # legados
+            'coleta_de_dados', 'projeto_fechado', 'em_producao',  # v32 novos
+        )
+        if prospect.status not in ONBOARDING_ALLOWED_STATUSES:
             return Response(
-                {'error': 'Cadastro só pode ser criado para leads fechados (won/production).'},
+                {'error': (
+                    'Cadastro só pode ser criado para leads em Coleta de Dados '
+                    'ou fechados.'
+                )},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Retorna existente se já criado
@@ -780,7 +1012,7 @@ class ProspectViewSet(viewsets.ModelViewSet):
 class ProposalViewSet(viewsets.ModelViewSet):
     queryset = Proposal.objects.select_related('customer', 'prospect', 'assigned_to', 'created_by')
     serializer_class = ProposalSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -838,9 +1070,10 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.sent_at = timezone.now()
         proposal.save()
         # Mover lead para "Proposta Enviada" ao enviar
+        # v32: data_collection vem DEPOIS de won — não rebaixar para proposal
         if proposal.prospect_id:
             Prospect.objects.filter(pk=proposal.prospect_id).exclude(
-                status__in=['won', 'lost', 'not_closed'],
+                status__in=['won', 'data_collection', 'lost', 'not_closed'],
             ).update(status='proposal')
         if proposal.prospect:
             log_crm_activity(proposal.prospect, 'proposal_sent', f'Proposta #{proposal.number} enviada', request.user)
@@ -866,10 +1099,26 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 {'error': f'Proposta não pode ser aprovada (status atual: {proposal.status})'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        proposal.status = 'approved'
-        proposal.save()
+        # M2: núcleo atômico — a mudança de status e a garantia do Customer
+        # commitam juntos (transação coerente). _ensure_customer_for_proposal
+        # roda em SAVEPOINT (atomic aninhado) com seu próprio try/except: se a
+        # criação do Customer falhar, só o savepoint dele faz rollback (sem
+        # Customer pela metade) — o status `approved` permanece e a aprovação
+        # NÃO é derrubada (H1). O select_for_update no prospect (dentro do
+        # helper) continua intacto.
+        with transaction.atomic():
+            proposal.status = 'approved'
+            proposal.save(update_fields=['status', 'updated_at'])
 
-        # Gerar comissões automaticamente
+            # P0.1 (raiz do caminho feliz, doc 09 §T-E2E): garante o Customer do
+            # prospect ANTES de qualquer efeito que dependa dele. Sem isso, o
+            # pré-cadastro F4, o _sync_customer do onboarding e o
+            # LegalCase(contrato) abortavam calados no submit, e a comissão
+            # (abaixo) nunca era gerada. Idempotente: reaproveita o Customer
+            # existente (por FK / e-mail / empresa).
+            self._ensure_customer_for_proposal(proposal, request.user)
+
+        # Gerar comissões automaticamente (agora com Customer garantido — P1.6)
         self._generate_commissions(proposal, request.user)
 
         if proposal.prospect:
@@ -878,8 +1127,237 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 f'Proposta #{proposal.number} aprovada — R$ {proposal.total_value}',
                 request.user,
             )
+            # v32 ajustes (doc 09 §04, item 01°/02°): aprovar a proposta
+            #   (a) deriva o project_type do prospect da forma de pagamento
+            #       (one_time -> fechado / recurring -> recorrente), eliminando
+            #       a duplicidade B do doc;
+            #   (b) MOVE o card do prospect para a Coleta de Dados
+            #       (status coleta_de_dados) — o fechamento (won/projeto_fechado)
+            #       NÃO é automatizado no aceite (decisão de John 2026-06-11).
+            # Isolado em try/except para não derrubar a aprovação.
+            self._on_proposal_approved(proposal, request.user)
+
         logger.info(f"Proposta {proposal.id} aprovada por {request.user.username}")
         return Response(ProposalSerializer(proposal).data)
+
+    @staticmethod
+    def _derive_project_type(plan):
+        """Deriva o project_type do Prospect a partir do plano de pagamento.
+
+        Regra (doc 09 §04 item 02°): pagamento ÚNICO -> projeto fechado;
+        qualquer recorrência (recurring_only / setup_plus_recurring) ->
+        projeto recorrente. Retorna '' se não há plano (não sobrescreve).
+        """
+        if plan is None:
+            return ''
+        if plan.plan_type == 'one_time':
+            return 'fechado'
+        if plan.plan_type in ('recurring_only', 'setup_plus_recurring'):
+            return 'recorrente'
+        return ''
+
+    @staticmethod
+    def _ensure_customer_for_proposal(proposal, user):
+        """P0.1: cria/obtém o Customer do prospect e vincula proposta+prospect.
+
+        Ponto certo do funil (doc 09 §T-E2E P0.1): ao aprovar a proposta — que
+        move o card para a Coleta de Dados — o Customer já precisa existir, pois
+        o submit do onboarding dispara o pré-cadastro F4, o _sync_customer e o
+        LegalCase(contrato), todos dependentes de um Customer.
+
+        Idempotente:
+          - se a proposta já tem customer, não faz nada;
+          - reaproveita Customer existente por e-mail do contato;
+          - só então cria um novo (mesma regra do convert_to_contract).
+        Isolado em try/except — uma falha aqui NÃO derruba a aprovação.
+
+        Returns: o Customer resolvido (ou None se não foi possível).
+        """
+        if proposal.customer_id:
+            return proposal.customer
+        prospect = proposal.prospect
+        if prospect is None:
+            return None
+        from django.db import IntegrityError
+        try:
+            try:
+                with transaction.atomic():
+                    customer = ProposalViewSet._resolve_or_create_customer(
+                        prospect, proposal, user,
+                    )
+            except IntegrityError as exc:
+                # M1: corrida cross-prospect — outra aprovação criou o Customer
+                # (unique de Customer.email) entre o nosso filter e o create.
+                # Re-resolve por e-mail e segue (sem duplicar). Se ainda assim
+                # não achar, re-levanta para o tratamento visível abaixo.
+                logger.info(
+                    'P0.1: IntegrityError ao criar Customer (proposta %s) — '
+                    'corrida concorrente; re-resolvendo por e-mail: %s',
+                    proposal.number, exc,
+                )
+                with transaction.atomic():
+                    customer = ProposalViewSet._resolve_or_create_customer(
+                        prospect, proposal, user, recreate_ok=False,
+                    )
+            return customer
+        except Exception as exc:  # noqa: BLE001 — isolamento de efeito colateral
+            # H1: a falha NÃO pode sumir. Aprovação segue (não derrubada), mas
+            # o erro fica VISÍVEL: stack no log + audit de falha + Sentry.
+            logger.exception(
+                'P0.1: falha ao garantir Customer para a proposta %s '
+                '(prospect %s) — aprovação mantida, efeito colateral perdido.',
+                proposal.id, getattr(prospect, 'id', None),
+            )
+            log_audit(
+                user, 'customer_autocreate_failed', 'proposal', proposal.id,
+                details=(
+                    f'Falha ao garantir Customer na aprovação da proposta '
+                    f'{proposal.number} (prospect '
+                    f'{getattr(prospect, "id", None)}): {exc!r}. '
+                    f'Pré-cadastro F4 / LegalCase(contrato) podem não disparar.'
+                ),
+                new_value={
+                    'proposal': proposal.id,
+                    'prospect': getattr(prospect, 'id', None),
+                    'error': repr(exc),
+                },
+            )
+            capture_exception(exc)
+            return None
+
+    @staticmethod
+    def _resolve_or_create_customer(prospect, proposal, user, recreate_ok=True):
+        """Resolve (e vincula) o Customer do prospect numa transação coerente.
+
+        M1: dedup robusto por chave estável — reaproveita por FK do prospect,
+        depois por e-mail (chave única do Customer), e só então cria. Sempre
+        revincula proposta + onboarding ao Customer (idempotente).
+
+        `recreate_ok=False` é usado no retry pós-IntegrityError: nesse caminho
+        NÃO recriamos (a corrida já criou); se não acharmos por e-mail/empresa,
+        deixamos a exceção propagar para o tratamento visível (H1).
+        """
+        # Lock no prospect para evitar corrida com outra aprovação.
+        prospect = Prospect.objects.select_for_update().get(pk=prospect.pk)
+        if prospect.customer_id:
+            customer = prospect.customer
+        else:
+            prospect_email = (prospect.contact_email or '').strip()
+            prospect_company = (prospect.company_name or '').strip()
+            customer = None
+            if prospect_email:
+                customer = Customer.objects.filter(email=prospect_email).first()
+            # Fallback de dedup por empresa (leads sem e-mail) — chave estável
+            # o suficiente para não duplicar o mesmo cliente no funil.
+            if customer is None and prospect_company:
+                customer = Customer.objects.filter(
+                    company_name__iexact=prospect_company,
+                ).first()
+            if customer is None:
+                if not recreate_ok:
+                    # Retry pós-corrida não achou: propaga p/ tratamento visível.
+                    raise Customer.DoesNotExist(
+                        f'Customer não resolvido após IntegrityError '
+                        f'(proposta {proposal.number}).'
+                    )
+                if not prospect_company:
+                    logger.warning(
+                        'P0.1: prospect %s sem company_name — Customer '
+                        'não criado na aprovação da proposta %s.',
+                        prospect.id, proposal.number,
+                    )
+                    return None
+                customer = Customer.objects.create(
+                    customer_type='PJ',
+                    company_name=prospect_company,
+                    name=(prospect.contact_name or '').strip(),
+                    email=prospect_email,
+                    phone=(prospect.contact_phone or '').strip(),
+                    source='crm',
+                    created_by=user,
+                )
+                logger.info(
+                    'P0.1: Customer %s (%s) auto-criado na aprovação da '
+                    'proposta %s.',
+                    customer.id, customer.company_name, proposal.number,
+                )
+            prospect.customer = customer
+            prospect.save(update_fields=['customer'])
+        # Vincula a proposta ao Customer (sempre — idempotente).
+        if proposal.customer_id != customer.id:
+            proposal.customer = customer
+            proposal.save(update_fields=['customer'])
+        # Vincula o onboarding existente, se houver, ao Customer.
+        onboarding = getattr(prospect, 'onboarding', None)
+        if onboarding is not None and not onboarding.customer_id:
+            onboarding.customer = customer
+            onboarding.save(update_fields=['customer'])
+        return customer
+
+    def _on_proposal_approved(self, proposal, user):
+        """Efeitos colaterais da aprovação da proposta (isolados).
+
+        1. Deriva/atualiza prospect.project_type da forma de pagamento.
+        2. Move o card do prospect para `coleta_de_dados` (etapa nova).
+
+        Um erro aqui NÃO derruba a aprovação — só loga.
+        """
+        prospect = proposal.prospect
+        if prospect is None:
+            return
+        try:
+            plan = getattr(proposal, 'payment_plan', None)
+            derived = self._derive_project_type(plan)
+            update_fields = []
+            if derived and prospect.project_type != derived:
+                prospect.project_type = derived
+                update_fields.append('project_type')
+
+            # Move o card para Coleta de Dados (não rebaixa terminais nem
+            # estados já avançados do fechamento).
+            old_status = prospect.status
+            advanced = (
+                'coleta_de_dados', 'data_collection', 'projeto_fechado', 'won',
+                'em_producao', 'production', 'concluded',
+                'lost', 'disqualified', 'not_closed',
+            )
+            if old_status not in advanced:
+                prospect.status = 'coleta_de_dados'
+                update_fields.append('status')
+
+            if update_fields:
+                prospect.save(update_fields=update_fields)
+
+            if 'status' in update_fields:
+                log_crm_activity(
+                    prospect, 'data_collection',
+                    'Proposta aprovada — card movido para Coleta de Dados',
+                    user,
+                )
+                self._audit_proposal_status_move(
+                    prospect, old_status, 'coleta_de_dados', user,
+                )
+        except Exception as exc:  # noqa: BLE001 — isolamento de efeito colateral
+            logger.warning(
+                'Falha ao aplicar efeitos de aprovação na proposta %s '
+                '(prospect %s): %s', proposal.id, getattr(prospect, 'id', None), exc,
+            )
+
+    @staticmethod
+    def _audit_proposal_status_move(prospect, old_status, new_status, user):
+        """Trilha de auditoria do movimento de card disparado pela aprovação."""
+        try:
+            log_audit(
+                user,
+                action='prospect_status_change',
+                resource_type='prospect',
+                resource_id=prospect.id,
+                details=f'{old_status} -> {new_status} (origin=action:proposal_approve)',
+                old_value={'status': old_status},
+                new_value={'status': new_status},
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('Falha ao auditar movimento de card: %s', exc)
 
     @staticmethod
     def _generate_commissions(proposal, user):
@@ -888,6 +1366,13 @@ class ProposalViewSet(viewsets.ModelViewSet):
         Idempotente: se `proposal.commissions_generated_at` ja esta setado,
         nao gera de novo (evita duplicacao em re-aprovacao quando admin
         reverte status via Django Admin).
+
+        P1.6 (doc 09 §T-E2E): a flag `commissions_generated_at` SÓ é marcada no
+        bloco atômico final, depois de criar os ClientCost. Os aborts (sem
+        valor / sem Customer) retornam ANTES de marcar a flag, então o approve
+        re-tenta na próxima vez. Com o Customer garantido em
+        _ensure_customer_for_proposal (P0.1), o abort por "sem Customer" não
+        acontece mais no caminho feliz.
         """
         from decimal import Decimal, ROUND_HALF_UP
         from django.db import transaction as db_tx
@@ -901,11 +1386,18 @@ class ProposalViewSet(viewsets.ModelViewSet):
         if total <= 0:
             return
 
+        # M1: usar o Customer JÁ vinculado à proposta (garantido por
+        # _ensure_customer_for_proposal antes desta chamada). O fallback antigo
+        # casava por company_name (NÃO único) — podia pegar o cliente errado em
+        # homônimos. Agora cai no Customer do prospect (FK estável), nunca por
+        # nome. `refresh_from_db` cobre o caso de a FK ter sido setada na mesma
+        # request (a instância em memória poderia estar defasada).
         customer = proposal.customer
         if not customer and proposal.prospect_id:
-            customer = Customer.objects.filter(
-                company_name=proposal.prospect.company_name
-            ).first() if proposal.prospect else None
+            proposal.refresh_from_db(fields=['customer'])
+            customer = proposal.customer
+        if not customer and proposal.prospect_id and proposal.prospect.customer_id:
+            customer = proposal.prospect.customer
 
         if not customer:
             logger.warning(f"Comissão não gerada — proposta #{proposal.number} sem cliente vinculado")
@@ -1319,7 +1811,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
         } for v in views])
 
     @action(detail=True, methods=['post'], url_path='regenerate-token',
-            permission_classes=[IsAdminOrManagerOrOperatorStrict])
+            permission_classes=[CommercialSectorAccess])
     def regenerate_token(self, request, pk=None):
         """Rotaciona o public_token da proposta (F7B.6).
 
@@ -1351,7 +1843,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
 class ContractViewSet(viewsets.ModelViewSet):
     queryset = Contract.objects.select_related('customer', 'proposal', 'created_by')
     serializer_class = ContractSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1702,7 +2194,7 @@ class ContractViewSet(viewsets.ModelViewSet):
 class ProspectActivityViewSet(viewsets.ModelViewSet):
     queryset = ProspectActivity.objects.select_related('prospect', 'created_by')
     serializer_class = ProspectActivitySerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [CommercialSectorAccess]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -1729,7 +2221,7 @@ class ProspectActivityViewSet(viewsets.ModelViewSet):
 class WinLossReasonViewSet(viewsets.ModelViewSet):
     queryset = WinLossReason.objects.select_related('prospect')
     serializer_class = WinLossReasonSerializer
-    permission_classes = [IsAdminOrManagerOrOperator]
+    permission_classes = [CommercialSectorAccess]
     http_method_names = ['get', 'post', 'head', 'options']
 
 
@@ -1738,7 +2230,7 @@ class ClientOnboardingViewSet(viewsets.ModelViewSet):
     """CRUD interno dos formulários de onboarding."""
     queryset = ClientOnboarding.objects.select_related('prospect', 'customer', 'created_by')
     serializer_class = ClientOnboardingInternalSerializer
-    permission_classes = [IsAdminOrManagerOrOperatorStrict]
+    permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
 
     def get_queryset(self):

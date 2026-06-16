@@ -7,12 +7,18 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 
 from accounts.permissions import IsAdminOrManagerOrOperator, IsAdminOrManager
-from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, KnowledgeBaseArticle
+from core.audit import log_audit
+from .models import (
+    SLAPolicy, SupportCategory, SupportTicket, TicketComment,
+    KnowledgeBaseArticle, PedidoUpdate,
+)
 from .serializers import (
     SLAPolicySerializer, SupportCategorySerializer, SupportTicketSerializer,
     TicketCommentSerializer, TicketCommentAdminSerializer,
-    KnowledgeBaseArticleSerializer,
+    KnowledgeBaseArticleSerializer, PedidoUpdateSerializer,
+    TicketAnalyzeSerializer, TicketTransitionSerializer,
 )
+from .services import escalate_inconclusive, promote_pedido_update
 
 logger = logging.getLogger('support')
 
@@ -116,41 +122,218 @@ class SupportTicketViewSet(viewsets.ModelViewSet):
         except User.DoesNotExist:
             return Response({'error': 'Usuário não encontrado'}, status=status.HTTP_404_NOT_FOUND)
         ticket.assigned_to = user
-        if ticket.status == 'open':
-            ticket.status = 'in_progress'
+        # F6: fluxo novo — chamado aberto vai para triagem ao ser atribuído.
+        # 'open' legado segue o mesmo caminho (convivência de release).
+        if ticket.status in ('aberto', 'open'):
+            ticket.status = 'triagem'
         ticket.save(update_fields=['assigned_to', 'status'])
         return Response(SupportTicketSerializer(ticket).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
         ticket = self.get_object()
-        ticket.status = 'resolved'
+        old_status = ticket.status
+        ticket.status = 'resolvido'
         ticket.resolved_at = timezone.now()
         ticket.save(update_fields=['status', 'resolved_at'])
+        log_audit(
+            request.user, 'support_ticket_resolve', 'support_ticket', ticket.id,
+            old_value={'status': old_status},
+            new_value={'status': 'resolvido'},
+            request=request,
+        )
         return Response(SupportTicketSerializer(ticket).data)
 
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
         ticket = self.get_object()
-        ticket.status = 'closed'
+        old_status = ticket.status
+        ticket.status = 'fechado'
         ticket.closed_at = timezone.now()
         ticket.save(update_fields=['status', 'closed_at'])
+        log_audit(
+            request.user, 'support_ticket_close', 'support_ticket', ticket.id,
+            old_value={'status': old_status},
+            new_value={'status': 'fechado'},
+            request=request,
+        )
         return Response(SupportTicketSerializer(ticket).data)
+
+    @action(detail=True, methods=['post'])
+    def transition(self, request, pk=None):
+        """Move o chamado no board do Suporte (v32 F6, doc 05 §2).
+
+        Body: {"status": "aberto|triagem|analise|correcao|resolvido|fechado"}.
+        Só aceita statuses do fluxo NOVO. Toda transição gera log_audit.
+        """
+        ticket = self.get_object()
+        input_serializer = TicketTransitionSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            return Response(input_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        new_status = input_serializer.validated_data['status']
+        if new_status == ticket.status:
+            return Response(
+                {'error': 'O chamado já está neste status.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_status = ticket.status
+        ticket.status = new_status
+        update_fields = ['status', 'updated_at']
+        if new_status == 'resolvido' and not ticket.resolved_at:
+            ticket.resolved_at = timezone.now()
+            update_fields.append('resolved_at')
+        if new_status == 'fechado' and not ticket.closed_at:
+            ticket.closed_at = timezone.now()
+            update_fields.append('closed_at')
+        ticket.save(update_fields=update_fields)
+
+        log_audit(
+            request.user, 'support_ticket_transition', 'support_ticket', ticket.id,
+            details=f'{old_status} -> {new_status}',
+            old_value={'status': old_status},
+            new_value={'status': new_status},
+            request=request,
+        )
+        return Response(SupportTicketSerializer(ticket).data)
+
+    @action(detail=True, methods=['post'])
+    def analyze(self, request, pk=None):
+        """Conclusão da Análise (v32 F6, doc 05 §3/§4).
+
+        Body: {"conclusao": "garantia|orcamento|inconclusivo|recorrente_corrige"}.
+        Lógica condicional por tipo de projeto:
+        - Project.tipo == recorrente → força recorrente_corrige (contrato
+          mensal sempre corrige, sem orçamento).
+        - inconclusivo → escala para a Diretoria (flag AUTOMATION_SUP_ESCALA,
+          default dry_run) + Notification para admins; chamado fica em análise.
+        - garantia/orcamento/recorrente_corrige → segue para correção.
+        """
+        ticket = self.get_object()
+        if ticket.status not in ('analise', 'in_progress'):
+            return Response(
+                {'error': 'A conclusão só pode ser registrada com o chamado em análise.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        input_serializer = TicketAnalyzeSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            return Response(input_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        conclusao = input_serializer.validated_data['conclusao']
+        forced = False
+        if ticket.project and ticket.project.tipo == 'recorrente':
+            # doc 05 §4: projeto recorrente SEMPRE corrige (sem orçamento).
+            if conclusao != 'recorrente_corrige':
+                forced = True
+            conclusao = 'recorrente_corrige'
+
+        old_value = {'status': ticket.status, 'conclusao': ticket.conclusao}
+        ticket.conclusao = conclusao
+        update_fields = ['conclusao', 'updated_at']
+        if conclusao != 'inconclusivo':
+            # Análise fechada → correção (garantia/recorrente) ou orçamento.
+            ticket.status = 'correcao'
+            update_fields.append('status')
+        ticket.save(update_fields=update_fields)
+
+        log_audit(
+            request.user, 'support_ticket_analyze', 'support_ticket', ticket.id,
+            details=(
+                f'Conclusão: {conclusao}'
+                + (' (forçada — projeto recorrente)' if forced else '')
+            ),
+            old_value=old_value,
+            new_value={'status': ticket.status, 'conclusao': conclusao},
+            request=request,
+        )
+
+        if conclusao == 'inconclusivo':
+            escalate_inconclusive(ticket, request.user, request=request)
+
+        data = SupportTicketSerializer(ticket).data
+        data['conclusao_forcada'] = forced
+        return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='pedido-update')
+    def pedido_update(self, request, pk=None):
+        """Triagem `mudanca` → cria PedidoUpdate (v32 F6, doc 05 §6).
+
+        A promoção para Prospect (tech_analysis) acontece depois, na action
+        promote do PedidoUpdateViewSet (flag AUTOMATION_SUP_PEDIDO_UPDATE).
+        """
+        ticket = self.get_object()
+        if ticket.ticket_type not in ('mudanca', 'feature'):
+            return Response(
+                {'error': 'Apenas chamados de mudança geram pedido de update.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not ticket.customer_id:
+            return Response(
+                {'error': 'O chamado precisa de um cliente vinculado.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if PedidoUpdate.objects.filter(
+            originating_ticket=ticket, status='opened',
+        ).exists():
+            return Response(
+                {'error': 'Este chamado já tem um pedido de update aberto.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        description = (request.data.get('description') or '').strip() or ticket.description
+        pedido = PedidoUpdate.objects.create(
+            originating_ticket=ticket,
+            customer=ticket.customer,
+            description=description,
+            created_by=request.user,
+        )
+        log_audit(
+            request.user, 'pedido_update_create', 'pedido_update', pedido.id,
+            details=f'Criado a partir do chamado {ticket.number}.',
+            new_value={
+                'originating_ticket': ticket.id,
+                'customer': ticket.customer_id,
+                'status': 'opened',
+            },
+            request=request,
+        )
+        logger.info(
+            'PedidoUpdate %s criado a partir do ticket %s por %s',
+            pedido.id, ticket.number, request.user.username,
+        )
+        return Response(
+            PedidoUpdateSerializer(pedido).data, status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         from django.db.models import Count
         qs = self.get_queryset()
         now = timezone.now()
+        # F6: agrupa novo + legado (convivência de release até a data
+        # migration 0003 rodar em produção).
+        open_statuses = [
+            'aberto', 'triagem', 'analise', 'correcao',
+            'open', 'in_progress', 'pending_client',
+        ]
         return Response({
             'total': qs.count(),
-            'open': qs.filter(status='open').count(),
-            'in_progress': qs.filter(status='in_progress').count(),
+            'aberto': qs.filter(status__in=['aberto', 'open']).count(),
+            'triagem': qs.filter(status='triagem').count(),
+            'analise': qs.filter(status__in=['analise', 'in_progress']).count(),
+            'correcao': qs.filter(status='correcao').count(),
+            'resolvido': qs.filter(status__in=['resolvido', 'resolved', 'pending_client']).count(),
+            'fechado': qs.filter(status__in=['fechado', 'closed']).count(),
+            # chaves legadas mantidas para o frontend antigo (remoção F8)
+            'open': qs.filter(status__in=['aberto', 'open']).count(),
+            'in_progress': qs.filter(status__in=['analise', 'in_progress']).count(),
             'pending_client': qs.filter(status='pending_client').count(),
-            'resolved': qs.filter(status='resolved').count(),
+            'resolved': qs.filter(status__in=['resolvido', 'resolved']).count(),
             'sla_breached': qs.filter(
                 sla_resolution_deadline__lt=now,
-                status__in=['open', 'in_progress', 'pending_client']
+                status__in=open_statuses,
             ).count(),
             'by_priority': list(qs.values('priority').annotate(count=Count('id'))),
             'by_type': list(qs.values('ticket_type').annotate(count=Count('id'))),
@@ -254,3 +437,82 @@ class KnowledgeBaseArticleViewSet(viewsets.ModelViewSet):
             article.not_helpful_count += 1
         article.save(update_fields=['helpful_count', 'not_helpful_count'])
         return Response({'helpful': article.helpful_count, 'not_helpful': article.not_helpful_count})
+
+
+@extend_schema(tags=['support'])
+class PedidoUpdateViewSet(viewsets.ModelViewSet):
+    """Ponte Suporte → Comercial (v32 F6, doc 05 §6).
+
+    Criação normalmente acontece pela action pedido-update do ticket; o
+    CRUD direto existe para ajustes. promote/decline são as únicas portas
+    de mudança de status (read_only no serializer).
+    """
+    queryset = PedidoUpdate.objects.select_related(
+        'originating_ticket', 'customer', 'prospect', 'created_by',
+    )
+    serializer_class = PedidoUpdateSerializer
+    permission_classes = [IsAdminOrManagerOrOperator]
+    http_method_names = ['get', 'post', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+        if params.get('status'):
+            qs = qs.filter(status=params['status'])
+        if params.get('customer'):
+            qs = qs.filter(customer_id=params['customer'])
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def promote(self, request, pk=None):
+        """Promove o pedido → Prospect novo em tech_analysis (doc 05 §6).
+
+        Atrás da flag AUTOMATION_SUP_PEDIDO_UPDATE (off | dry_run | on,
+        default dry_run). Em dry_run loga o que faria sem criar Prospect
+        nem mudar o pedido.
+        """
+        pedido = self.get_object()
+        if pedido.status != 'opened':
+            return Response(
+                {'error': 'Apenas pedidos abertos podem ser promovidos.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        flag, prospect = promote_pedido_update(pedido, request.user, request=request)
+        if flag != 'on':
+            return Response(
+                {
+                    'promoted': False,
+                    'flag': flag,
+                    'message': (
+                        'Automação em dry_run: a promoção foi simulada e '
+                        'registrada na auditoria, sem efeito.'
+                        if flag == 'dry_run'
+                        else 'Automação desligada (AUTOMATION_SUP_PEDIDO_UPDATE=off).'
+                    ),
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
+        return Response(PedidoUpdateSerializer(pedido).data)
+
+    @action(detail=True, methods=['post'])
+    def decline(self, request, pk=None):
+        """Recusa o pedido de update (não vira Prospect)."""
+        pedido = self.get_object()
+        if pedido.status != 'opened':
+            return Response(
+                {'error': 'Apenas pedidos abertos podem ser recusados.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        pedido.status = 'declined'
+        pedido.save(update_fields=['status'])
+        log_audit(
+            request.user, 'pedido_update_decline', 'pedido_update', pedido.id,
+            old_value={'status': 'opened'},
+            new_value={'status': 'declined'},
+            request=request,
+        )
+        return Response(PedidoUpdateSerializer(pedido).data)

@@ -26,14 +26,17 @@ reportlab==4.2.5
 # Sanitiza propostas HTML enviadas pelo time comercial antes de servir
 # publicamente. Allow-list de tags + filtro de atributos `on*`/`srcdoc`.
 # `bleach.css_sanitizer` precisa de `tinycss2` para validar inline styles.
-bleach[css]==6.2.0
+# 6.4.0: fix GHSA-gj48-438w-jh9v + GHSA-8rfp-98v4-mmr6 (CVEs em 6.2.0)
+bleach[css]==6.4.0
 
 # ─── Authentication / 2FA ────────────────────────────────────────────────────
 pyotp==2.9.0
 qrcode==7.4.2
 # cryptography eh dep transitiva (pyjwt[crypto]) mas pinamos explicitamente
 # para F3b — Fernet encrypt do totp_secret em repouso
-cryptography==46.0.7
+# 48.0.1: fix de GHSA-537c-gmf6-5ccf (CVE em 46.0.7, sem impacto no uso atual:
+# Fernet/HMAC; bump pego pelo pip-audit do CI)
+cryptography==48.0.1
 
 # ─── Cache / Queue ───────────────────────────────────────────────────────────
 redis==5.2.1

@@ -47,6 +47,7 @@ def manager_user(db):
     return User.objects.create_user(
         username='s7brbac_mgr', email='s7brbac@mgr.com',
         password='pass12345', role='manager',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -55,6 +56,7 @@ def operator_user(db):
     return User.objects.create_user(
         username='s7brbac_op', email='s7brbac@op.com',
         password='pass12345', role='operator',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -63,6 +65,7 @@ def operator2_user(db):
     return User.objects.create_user(
         username='s7brbac_op2', email='s7brbac@op2.com',
         password='pass12345', role='operator',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 

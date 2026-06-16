@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const PUBLIC_PATHS = ['/login', '/reset-password', '/forgot-password', '/p/', '/api/proposal/', '/onboarding/', '/api/onboarding/'];
+const PUBLIC_PATHS = ['/login', '/reset-password', '/forgot-password', '/p/', '/api/proposal/', '/onboarding/', '/api/onboarding/', '/chamado/'];
 
 const ONBOARDING_HOST = process.env.ONBOARDING_HOST || 'cadastro.inovasystemssolutions.com';
 const PARTNER_HOST = process.env.PARTNER_HOST || 'parceiro.inovasystemssolutions.com';
@@ -41,18 +41,30 @@ function generateNonce(): string {
  */
 function buildCsp(nonce: string): string {
   const publicApi = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  // F0: connect-src precisa da ORIGIN (sem path). Na CSP, um source com path
+  // sem barra final casa SO aquele path exato: 'http://host/api/v1' bloqueia
+  // '/api/v1/accounts/login/'. Em prod o dominio nu na lista mascarava isso;
+  // em localhost (porta dedicada) o fetch morria bloqueado.
+  let publicApiOrigin = publicApi;
+  try { publicApiOrigin = new URL(publicApi).origin; } catch { /* mantem como veio */ }
   const connectExtra = [
     'https://*.inovasystemssolutions.com',
     'https://erp.inovasystemssolutions.com',
     'https://cadastro.inovasystemssolutions.com',
     'https://parceiro.inovasystemssolutions.com',
     'https://viacep.com.br',
-    publicApi,
+    publicApiOrigin,
   ].join(' ');
+
+  // F0: em desenvolvimento o Next (react-refresh/webpack) usa eval() para
+  // HMR; a CSP nonce+strict-dynamic bloqueia e a pagina morre com EvalError.
+  // 'unsafe-eval' APENAS quando NODE_ENV!=production (npm run dev) — o build
+  // de producao continua sem eval e sem relaxamento.
+  const devEval = process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : '';
 
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     `connect-src 'self' ${connectExtra}`,

@@ -79,6 +79,26 @@ def log_audit(
         return None
 
 
+def capture_exception(exc=None):
+    """Encaminha uma exceção ao Sentry, se configurado. No-op caso contrário.
+
+    Centraliza o guard `if SENTRY_DSN` + `import sentry_sdk` para que efeitos
+    colaterais isolados (que NÃO derrubam a request) ainda fiquem visíveis no
+    Sentry, além do logger.exception + log_audit. Seguro: nunca levanta.
+
+    Returns: o event_id do Sentry, ou None (sem Sentry / falha).
+    """
+    try:
+        from django.conf import settings
+        if not getattr(settings, 'SENTRY_DSN', ''):
+            return None
+        import sentry_sdk
+        return sentry_sdk.capture_exception(exc)
+    except Exception as cap_exc:  # noqa: BLE001 — nunca propaga
+        audit_logger.warning('Sentry capture_exception falhou: %s', cap_exc)
+        return None
+
+
 def _extract_client_ip(request):
     """Extrai IP do cliente considerando proxies (X-Forwarded-For).
 

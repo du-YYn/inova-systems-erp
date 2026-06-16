@@ -105,6 +105,23 @@ jobs:
             PREV_TAG=$(grep -E '^ERP_IMAGE_TAG=' .env | cut -d= -f2-)
             echo "Deploy: $(date) — nova tag=${NEW_TAG:0:12} anterior=${PREV_TAG:0:12}"
 
+            # ── F0: backup OBRIGATORIO antes de qualquer migration ──────────
+            # O entrypoint do backend roda `migrate` no up; este dump e a
+            # garantia de restauracao de DADOS (rollback de imagem nao desfaz
+            # migration). Deploy aborta se o dump falhar ou vier vazio.
+            # Usa o mesmo container/volume do backup diario (db-backup +
+            # volume db_backups): zero dependencia de permissao no host.
+            BK_NAME="pre_${NEW_TAG:0:12}_$(date +%Y%m%d_%H%M%S).dump"
+            if ! docker compose run --rm --no-deps db-backup sh -c \
+              "pg_dump --format=custom -f /backups/$BK_NAME && [ -s /backups/$BK_NAME ] && echo \"Backup pre-deploy OK: $BK_NAME (\$(du -h /backups/$BK_NAME | cut -f1))\""; then
+              echo "✖ Backup pre-deploy FALHOU — deploy abortado (nada foi alterado)."
+              docker compose run --rm --no-deps db-backup sh -c "rm -f /backups/$BK_NAME" || true
+              exit 1
+            fi
+            # Retencao: mantem os 10 dumps pre-deploy mais recentes.
+            docker compose run --rm --no-deps db-backup sh -c \
+              "ls -1t /backups/pre_*.dump 2>/dev/null | tail -n +11 | xargs -r rm -f" || true
+
             # Grava a tag nova no .env (o compose lê ERP_IMAGE_TAG daqui).
             if grep -q '^ERP_IMAGE_TAG=' .env; then
               sed -i "s/^ERP_IMAGE_TAG=.*/ERP_IMAGE_TAG=${NEW_TAG}/" .env

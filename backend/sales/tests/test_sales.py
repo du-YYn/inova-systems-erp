@@ -23,6 +23,7 @@ def manager_user(db):
         email='manager@salestest.com',
         password='manager_pass_123',
         role='manager',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -33,6 +34,7 @@ def operator_user(db):
         email='operator@salestest.com',
         password='operator_pass_123',
         role='operator',
+        sectors=['comercial'],  # P2.8: RBAC por setor no Comercial
     )
 
 
@@ -121,9 +123,11 @@ class TestCustomer:
         response = api_client.get(self.url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-    def test_list_customers_viewer_forbidden(self, viewer_client):
+    def test_list_customers_viewer_can_read(self, viewer_client):
+        """P2.8 (F3 RBAC): viewer lê globalmente o Comercial (antes Strict
+        negava). A escrita continua negada (coberto em outros testes)."""
         response = viewer_client.get(self.url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
 
     def test_create_customer(self, manager_client):
         payload = {
@@ -427,9 +431,10 @@ class TestProposal:
         response = operator_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_list_proposals_viewer_forbidden(self, viewer_client):
+    def test_list_proposals_viewer_can_read(self, viewer_client):
+        """P2.8 (F3 RBAC): viewer lê globalmente (antes Strict negava)."""
         response = viewer_client.get(self.url)
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
 
     def test_create_proposal_from_prospect_moves_status(self, manager_client, db, manager_user):
         """Criar proposta vinculada a um lead deve mover o lead para 'proposal'."""
@@ -879,15 +884,19 @@ class TestCrossUserAccess:
         response = operator_client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
-    def test_viewer_cannot_list_customers(self, viewer_client):
-        """Viewer não tem acesso a nenhum recurso de vendas."""
-        response = viewer_client.get('/api/v1/sales/customers/')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_viewer_cannot_list_proposals(self, viewer_client):
-        response = viewer_client.get('/api/v1/sales/proposals/')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    def test_viewer_cannot_list_prospects(self, viewer_client):
-        response = viewer_client.get('/api/v1/sales/prospects/')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+    def test_viewer_can_read_but_not_write_sales(self, viewer_client):
+        """P2.8 (F3 RBAC): viewer lê globalmente os recursos do Comercial, mas
+        NÃO escreve. Antes (permission Strict) nem lia."""
+        # leitura permitida em todos os recursos
+        assert viewer_client.get(
+            '/api/v1/sales/customers/').status_code == status.HTTP_200_OK
+        assert viewer_client.get(
+            '/api/v1/sales/proposals/').status_code == status.HTTP_200_OK
+        assert viewer_client.get(
+            '/api/v1/sales/prospects/').status_code == status.HTTP_200_OK
+        # escrita negada (viewer nunca escreve)
+        r = viewer_client.post('/api/v1/sales/customers/', {
+            'company_name': 'Viewer Co', 'customer_type': 'PJ',
+            'email': 'viewer@co.com',
+        }, format='json')
+        assert r.status_code == status.HTTP_403_FORBIDDEN

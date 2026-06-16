@@ -22,6 +22,8 @@ import {
   Mail,
   Package,
   Landmark,
+  Scale,
+  Crown,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
@@ -66,6 +68,12 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    title: 'JURÍDICO',
+    items: [
+      { href: '/juridico',  label: 'Jurídico',   icon: Scale         },
+    ],
+  },
+  {
     title: 'OPERACIONAL',
     items: [
       { href: '/projects',  label: 'Projetos',   icon: FolderKanban  },
@@ -75,7 +83,16 @@ const navSections: NavSection[] = [
   {
     title: 'FINANCEIRO',
     items: [
-      { href: '/finance',    label: 'Financeiro',  icon: DollarSign  },
+      // v32 F4b: entrada do Financeiro vira visão CRM (5 grupos do v34)
+      { href: '/financeiro', label: 'CRM Financeiro',    icon: DollarSign },
+      { href: '/finance',    label: 'Gestão Financeira', icon: Landmark   },
+    ],
+  },
+  {
+    // v32 F6: visível só para admin ou setor diretoria (filtro no render)
+    title: 'DIRETORIA',
+    items: [
+      { href: '/diretoria',  label: 'Diretoria',   icon: Crown       },
     ],
   },
   {
@@ -97,7 +114,7 @@ const allNavItems = navSections.flatMap((s) => s.items);
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<{ username: string; email: string; is_staff?: boolean; role?: string } | null>(null);
+  const [user, setUser] = useState<{ username: string; email: string; is_staff?: boolean; role?: string; sectors?: string[] } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notif[]>([]);
@@ -119,7 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // Email is no longer persisted in localStorage; fetch it from the
     // authenticated profile endpoint so it never lives in the browser store.
     api
-      .get<{ email?: string; username?: string; role?: string; is_staff?: boolean }>(
+      .get<{ email?: string; username?: string; role?: string; is_staff?: boolean; sectors?: string[] }>(
         '/accounts/profile/',
       )
       .then((profile) => {
@@ -129,6 +146,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           email: profile.email ?? prev?.email ?? '',
           is_staff: profile.is_staff ?? prev?.is_staff,
           role: profile.role ?? prev?.role,
+          sectors: profile.sectors ?? prev?.sectors,
         }));
       })
       .catch(() => {
@@ -223,13 +241,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.location.href = '/login';
   };
 
-  const currentPage = allNavItems.find(
-    (item) => pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)),
-  );
+  // v32 F4b: match por segmento (href + '/') para /financeiro não ativar /finance
+  const matchesNavItem = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+
+  const currentPage = allNavItems.find((item) => matchesNavItem(item.href));
 
   // Detect nested pages (e.g. /projects/123)
   const pathSegments = pathname.split('/').filter(Boolean);
   const isNestedPage = pathSegments.length > 1;
+
+  // v32 F6: seção DIRETORIA só para admin ou usuário do setor diretoria
+  const visibleSections = navSections.filter((section) => {
+    if (section.title !== 'DIRETORIA') return true;
+    return user?.role === 'admin' || (user?.sectors || []).includes('diretoria');
+  });
 
   const SidebarContent = () => (
     <>
@@ -255,16 +281,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-        {navSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.title}>
             <p className="px-3 mb-2 mt-1 text-[9px] font-bold text-slate-600/80 tracking-[0.2em] uppercase">
               {section.title}
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                const isActive = matchesNavItem(item.href);
                 const Icon = item.icon;
                 return (
                   <Link

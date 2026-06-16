@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import SLAPolicy, SupportCategory, SupportTicket, TicketComment, TicketAttachment, KnowledgeBaseArticle
+from .models import (
+    SLAPolicy, SupportCategory, SupportTicket, TicketComment, TicketAttachment,
+    KnowledgeBaseArticle, PedidoUpdate,
+)
 
 
 class SLAPolicySerializer(serializers.ModelSerializer):
@@ -53,12 +56,15 @@ class SupportTicketSerializer(serializers.ModelSerializer):
     comments_count = serializers.SerializerMethodField()
     is_sla_breached = serializers.SerializerMethodField()
 
+    project_tipo = serializers.CharField(source='project.tipo', read_only=True, default=None)
+
     class Meta:
         model = SupportTicket
         fields = [
             'id', 'number', 'title', 'description', 'customer', 'customer_name',
-            'contract', 'project', 'category', 'sla_policy', 'sla_policy_name',
+            'contract', 'project', 'project_tipo', 'category', 'sla_policy', 'sla_policy_name',
             'ticket_type', 'priority', 'status', 'assigned_to', 'assigned_to_name',
+            'conclusao', 'contexto', 'originating_proposal',
             'sla_response_deadline', 'sla_resolution_deadline',
             'first_response_at', 'resolved_at', 'closed_at',
             'contact_name', 'contact_email', 'tags',
@@ -68,11 +74,15 @@ class SupportTicketSerializer(serializers.ModelSerializer):
         # S7C1: status/resolved_at/closed_at/first_response_at e sla_*_deadline
         # sao gerenciados pelas actions assign/resolve/close. PATCH direto
         # burlava transicoes e zerava breach do SLA dashboard (KPIs adulterados).
+        # F6: conclusao so muda via POST /analyze/ (logica por tipo de projeto
+        # + escalacao); originating_proposal e' preenchido pelo fluxo do
+        # orcamento — ambos read_only (STRIDE Tampering, doc 08 §8.1).
         read_only_fields = [
             'id', 'number', 'created_by', 'created_by_name',
             'created_at', 'updated_at',
             'status', 'resolved_at', 'closed_at', 'first_response_at',
             'sla_response_deadline', 'sla_resolution_deadline',
+            'conclusao', 'originating_proposal',
         ]
 
     def get_customer_name(self, obj):
@@ -99,7 +109,8 @@ class SupportTicketSerializer(serializers.ModelSerializer):
     def get_is_sla_breached(self, obj):
         from django.utils import timezone
         now = timezone.now()
-        if obj.status in ('resolved', 'closed'):
+        # F6: statuses terminais novos + legados (convivência de release)
+        if obj.status in ('resolvido', 'fechado', 'resolved', 'closed'):
             return False
         if obj.sla_resolution_deadline and now > obj.sla_resolution_deadline:
             return True
@@ -128,3 +139,65 @@ class KnowledgeBaseArticleSerializer(serializers.ModelSerializer):
 
     def get_category_name(self, obj):
         return obj.category.name if obj.category else None
+
+
+# ─── v32 F6 (doc 05) ─────────────────────────────────────────────────────────
+
+class TicketTransitionSerializer(serializers.Serializer):
+    """Input do POST /tickets/{id}/transition/ — board do Suporte.
+
+    Aceita apenas os statuses do fluxo NOVO (aberto → triagem → analise →
+    correcao → resolvido → fechado). Statuses legados não são alvos válidos.
+    """
+    status = serializers.ChoiceField(
+        choices=[(s, s) for s in SupportTicket.STATUS_FLOW],
+    )
+
+
+class TicketAnalyzeSerializer(serializers.Serializer):
+    """Input do POST /tickets/{id}/analyze/ — conclusão da Análise (doc 05 §3)."""
+    conclusao = serializers.ChoiceField(choices=SupportTicket.CONCLUSAO_CHOICES)
+
+
+class PedidoUpdateSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    ticket_number = serializers.CharField(
+        source='originating_ticket.number', read_only=True, default=None,
+    )
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    prospect_status = serializers.CharField(
+        source='prospect.status', read_only=True, default=None,
+    )
+
+    class Meta:
+        model = PedidoUpdate
+        fields = [
+            'id', 'originating_ticket', 'ticket_number', 'customer',
+            'customer_name', 'description', 'status', 'status_display',
+            'prospect', 'prospect_status', 'requested_at', 'promoted_at',
+            'created_by',
+        ]
+        # status/prospect/promoted_at mudam apenas via actions promote/decline
+        # (flag AUTOMATION_SUP_PEDIDO_UPDATE + auditoria).
+        read_only_fields = [
+            'id', 'status', 'prospect', 'requested_at', 'promoted_at',
+            'created_by',
+        ]
+
+    def get_customer_name(self, obj):
+        if not obj.customer:
+            return None
+        return obj.customer.company_name or obj.customer.name
+
+
+class PublicTicketCreateSerializer(serializers.Serializer):
+    """Input do canal público de chamados (doc 05 §9) — POST sem login.
+
+    Payload mínimo: título + descrição + contato opcional + anexo opcional
+    (texto/imagem/vídeo/áudio). Nenhum campo de sistema é aceito.
+    """
+    title = serializers.CharField(max_length=300)
+    description = serializers.CharField()
+    contact_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    contact_email = serializers.EmailField(required=False, allow_blank=True, default='')
+    attachment = serializers.FileField(required=False, allow_null=True, default=None)

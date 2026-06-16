@@ -1,0 +1,1043 @@
+{
+  "scenario": "04_prazo_longo_dez_jan",
+  "source": "inova-cockpit-v34.html",
+  "params": {
+    "prazo_total": 180,
+    "modo": "uteis",
+    "data_onboarding": "2026-06-10",
+    "pct_doc": 15,
+    "pct_dev": 50,
+    "pct_aud": 8,
+    "peso_val": 5,
+    "peso_hom": 17,
+    "peso_ent": 5,
+    "reupd_fds": 0,
+    "considerar_carnaval": true,
+    "considerar_corpus": true,
+    "data_reuniao_validacao": null,
+    "data_reuniao_apresentacao": null,
+    "data_reuniao_graduacao": null
+  },
+  "expected": {
+    "capped": false,
+    "total_gap": 0,
+    "entrega": "2027-03-02",
+    "entrega_base": "2027-03-02",
+    "fases": [
+      {
+        "key": "doc",
+        "label": "Documentação",
+        "dias": 27,
+        "pct": 15,
+        "cum_prev": 0,
+        "cum_end": 27,
+        "inicio": "2026-06-11",
+        "fim": "2026-07-20",
+        "sub_passos": [
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-11",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-12",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-15",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-16",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-17",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-18",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-19",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-22",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-23",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-24",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-25",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-26",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-29",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-30",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-07-01",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-07-02",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-03",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-06",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-07",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-08",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-10",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-13",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-07-14",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Revisão interna e apresentação",
+            "data": "2026-07-15",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Revisão interna e apresentação",
+            "data": "2026-07-16",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Revisão interna e apresentação",
+            "data": "2026-07-17",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Revisão interna e apresentação",
+            "data": "2026-07-20",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Documentação pronta pra validar",
+            "data": "2026-07-20",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Agendar a reunião de validação com o cliente",
+            "data": "2026-07-20",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "val",
+        "label": "Validação e assinatura",
+        "dias": 9,
+        "pct": 5,
+        "cum_prev": 27,
+        "cum_end": 36,
+        "inicio": "2026-07-21",
+        "fim": "2026-07-31",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Reunião de validação com o cliente (refina ou muda)",
+            "data": "2026-07-21",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-21",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-22",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-23",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-24",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-27",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-28",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-29",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-30",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-07-31",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente assina, baseline oficial",
+            "data": "2026-07-31",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "dev",
+        "label": "Desenvolvimento",
+        "dias": 90,
+        "pct": 50,
+        "cum_prev": 36,
+        "cum_end": 126,
+        "inicio": "2026-08-03",
+        "fim": "2026-12-10",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Início (quebra a documentação em fases)",
+            "data": "2026-08-03",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-08-07",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-08-14",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-08-21",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-08-28",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-09-04",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-09-11",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-09-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-09-25",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-10-02",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-10-09",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-10-16",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-10-23",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-10-30",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-11-06",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-11-13",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-11-27",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-12-04",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Desenvolvimento concluído, pronto pra auditoria",
+            "data": "2026-12-10",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "aud",
+        "label": "Auditoria interna",
+        "dias": 14,
+        "pct": 8,
+        "cum_prev": 126,
+        "cum_end": 140,
+        "inicio": "2026-12-11",
+        "fim": "2026-12-31",
+        "sub_passos": [
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-11",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-14",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-15",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-16",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-17",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-18",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-21",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-12-22",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-23",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-24",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-28",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-29",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-30",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-12-31",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Auditoria aprovada, reunião de apresentação agendada",
+            "data": "2026-12-31",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "hom",
+        "label": "Homologação",
+        "dias": 31,
+        "pct": 17,
+        "cum_prev": 140,
+        "cum_end": 171,
+        "inicio": "2027-01-04",
+        "fim": "2027-02-17",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Apresentação e liberação do acesso",
+            "data": "2027-01-04",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-04",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-05",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-06",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-07",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-08",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-11",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-12",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-13",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-14",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-15",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-18",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-19",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-20",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-21",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-22",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-25",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2027-01-26",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-01-27",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-01-28",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-01-29",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-01",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-02",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-03",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-04",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-05",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-10",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-11",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-12",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-15",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-16",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2027-02-17",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente aprovou",
+            "data": "2027-02-17",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "ent",
+        "label": "Entrega ou Implementação",
+        "dias": 9,
+        "pct": 5,
+        "cum_prev": 171,
+        "cum_end": 180,
+        "inicio": "2027-02-18",
+        "fim": "2027-03-02",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Registro da versão entregue (release, baseline, deploy)",
+            "data": "2027-02-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Graduação (Fechado) ou subida no ambiente (Recorrente)",
+            "data": "2027-02-24",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Plano de recorrência definido e passagem pro suporte",
+            "data": "2027-03-02",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      }
+    ],
+    "reunioes": {
+      "val": {
+        "data_natural": "2026-07-21",
+        "gap": 0,
+        "marcada": false
+      },
+      "apr": {
+        "data_natural": "2027-01-04",
+        "gap": 0,
+        "marcada": false
+      },
+      "grad": {
+        "data_natural": "2027-02-24",
+        "gap": 0,
+        "marcada": false
+      }
+    },
+    "feriados": [
+      {
+        "data": "2026-07-09",
+        "nome": "Revolução Constitucionalista (SP)"
+      },
+      {
+        "data": "2026-09-07",
+        "nome": "Independência"
+      },
+      {
+        "data": "2026-10-12",
+        "nome": "Nossa Senhora Aparecida"
+      },
+      {
+        "data": "2026-11-02",
+        "nome": "Finados"
+      },
+      {
+        "data": "2026-11-20",
+        "nome": "Consciência Negra"
+      },
+      {
+        "data": "2026-12-25",
+        "nome": "Natal"
+      },
+      {
+        "data": "2027-01-01",
+        "nome": "Confraternização Universal"
+      },
+      {
+        "data": "2027-02-08",
+        "nome": "Carnaval"
+      },
+      {
+        "data": "2027-02-09",
+        "nome": "Carnaval"
+      }
+    ],
+    "reupd_info": {
+      "base": 14,
+      "requested": 0,
+      "available": 0,
+      "used": 0,
+      "total": 14
+    }
+  }
+}

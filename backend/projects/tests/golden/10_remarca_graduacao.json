@@ -1,0 +1,427 @@
+{
+  "scenario": "10_remarca_graduacao",
+  "source": "inova-cockpit-v34.html",
+  "params": {
+    "prazo_total": 45,
+    "modo": "uteis",
+    "data_onboarding": "2026-06-10",
+    "pct_doc": 15,
+    "pct_dev": 50,
+    "pct_aud": 8,
+    "peso_val": 5,
+    "peso_hom": 17,
+    "peso_ent": 5,
+    "reupd_fds": 0,
+    "considerar_carnaval": true,
+    "considerar_corpus": true,
+    "data_reuniao_validacao": null,
+    "data_reuniao_apresentacao": null,
+    "data_reuniao_graduacao": "2026-08-18"
+  },
+  "expected": {
+    "capped": false,
+    "total_gap": 4,
+    "entrega": "2026-08-19",
+    "entrega_base": "2026-08-13",
+    "fases": [
+      {
+        "key": "doc",
+        "label": "Documentação",
+        "dias": 7,
+        "pct": 15,
+        "cum_prev": 0,
+        "cum_end": 7,
+        "inicio": "2026-06-11",
+        "fim": "2026-06-19",
+        "sub_passos": [
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-11",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-12",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-15",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Produção da documentação",
+            "data": "2026-06-16",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-06-17",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Design e wireframes",
+            "data": "2026-06-18",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Revisão interna e apresentação",
+            "data": "2026-06-19",
+            "pos": "ini",
+            "single": true,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Documentação pronta pra validar",
+            "data": "2026-06-19",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Agendar a reunião de validação com o cliente",
+            "data": "2026-06-19",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "val",
+        "label": "Validação e assinatura",
+        "dias": 2,
+        "pct": 4,
+        "cum_prev": 7,
+        "cum_end": 9,
+        "inicio": "2026-06-22",
+        "fim": "2026-06-23",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Reunião de validação com o cliente (refina ou muda)",
+            "data": "2026-06-22",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-06-22",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Dev ajusta a documentação e envia ao Jurídico",
+            "data": "2026-06-23",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente assina, baseline oficial",
+            "data": "2026-06-23",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "dev",
+        "label": "Desenvolvimento",
+        "dias": 23,
+        "pct": 50,
+        "cum_prev": 9,
+        "cum_end": 32,
+        "inicio": "2026-06-24",
+        "fim": "2026-07-27",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Início (quebra a documentação em fases)",
+            "data": "2026-06-24",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-06-26",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-07-03",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-07-10",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-07-17",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "rec",
+            "label": "Atualização semanal pro cliente",
+            "data": "2026-07-24",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Desenvolvimento concluído, pronto pra auditoria",
+            "data": "2026-07-27",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "aud",
+        "label": "Auditoria interna",
+        "dias": 4,
+        "pct": 8,
+        "cum_prev": 32,
+        "cum_end": 36,
+        "inicio": "2026-07-28",
+        "fim": "2026-07-31",
+        "sub_passos": [
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-07-28",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Testes (fluxos, regras, permissões, integrações, design)",
+            "data": "2026-07-29",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-07-30",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Correção dos bugs encontrados",
+            "data": "2026-07-31",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Auditoria aprovada, reunião de apresentação agendada",
+            "data": "2026-07-31",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "hom",
+        "label": "Homologação",
+        "dias": 7,
+        "pct": 16,
+        "cum_prev": 36,
+        "cum_end": 43,
+        "inicio": "2026-08-03",
+        "fim": "2026-08-11",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Apresentação e liberação do acesso",
+            "data": "2026-08-03",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2026-08-03",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2026-08-04",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2026-08-05",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "Janela de teste do cliente",
+            "data": "2026-08-06",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2026-08-07",
+            "pos": "ini",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2026-08-10",
+            "pos": "mid",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "bloco",
+            "label": "re-update",
+            "data": "2026-08-11",
+            "pos": "fim",
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Cliente aprovou",
+            "data": "2026-08-11",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      },
+      {
+        "key": "ent",
+        "label": "Entrega ou Implementação",
+        "dias": 2,
+        "pct": 4,
+        "cum_prev": 43,
+        "cum_end": 45,
+        "inicio": "2026-08-18",
+        "fim": "2026-08-19",
+        "sub_passos": [
+          {
+            "kind": "marco",
+            "label": "Registro da versão entregue (release, baseline, deploy)",
+            "data": "2026-08-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Graduação (Fechado) ou subida no ambiente (Recorrente)",
+            "data": "2026-08-18",
+            "pos": null,
+            "single": false,
+            "ws": false
+          },
+          {
+            "kind": "marco",
+            "label": "Plano de recorrência definido e passagem pro suporte",
+            "data": "2026-08-19",
+            "pos": null,
+            "single": false,
+            "ws": false
+          }
+        ]
+      }
+    ],
+    "reunioes": {
+      "val": {
+        "data_natural": "2026-06-22",
+        "gap": 0,
+        "marcada": false
+      },
+      "apr": {
+        "data_natural": "2026-08-03",
+        "gap": 0,
+        "marcada": false
+      },
+      "grad": {
+        "data_natural": "2026-08-12",
+        "gap": 4,
+        "marcada": true
+      }
+    },
+    "feriados": [
+      {
+        "data": "2026-07-09",
+        "nome": "Revolução Constitucionalista (SP)"
+      }
+    ],
+    "reupd_info": {
+      "base": 3,
+      "requested": 0,
+      "available": 0,
+      "used": 0,
+      "total": 3
+    }
+  }
+}

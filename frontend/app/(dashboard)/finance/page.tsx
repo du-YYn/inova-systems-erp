@@ -165,6 +165,9 @@ interface CostCenter {
   is_active: boolean;
 }
 
+// v32 F4: estágio do ciclo de cobrança calculado pelo backend
+type BillingCycle = 'pre_cadastro' | 'aguardando_assinatura' | 'cobranca_ativa' | 'paga' | null;
+
 interface FullInvoice {
   id: number;
   number: string;
@@ -183,6 +186,7 @@ interface FullInvoice {
   bank_account_name: string | null;
   category: number | null;
   category_name: string | null;
+  billing_cycle?: BillingCycle;
 }
 
 interface FullTransaction {
@@ -217,6 +221,26 @@ const formatCurrency = (value: number | string) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value));
 
 const formatDate = (date: string) => new Date(date).toLocaleDateString('pt-BR');
+
+// v32 F4: badges do ciclo de cobrança (pré-cadastro → assinatura → ativa → paga)
+const BILLING_CYCLE_BADGES: Record<string, { label: string; className: string }> = {
+  pre_cadastro: {
+    label: 'Pré-cadastro',
+    className: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+  },
+  aguardando_assinatura: {
+    label: 'Aguardando assinatura',
+    className: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300',
+  },
+  cobranca_ativa: {
+    label: 'Cobrança ativa',
+    className: 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300',
+  },
+  paga: {
+    label: 'Paga',
+    className: 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300',
+  },
+};
 
 const EMPTY_REVENUE = { description: '', amount: '', date: '', bank_account: '' };
 const EMPTY_EXPENSE = { description: '', amount: '', date: '', bank_account: '' };
@@ -1221,6 +1245,7 @@ export default function FinancePage() {
                     <th className="text-left">Vencimento</th>
                     <th className="text-right">Total</th>
                     <th className="text-left">Status</th>
+                    <th className="text-left">Ciclo</th>
                     <th className="text-right">Ações</th>
                   </tr>
                 </thead>
@@ -1252,6 +1277,15 @@ export default function FinancePage() {
                           {inv.status === 'paid' ? 'Paga' : inv.status === 'overdue' ? 'Vencida' :
                            inv.status === 'cancelled' ? 'Cancelada' : inv.status === 'sent' ? 'Enviada' : 'Pendente'}
                         </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {inv.billing_cycle && BILLING_CYCLE_BADGES[inv.billing_cycle] ? (
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${BILLING_CYCLE_BADGES[inv.billing_cycle].className}`}>
+                            {BILLING_CYCLE_BADGES[inv.billing_cycle].label}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-1">

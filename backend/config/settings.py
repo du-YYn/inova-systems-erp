@@ -91,6 +91,8 @@ INSTALLED_APPS = [
     'core.apps.CoreConfig',
     'support.apps.SupportConfig',
     'notifications.apps.NotificationsConfig',
+    'juridico.apps.JuridicoConfig',
+    'diretoria.apps.DiretoriaConfig',
     'drf_spectacular',
 ]
 
@@ -142,9 +144,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    # F0: 8 → 12. ERP financeiro com dados reais; 12+complexidade torna
+    # brute-force offline impraticavel. So afeta senhas novas/trocadas.
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 12},
+    },
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    # F0: exige maiuscula + numero + simbolo (accounts/validators.py).
+    {'NAME': 'accounts.validators.PasswordComplexityValidator'},
 ]
 
 LANGUAGE_CODE = 'pt-br'
@@ -224,6 +233,17 @@ REST_FRAMEWORK = {
         # S7H: password reset composto (IP, email). 1/h por combinacao
         # IP+email — empilha com password_reset (3/h por IP).
         'password_reset_email': '1/hour',
+        # F0: health era throttle_classes=[] (sem limite). 60/min por IP
+        # cobre o smoke do CD (24 req/2min) e monitores externos.
+        'health': '60/minute',
+        # F1: simulação do cronograma é cálculo puro autenticado; 60/min
+        # por usuário cobre uso humano (sliders na mini-tela) sem permitir
+        # flood (STRIDE DoS, doc 08 §8.1).
+        'cronograma_simulate': '60/minute',
+        # F6 (doc 05 §9): canal público de chamados — 5/h por token de
+        # cliente (STRIDE DoS/Info disclosure, doc 08 §8.1). Empilha com o
+        # throttle por IP da view.
+        'public_ticket': '5/hour',
     },
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
@@ -231,12 +251,104 @@ REST_FRAMEWORK = {
 # ─── JWT ───────────────────────────────────────────────────────────────────────
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    # F0: 60 → 30min. O frontend ja faz auto-refresh single-flight em 401,
+    # entao a unica mudanca percebida e a janela menor de um token vazado.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# ─── F0: FLAGS DE SEGURANCA OPERACIONAL ───────────────────────────────────────
+# Enforcement de 2FA para admins: em producao default ON. Fase 1 do
+# enforcement: o login de admin sem 2FA retorna must_setup_2fa=True e o
+# frontend forca a tela de setup (bloqueio hard no backend fica para F2,
+# evitando lockout do unico admin durante a transicao).
+ENFORCE_ADMIN_2FA = os.environ.get(
+    'ENFORCE_ADMIN_2FA', 'false' if DEBUG else 'true'
+).lower() == 'true'
+
+# reset-data apaga TODA a base de negocio. Fora de DEBUG o endpoint
+# responde 404 a menos que o operador ligue explicitamente (e desligue
+# depois). Nunca deixar ligado em producao.
+RESET_DATA_ENABLED = DEBUG or os.environ.get(
+    'RESET_DATA_ENABLED', 'false'
+).lower() == 'true'
+
+# ─── v32: FLAGS DE AUTOMACAO CROSS-SETOR (doc 08 §11.2 R2) ────────────────────
+# Toda automacao nova nasce atras de flag por env: off | dry_run | on.
+# Default dry_run: loga (logger + log_audit) o que faria, sem efeito.
+# Kill-switch sem deploy: trocar env + restart.
+
+
+def _automation_flag(name: str, default: str = 'dry_run') -> str:
+    value = os.environ.get(name, default).strip().lower()
+    if value not in ('off', 'dry_run', 'on'):
+        logging.getLogger('django').warning(
+            'CONFIG: %s=%r invalido (esperado off|dry_run|on) — usando %r.',
+            name, value, default,
+        )
+        return default
+    return value
+
+
+# F3: ClientOnboarding submitted -> cria LegalCase(contrato, source=comercial)
+AUTOMATION_JURIDICO_CONTRATO = _automation_flag('AUTOMATION_JURIDICO_CONTRATO')
+
+# F4: ClientOnboarding submitted -> pré-cadastra Invoice(pending) do
+# ProposalPaymentPlan (paralelo ao Jurídico)
+AUTOMATION_FIN_PRECADASTRO = _automation_flag('AUTOMATION_FIN_PRECADASTRO')
+
+# F4: LegalCase(contrato) assinado -> libera cobrança das invoices pendentes
+AUTOMATION_FIN_LIBERA_COBRANCA = _automation_flag('AUTOMATION_FIN_LIBERA_COBRANCA')
+
+# F4: Invoice da entrada paga -> evento interno entrada_paga (Dia 0 Produção)
+AUTOMATION_FIN_ENTRADA_PAGA = _automation_flag('AUTOMATION_FIN_ENTRADA_PAGA')
+
+# F4: régua de cobrança (lembretes a vencer 3d / vencida 1d e 7d)
+AUTOMATION_FIN_REGUA = _automation_flag('AUTOMATION_FIN_REGUA')
+
+# F3/F4 (doc 09 item 07): Aditivo -> Financeiro. Nova solicitação pré-cadastra
+# o valor (pendente); Assinado ativa a cobrança; Recusado cancela o pré-cadastro.
+AUTOMATION_FIN_ADITIVO = _automation_flag('AUTOMATION_FIN_ADITIVO')
+
+# F5: evento entrada_paga (Financeiro) -> seta Project.entrada_paga_at
+AUTOMATION_PROD_ENTRADA = _automation_flag('AUTOMATION_PROD_ENTRADA')
+
+# F5: LegalCase(contrato) assinado -> seta Project.contrato_assinado_at
+AUTOMATION_PROD_CONTRATO_ASSINADO = _automation_flag(
+    'AUTOMATION_PROD_CONTRATO_ASSINADO')
+
+# F5: LegalCase(validacao_documento) assinado -> ProjectDocument signed+baseline
+AUTOMATION_PROD_DOC_ASSINADA = _automation_flag('AUTOMATION_PROD_DOC_ASSINADA')
+
+# F5: bifurcação (graduação/implementação) -> cria RecurrenceContract
+AUTOMATION_PROD_RECORRENCIA = _automation_flag('AUTOMATION_PROD_RECORRENCIA')
+
+# v32 ajustes (doc 09 itens 06/07 + doc 10): PRODUCERS Produção -> Jurídico.
+# Doc enviada pra validação -> cria LegalCase(validacao_documento).
+AUTOMATION_PROD_VALIDACAO_JURIDICO = _automation_flag(
+    'AUTOMATION_PROD_VALIDACAO_JURIDICO')
+# Solicitar Mudança -> cria ChangeRequest + LegalCase(aditivo).
+AUTOMATION_PROD_ADITIVO_JURIDICO = _automation_flag(
+    'AUTOMATION_PROD_ADITIVO_JURIDICO')
+
+# F6: SupportTicket analisado com conclusao=inconclusivo -> cria
+# diretoria.DirectorEscalation + Notification para admins
+AUTOMATION_SUP_ESCALA = _automation_flag('AUTOMATION_SUP_ESCALA')
+
+# F6: promover PedidoUpdate -> cria Prospect(status=tech_analysis) no Comercial
+AUTOMATION_SUP_PEDIDO_UPDATE = _automation_flag('AUTOMATION_SUP_PEDIDO_UPDATE')
+
+# F6: auto-fechamento de chamados resolvidos sem retorno do cliente
+AUTOMATION_SUP_AUTOCLOSE = _automation_flag('AUTOMATION_SUP_AUTOCLOSE')
+
+# F6 (doc 05 §8): dias em `resolvido` sem retorno antes do auto-fechamento.
+try:
+    SUPPORT_AUTOCLOSE_DAYS = int(os.environ.get('SUPPORT_AUTOCLOSE_DAYS', '5'))
+except ValueError:
+    SUPPORT_AUTOCLOSE_DAYS = 5
 
 # ─── JWT COOKIES ────────────────────────────────────────────────────────────────
 # Cookies são httpOnly — inacessíveis por JavaScript (proteção XSS)
@@ -311,6 +423,19 @@ else:
     # Settamos None para forcar erro claro em totp_crypto.py se for usado.
     TOTP_ENCRYPTION_KEY = None
 
+# Trava anti-lockout (S2FA-safe): forcar 2FA exige a chave que cifra os
+# segredos TOTP. Sem TOTP_ENCRYPTION_KEY, o setup/verify de 2FA falha em
+# accounts/totp_crypto.py e o admin ficaria preso na tela de setup forcado.
+# Quando a chave esta ausente, desligamos o enforcement (login normal segue
+# funcionando) e ele volta a valer sozinho assim que a chave for definida.
+if ENFORCE_ADMIN_2FA and not TOTP_ENCRYPTION_KEY:
+    ENFORCE_ADMIN_2FA = False
+    logging.getLogger('django').warning(
+        'ENFORCE_ADMIN_2FA desativado automaticamente: TOTP_ENCRYPTION_KEY '
+        'ausente. Sem a chave o setup de 2FA nao conclui e prenderia o admin. '
+        'Defina TOTP_ENCRYPTION_KEY no .env para reativar o enforcement de 2FA.'
+    )
+
 # ─── N8N INTEGRATION ─────────────────────────────────────────────────────────
 N8N_API_KEY = os.environ.get('N8N_API_KEY', '')
 
@@ -354,6 +479,15 @@ if not DEBUG:
         if _o.startswith('https://') and '*' not in _o and _o not in _csrf_trusted:
             _csrf_trusted.append(_o)
     CSRF_TRUSTED_ORIGINS = _csrf_trusted
+else:
+    # F0/DX: em dev o frontend (localhost:3000) chama a API direto em outra
+    # porta; POST cross-origin exige a origin aqui, senao todo unsafe method
+    # morre com "CSRF Failed: Origin checking failed". SO em DEBUG — em
+    # producao vale o bloco acima (enumerado, sem wildcard, https only).
+    CSRF_TRUSTED_ORIGINS = [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+    ]
 
 # ─── CACHE / REDIS ─────────────────────────────────────────────────────────────
 
@@ -378,7 +512,7 @@ EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'resend')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@inovasystemssolutions.com')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Inova Systems Solutions <noreply@inovasystemssolutions.com>')
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
@@ -437,6 +571,7 @@ LOGGING = {
         'sales':     {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'finance':   {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'projects':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'juridico':  {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
         'audit': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
     },
 }
@@ -487,6 +622,19 @@ CELERY_BEAT_SCHEDULE = {
     'check-sla-warnings': {
         'task': 'notifications.tasks.check_sla_warnings',
         'schedule': crontab(minute=0),  # a cada hora cheia
+    },
+    # v32 F4: régua de cobrança (a vencer 3d / vencida 1d e 7d) — diário 08:30
+    # Atrás da flag AUTOMATION_FIN_REGUA (default dry_run).
+    'dunning-reminders': {
+        'task': 'finance.tasks.dunning_reminders',
+        'schedule': crontab(hour=8, minute=30),
+    },
+    # v32 F6 (doc 05 §8): auto-fechamento de chamados resolvidos há mais de
+    # SUPPORT_AUTOCLOSE_DAYS dias sem retorno — diário às 07:30.
+    # Atrás da flag AUTOMATION_SUP_AUTOCLOSE (default dry_run).
+    'support-autoclose-resolved': {
+        'task': 'support.tasks.close_stale_resolved',
+        'schedule': crontab(hour=7, minute=30),
     },
 }
 

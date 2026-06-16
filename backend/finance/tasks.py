@@ -1,6 +1,6 @@
 import logging
 from celery import shared_task
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 logger = logging.getLogger('finance')
 
@@ -123,3 +123,122 @@ def generate_recurring_invoices():
             created += 1
 
     logger.info(f"generate_recurring_invoices: {created} faturas criadas para {month_label}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# v32 F4 — Régua de cobrança (dunning, doc 03 §3.04)
+# ─────────────────────────────────────────────────────────────────────────────
+
+DUNNING_FLAG = 'AUTOMATION_FIN_REGUA'
+DUNNING_ACTION = 'fin_regua_cobranca'
+DUNNING_DRY_RUN_ACTION = 'fin_regua_cobranca_dry_run'
+
+# Janelas da régua: (offset em dias relativo ao vencimento, rótulo pt-BR).
+# Negativo = a vencer; positivo = vencida há N dias.
+DUNNING_WINDOWS = [
+    (-3, 'a vencer em 3 dias'),
+    (1, 'vencida há 1 dia'),
+    (7, 'vencida há 7 dias'),
+]
+
+
+@shared_task
+def dunning_reminders():
+    """Régua de cobrança: lembretes de fatura a vencer (3d) e vencida (1/7d).
+
+    Complementa check_invoice_overdue (que só marca o D+0). Atrás da flag
+    AUTOMATION_FIN_REGUA (off | dry_run | on, default dry_run):
+    - dry_run: loga (logger + log_audit) o que lembraria, sem Notification.
+    - on: cria Notification para admins/managers (sem email real nesta fase).
+
+    Só considera invoices ENVIÁVEIS: sem pré-cadastro (fluxo antigo) ou com
+    cobrança liberada (regra de ouro F4 — pré-cadastro não cobrável não
+    entra na régua). Agendada no Celery Beat diário às 08:30.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from .flags import get_automation_flag
+    from .models import Invoice
+    from core.audit import log_audit
+
+    flag = get_automation_flag(DUNNING_FLAG)
+    if flag == 'off':
+        return 0
+
+    today = timezone.now().date()
+    total_reminders = 0
+    audit_entries = []
+
+    for offset, label in DUNNING_WINDOWS:
+        target_date = today + timedelta(days=-offset)
+        statuses = ['pending', 'sent'] if offset < 0 else ['pending', 'sent', 'overdue']
+        invoices = list(
+            Invoice.objects.filter(
+                invoice_type='receivable',
+                due_date=target_date,
+                status__in=statuses,
+            )
+            .filter(Q(precadastro_origem__isnull=True) | Q(cobranca_liberada=True))
+            .select_related('customer')
+        )
+        if not invoices:
+            continue
+
+        for invoice in invoices:
+            customer_name = (
+                invoice.customer.company_name if invoice.customer else 'Sem cliente'
+            )
+            title = f'Fatura {invoice.number} {label}'
+            message = (
+                f'A fatura {invoice.number} de {customer_name} '
+                f'(R$ {invoice.total}) está {label} '
+                f'(vencimento {invoice.due_date.strftime("%d/%m/%Y")}).'
+            )
+            audit_entries.append({
+                'invoice': invoice.id,
+                'number': invoice.number,
+                'window': label,
+                'due_date': str(invoice.due_date),
+            })
+            if flag == 'dry_run':
+                logger.info(
+                    'DRY_RUN %s: enviaria lembrete "%s" (invoice %s). '
+                    'Sem efeito.', DUNNING_FLAG, title, invoice.id,
+                )
+            else:
+                from notifications.utils import notify_admins_and_managers
+                notification_type = (
+                    'invoice_overdue' if offset > 0 else 'general'
+                )
+                notify_admins_and_managers(
+                    notification_type=notification_type,
+                    title=title,
+                    message=message,
+                    object_type='invoice',
+                    object_id=invoice.id,
+                )
+                logger.info(
+                    'Regua de cobranca F4: lembrete "%s" criado (invoice %s).',
+                    title, invoice.id,
+                )
+            total_reminders += 1
+
+    if audit_entries:
+        action = DUNNING_DRY_RUN_ACTION if flag == 'dry_run' else DUNNING_ACTION
+        log_audit(
+            None, action, 'invoice',
+            details=(
+                f'Régua de cobrança ({flag}): {total_reminders} lembretes '
+                f'{"simulados" if flag == "dry_run" else "criados"} em '
+                f'{today.isoformat()}.'
+            ),
+            new_value={
+                'reminders': audit_entries,
+                'dry_run': flag == 'dry_run',
+            },
+        )
+
+    logger.info('dunning_reminders (%s): %s lembretes.', flag, total_reminders)
+    return total_reminders

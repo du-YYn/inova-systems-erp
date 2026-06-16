@@ -1,0 +1,28 @@
+# F0: auditoria continua da cadeia de dependencias.
+# Security updates viram PR automaticamente; o merge segue o fluxo normal
+# (CI completo + review). CRITICAL/HIGH bloqueiam merge por politica.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, backend]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    labels: [dependencies, frontend]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    labels: [dependencies, ci]
