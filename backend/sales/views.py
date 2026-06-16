@@ -485,8 +485,18 @@ class ProspectViewSet(viewsets.ModelViewSet):
         if instance.status in hot_statuses and instance.temperature != 'hot':
             instance.temperature = 'hot'
             instance.save(update_fields=['temperature'])
-        # Gerar faturas ao fechar lead
-        if old_status != 'won' and instance.status == 'won':
+        # Gerar faturas/comissão ao fechar lead.
+        # v32: o funil novo fecha o card pela coluna "Projeto Fechado"
+        # (status `projeto_fechado`) — não mais por `won` (que virou apenas o
+        # alias legado, ver frontend COLUMN_STATUS_ALIASES). O gate exclusivo
+        # em `won` deixava o caminho PRIMÁRIO de fechamento (drag → projeto_fechado)
+        # sem gerar PartnerCommission/recebíveis (perda silenciosa de comissão do
+        # parceiro indicador). Tratamos os status de fechamento como equivalentes.
+        # Idempotente: _generate_partner_commission deduplica via
+        # PartnerCommission.filter(prospect=...).exists(); _generate_receivables
+        # via prospect.receivables_generated_at.
+        CLOSING_STATUSES = ('won', 'projeto_fechado')
+        if old_status not in CLOSING_STATUSES and instance.status in CLOSING_STATUSES:
             self._generate_receivables(instance, self.request.user)
             self._generate_partner_commission(instance)
         # Marcar entrada como paga ao ir para produção
@@ -596,10 +606,19 @@ class ProspectViewSet(viewsets.ModelViewSet):
 
         # Dedupe (cobrança em dobro): o pré-cadastro F4 da proposta cobre este
         # prospect — não gerar recebíveis legados em paralelo.
-        if ProspectViewSet._proposal_plan_exists(prospect):
+        #
+        # CORREÇÃO (deploy v32 sobre prod): o dedupe só é válido quando o F4
+        # REALMENTE gera as invoices, i.e. AUTOMATION_FIN_PRECADASTRO == 'on'.
+        # Com a flag em 'off'/'dry_run' (DEFAULT = dry_run) o signal F4 só loga e
+        # NÃO cria nada; suprimir o legado nesse caso deixaria o deal SEM nenhum
+        # recebível (perda silenciosa de faturamento). Só desligamos o legado
+        # quando a automação F4 está ativa de fato.
+        from finance.flags import get_automation_flag
+        f4_active = get_automation_flag('AUTOMATION_FIN_PRECADASTRO') == 'on'
+        if f4_active and ProspectViewSet._proposal_plan_exists(prospect):
             logger.info(
                 'Receivables legado pulado para prospect %s: proposta com '
-                'ProposalPaymentPlan existe — pré-cadastro F4 é a fonte.',
+                'ProposalPaymentPlan existe e F4 ativo — pré-cadastro F4 é a fonte.',
                 prospect.id,
             )
             return

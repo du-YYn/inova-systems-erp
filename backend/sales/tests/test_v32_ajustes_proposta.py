@@ -230,13 +230,17 @@ class TestDoubleChargeDedupe:
         )
 
     def test_legacy_receivables_skipped_when_plan_exists(
-        self, admin_client, prospect, admin_user,
+        self, admin_client, prospect, admin_user, settings,
     ):
-        """Com ProposalPaymentPlan, won NÃO gera recebíveis legados (dedupe).
+        """Com ProposalPaymentPlan E F4 ATIVO, won NÃO gera recebíveis legados.
 
         O pré-cadastro F4 (a partir do plano) é a fonte; o caminho legado
-        não pode cobrar em paralelo.
+        não pode cobrar em paralelo. O dedupe SÓ vale quando o F4 realmente
+        gera invoices (AUTOMATION_FIN_PRECADASTRO == 'on'); com a flag em
+        off/dry_run o legado precisa rodar para não deixar o deal sem cobrança
+        (ver test_legacy_receivables_run_when_plan_exists_but_f4_inactive).
         """
+        settings.AUTOMATION_FIN_PRECADASTRO = 'on'
         make_proposal(prospect, admin_user, plan_type='one_time',
                       status='approved', recurring_amount=Decimal('0'))
         prospect.payment_type = 'one_time'
@@ -263,9 +267,13 @@ class TestDoubleChargeDedupe:
         assert Invoice.objects.filter(invoice_type='receivable').count() == 1
 
     def test_f4_precadastro_only_source_when_plan_exists(
-        self, admin_client, prospect, admin_user, customer,
+        self, admin_client, prospect, admin_user, customer, settings,
     ):
-        """Fluxo completo: won (sem legado) + pré-cadastro F4 = SEM duplicação."""
+        """Fluxo completo: won (sem legado) + pré-cadastro F4 = SEM duplicação.
+
+        Pré-condição do dedupe: F4 ativo (AUTOMATION_FIN_PRECADASTRO == 'on').
+        """
+        settings.AUTOMATION_FIN_PRECADASTRO = 'on'
         make_proposal(prospect, admin_user, plan_type='one_time',
                       status='approved', recurring_amount=Decimal('0'),
                       one_time_amount=Decimal('6000'),
@@ -303,6 +311,107 @@ class TestDoubleChargeDedupe:
         assert len(numbers) == 3
         assert len(set(numbers)) == 3  # todos únicos
         assert all(n.startswith('REC-') for n in numbers)
+
+    @pytest.mark.parametrize('flag', ['dry_run', 'off'])
+    def test_legacy_receivables_run_when_plan_exists_but_f4_inactive(
+        self, admin_client, prospect, admin_user, settings, flag,
+    ):
+        """REGRESSÃO (deploy v32): com ProposalPaymentPlan mas F4 INATIVO
+        (AUTOMATION_FIN_PRECADASTRO em dry_run/off — o default é dry_run), o
+        signal F4 NÃO cria invoice. O dedupe legado NÃO pode desligar o caminho
+        legado nesse caso, senão o deal fica SEM nenhum recebível (perda
+        silenciosa de faturamento). O legado deve gerar normalmente.
+        """
+        settings.AUTOMATION_FIN_PRECADASTRO = flag
+        make_proposal(prospect, admin_user, plan_type='one_time',
+                      status='approved', recurring_amount=Decimal('0'))
+        prospect.payment_type = 'one_time'
+        prospect.proposal_value = Decimal('6000')
+        prospect.save(update_fields=['payment_type', 'proposal_value'])
+
+        r = self._close_won_via_patch(admin_client, prospect)
+        assert r.status_code == status.HTTP_200_OK, r.data
+        # F4 inativo => legado precisa gerar (1 parcela one_time)
+        assert Invoice.objects.filter(invoice_type='receivable').count() == 1
+
+
+# ─── Bug v32 · comissão de parceiro no fechamento via "Projeto Fechado" ──────
+
+@pytest.mark.django_db
+class TestPartnerCommissionOnProjetoFechado:
+    """REGRESSÃO (deploy v32): o caminho PRIMÁRIO de fechamento do funil v32 é
+    arrastar o card para a coluna "Projeto Fechado" (status `projeto_fechado`),
+    que o frontend PATCHa diretamente — NÃO `won`. O gate de efeitos colaterais
+    em perform_update precisa tratar `projeto_fechado` como fechamento, senão a
+    PartnerCommission do parceiro indicador (referred_by) nunca é criada."""
+
+    def _make_partner(self):
+        return User.objects.create_user(
+            username='partner_pf', email='partner_pf@v32aj.com',
+            password='pass12345', role='partner', is_active=True,
+        )
+
+    def _close_via_patch(self, client, prospect, new_status):
+        return client.patch(
+            f'/api/v1/sales/prospects/{prospect.id}/',
+            {'status': new_status}, format='json',
+        )
+
+    def test_commission_generated_on_projeto_fechado(
+        self, admin_client, admin_user, customer,
+    ):
+        from sales.models import PartnerCommission
+        partner = self._make_partner()
+        prospect = Prospect.objects.create(
+            customer=customer, company_name='Indicado Parceiro Co',
+            contact_name='C', source='referral', status='proposal',
+            proposal_value=Decimal('15000'), referred_by=partner,
+            created_by=admin_user,
+        )
+        r = self._close_via_patch(admin_client, prospect, 'projeto_fechado')
+        assert r.status_code == status.HTTP_200_OK, r.data
+        commission = PartnerCommission.objects.filter(prospect=prospect).first()
+        assert commission is not None, (
+            'PartnerCommission deveria ter sido criada ao fechar via '
+            'projeto_fechado (caminho primário do funil v32)'
+        )
+        # Faixa 10-25k = 10% de 15000 = 1500
+        assert float(commission.commission_value) == 1500.0
+
+    def test_commission_still_generated_on_won(
+        self, admin_client, admin_user, customer,
+    ):
+        """O caminho legado `won` (modal "Fechar Lead") continua gerando."""
+        from sales.models import PartnerCommission
+        partner = self._make_partner()
+        prospect = Prospect.objects.create(
+            customer=customer, company_name='Indicado Won Co',
+            contact_name='C', source='referral', status='proposal',
+            proposal_value=Decimal('15000'), referred_by=partner,
+            created_by=admin_user,
+        )
+        r = self._close_via_patch(admin_client, prospect, 'won')
+        assert r.status_code == status.HTTP_200_OK, r.data
+        assert PartnerCommission.objects.filter(prospect=prospect).exists()
+
+    def test_commission_not_duplicated_won_then_projeto_fechado(
+        self, admin_client, admin_user, customer,
+    ):
+        """Idempotência: won -> projeto_fechado não cria comissão duplicada."""
+        from sales.models import PartnerCommission
+        partner = self._make_partner()
+        prospect = Prospect.objects.create(
+            customer=customer, company_name='Indicado Dup Co',
+            contact_name='C', source='referral', status='proposal',
+            proposal_value=Decimal('15000'), referred_by=partner,
+            created_by=admin_user,
+        )
+        assert self._close_via_patch(
+            admin_client, prospect, 'won').status_code == status.HTTP_200_OK
+        assert self._close_via_patch(
+            admin_client, prospect, 'projeto_fechado',
+        ).status_code == status.HTTP_200_OK
+        assert PartnerCommission.objects.filter(prospect=prospect).count() == 1
 
 
 # ─── L4 · recebíveis legados usam Decimal (sem drift de float) ───────────────
