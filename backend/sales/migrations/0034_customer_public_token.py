@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
             model_name='customer',
             name='public_token',
             field=models.UUIDField(
-                default=uuid.uuid4, editable=False, null=True,
+                editable=False, null=True,
                 help_text='Token do canal público de abertura de chamados',
             ),
         ),
