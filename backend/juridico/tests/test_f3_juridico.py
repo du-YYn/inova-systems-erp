@@ -330,10 +330,10 @@ class TestLegalCaseRBAC:
         response = client.post(URL, {'customer': customer.id, 'process_type': 'contrato'})
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_operator_without_sectors_falls_back_to_role(self, db, customer):
-        """H2 (code review): operador SEM sectors cai no comportamento legado
-        role-based (não é trancado no deploy do RBAC). Lê e escreve como
-        operator até John atribuir um setor."""
+    def test_operator_without_sectors_reads_but_write_fail_closed(self, db, customer):
+        """SEC-002: operador SEM sectors mantém a LEITURA legada (não é trancado
+        no deploy do RBAC), mas a ESCRITA é fail-closed (403) até John atribuir
+        um setor."""
         user = User.objects.create_user(
             username='nosector_f3', email='nosector@f3test.com',
             password='nosector_pass_123', role='operator',
@@ -341,7 +341,7 @@ class TestLegalCaseRBAC:
         client = client_for(user)
         assert client.get(URL).status_code == status.HTTP_200_OK
         response = client.post(URL, {'customer': customer.id, 'process_type': 'contrato'})
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_viewer_reads_globally_but_cannot_write(self, viewer_user, customer):
         client = client_for(viewer_user)

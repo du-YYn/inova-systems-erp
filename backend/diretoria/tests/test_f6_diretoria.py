@@ -197,6 +197,23 @@ class TestEscalationRBAC:
         )
         assert resp.status_code == 200
 
+    def test_operator_without_sectors_reads_but_write_fail_closed(self, db, ticket):
+        """SEC-002: operador SEM sectors mantém a LEITURA legada (não é trancado
+        no deploy), mas a ESCRITA é fail-closed (403). Aqui o POST cai pela
+        permission de criação (ESCALATION_CREATE_ACCESS) já fail-closed sem
+        setor; a leitura segue liberada pela leitura legada."""
+        make_escalation(ticket)
+        user = User.objects.create_user(
+            username='dir_nosector', password='dir_pass_123!', role='operator',
+            email='dirnosector@test.com', sectors=[],
+        )
+        client = client_for(user)
+        assert client.get('/api/v1/diretoria/escalations/').status_code == 200
+        resp = client.post('/api/v1/diretoria/escalations/', {
+            'originating_ticket': ticket.id, 'summary': 'Resumo',
+        }, format='json')
+        assert resp.status_code == 403
+
     def test_anonymous_401(self, ticket):
         client = APIClient()
         assert client.get('/api/v1/diretoria/escalations/').status_code == 401

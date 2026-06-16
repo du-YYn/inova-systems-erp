@@ -354,3 +354,32 @@ class TestRBAC:
     def test_user_list_requires_auth(self, api_client):
         response = api_client.get(self.users_url)
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_admin_creates_user_with_sectors(self, api_client, admin_user):
+        """SEC-002 (parte B): admin pode criar manager/operator JÁ com setor —
+        evita recriar o estado inseguro de sectors=[] (escrita fail-closed)."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.post(self.users_url, {
+            'username': 'op_with_sector',
+            'email': 'opsector@test.com',
+            'password': 'op_pass_12345',
+            'role': 'operator',
+            'sectors': ['financeiro'],
+        }, format='json')
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        created = User.objects.get(username='op_with_sector')
+        assert created.sectors == ['financeiro']
+
+    def test_admin_create_user_rejects_invalid_sector(self, api_client, admin_user):
+        """SEC-002 (parte B): validate_sectors reaproveitado no create —
+        setor inválido é rejeitado (400)."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.post(self.users_url, {
+            'username': 'op_bad_sector',
+            'email': 'opbad@test.com',
+            'password': 'op_pass_12345',
+            'role': 'operator',
+            'sectors': ['setor_inexistente'],
+        }, format='json')
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert not User.objects.filter(username='op_bad_sector').exists()

@@ -70,22 +70,23 @@ class TestHasSectorAccess:
         assert not check(partner, 'juridico', 'GET')
         assert not check(partner, 'juridico', 'POST')
 
-    def test_empty_sectors_falls_back_to_role_based(self):
-        """H2 (code review): manager/operator SEM sectors NÃO são trancados —
-        caem no comportamento legado role-based (leitura p/ todos, escrita p/
-        manager/operator). Evita 403 em massa no deploy do RBAC por setor numa
-        base de produção sem o campo preenchido."""
+    def test_empty_sectors_reads_but_write_is_fail_closed(self):
+        """SEC-002: manager/operator SEM sectors mantêm a LEITURA legada (não
+        são trancados no deploy numa base de produção sem o campo preenchido),
+        mas a ESCRITA é fail-closed (403) — sem setor não há interseção com
+        write_set. Assim que John atribui `sectors`, a escrita por setor passa
+        a valer (ver test_assigned_sector_overrides_fallback)."""
         op = make_user('operator', sectors=[], suffix='_empty_op')
         # leitura liberada em qualquer setor
         assert check(op, 'juridico', 'GET')
         assert check(op, 'comercial', 'GET')
-        # escrita liberada (role operator) — comportamento pré-v32
-        assert check(op, 'juridico', 'POST')
-        assert check(op, 'comercial', 'POST')
+        # escrita negada (fail-closed) — sem setor, sem escrita setorizada
+        assert not check(op, 'juridico', 'POST')
+        assert not check(op, 'comercial', 'POST')
 
         mgr = make_user('manager', sectors=[], suffix='_empty_mgr')
         assert check(mgr, 'financeiro', 'GET')
-        assert check(mgr, 'financeiro', 'POST')
+        assert not check(mgr, 'financeiro', 'POST')
 
     def test_empty_sectors_still_blocks_non_operator_roles(self):
         """O fallback é só para manager/operator. Viewer (leitura global) e

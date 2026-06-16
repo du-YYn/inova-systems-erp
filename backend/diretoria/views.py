@@ -5,6 +5,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.permissions import SAFE_METHODS
 from rest_framework.response import Response
 
 from accounts.permissions import HasSectorAccess
@@ -38,8 +39,32 @@ ESCALATION_CREATE_ACCESS = {
 }
 
 
+class DiretoriaWriteGuardMixin:
+    """SEC-005 — defense-in-depth: escrita em recursos da Diretoria exige que
+    o usuário seja do setor diretoria (ou admin).
+
+    Além do HasSectorAccess('diretoria') (permission de view), reforçamos no
+    nível do objeto que SÓ a Diretoria (ou admin) muta recursos da Diretoria.
+    Fecha o caminho residual em que a leitura legada (sectors=[] -> SAFE_METHODS
+    True) ou um setor com `read` na matriz (ex.: suporte) tentasse uma escrita
+    em rota de detalhe (ex.: POST /decide/). Leitura permanece pela matriz.
+    """
+
+    def _is_diretoria(self, user):
+        return bool(user) and (
+            user.role == 'admin' or 'diretoria' in set(user.sectors or [])
+        )
+
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if request.method not in SAFE_METHODS and not self._is_diretoria(request.user):
+            self.permission_denied(
+                request, message='Escrita restrita ao setor diretoria.',
+            )
+
+
 @extend_schema(tags=['diretoria'])
-class DirectorEscalationViewSet(viewsets.ModelViewSet):
+class DirectorEscalationViewSet(DiretoriaWriteGuardMixin, viewsets.ModelViewSet):
     queryset = DirectorEscalation.objects.select_related(
         'originating_ticket', 'originating_ticket__customer',
         'raised_by', 'decided_by',
@@ -161,7 +186,7 @@ class DirectorEscalationViewSet(viewsets.ModelViewSet):
 
 
 @extend_schema(tags=['diretoria'])
-class DirectoryMeetingViewSet(viewsets.ModelViewSet):
+class DirectoryMeetingViewSet(DiretoriaWriteGuardMixin, viewsets.ModelViewSet):
     queryset = DirectoryMeeting.objects.select_related('created_by').prefetch_related('attendees')
     serializer_class = DirectoryMeetingSerializer
     permission_classes = [HasSectorAccess('diretoria')]
