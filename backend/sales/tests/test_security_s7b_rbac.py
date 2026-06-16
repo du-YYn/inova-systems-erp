@@ -402,6 +402,16 @@ class TestS7B_8_WebsiteLeadOriginCheck:
         )
         assert r.status_code == 403
 
+    def test_rejects_suffix_spoofed_origin(self, api_client, setup_website):
+        """SEC-018: origin que apenas COMEÇA com o domínio permitido (mas é
+        outro host) deve ser rejeitado — startswith puro deixava passar."""
+        r = api_client.post(
+            self.URL, self._valid_payload(), format='json',
+            HTTP_ORIGIN='https://inovasystemssolutions.com.evil.com',
+            HTTP_X_API_KEY='test-website-key-s7b',
+        )
+        assert r.status_code == 403
+
     def test_accepts_allowed_origin(self, api_client, setup_website):
         r = api_client.post(
             self.URL, self._valid_payload(), format='json',
@@ -496,3 +506,38 @@ class TestS7B_9_N8NBotPermission:
         api_client.get(self.URL, HTTP_X_API_KEY='test-n8n-key-s7b-9')
         bot.refresh_from_db()
         assert bot.is_active is True
+
+
+# ─── SEC-019: SendEmailView ignora 'from' do request ──────────────────────
+
+
+@pytest.mark.django_db
+class TestSEC019SendEmailFrom:
+    URL = '/api/v1/sales/n8n/send-email/'
+
+    @pytest.fixture
+    def setup_n8n(self, settings):
+        settings.N8N_API_KEY = 'test-n8n-key-sec019'
+        settings.EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+        settings.DEFAULT_FROM_EMAIL = 'noreply@inovasystems.test'
+        return settings
+
+    def test_from_is_forced_to_default(self, api_client, setup_n8n):
+        """SEC-019: o campo 'from' do payload é ignorado — o e-mail sai sempre
+        com settings.DEFAULT_FROM_EMAIL (anti-spoofing)."""
+        from django.core import mail
+
+        r = api_client.post(
+            self.URL,
+            {
+                'to': 'dest@cliente.com',
+                'subject': 'Follow-up',
+                'body': '<p>Olá</p>',
+                'from': 'spoofed@attacker.com',
+            },
+            format='json',
+            HTTP_X_API_KEY='test-n8n-key-sec019',
+        )
+        assert r.status_code == 200, r.content
+        assert len(mail.outbox) == 1
+        assert mail.outbox[0].from_email == 'noreply@inovasystems.test'

@@ -12,12 +12,14 @@ DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in ("true", "1", "yes")
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    if DEBUG:
-        SECRET_KEY = "dev-insecure-key-change-me-before-deploy"
-    else:
-        raise ImproperlyConfigured(
-            "DJANGO_SECRET_KEY precisa estar setada no ambiente quando DEBUG=False."
-        )
+    # SEC-011: exige DJANGO_SECRET_KEY sempre (dev e prod) — sem fallback
+    # literal no repo. Espelha backend/config/settings.py. Mesmo com DEBUG=True,
+    # uma chave conhecida publicamente permitiria forjar sessões/tokens se
+    # vazasse em produção por engano.
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY precisa estar setada no ambiente (dev e prod). "
+        "Gere com: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+    )
 
 _allowed_raw = os.getenv("DJANGO_ALLOWED_HOSTS", "").strip()
 if not _allowed_raw:

@@ -372,7 +372,9 @@ class SendEmailView(N8NBaseView):
         to_email = request.data.get('to', '').strip()
         subject = request.data.get('subject', '').strip()
         body = request.data.get('body', '').strip()
-        from_email = request.data.get('from', settings.DEFAULT_FROM_EMAIL)
+        # SEC-019: from_email FIXO em DEFAULT_FROM_EMAIL — ignora o campo 'from'
+        # do request (anti-spoofing do remetente).
+        from_email = settings.DEFAULT_FROM_EMAIL
 
         if not to_email or not subject or not body:
             return Response(

@@ -15,7 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from core.models import AuditLog
-from sales.models import Prospect, ProspectActivity
+from sales.models import Customer, Prospect, ProspectActivity
 
 User = get_user_model()
 
@@ -406,3 +406,90 @@ class TestV32NewFields:
         prospect = make_prospect(manager_user, status='proposal')
         response = manager_client.post(f'{URL}{prospect.id}/create-onboarding/', {})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+# ─── SEC-004: masking de PII do Customer para viewer ────────────────────────
+
+def make_customer(user, **kwargs):
+    defaults = dict(
+        company_name='Cliente SEC Co',
+        customer_type='PJ',
+        document='12.345.678/0001-99',
+        email='financeiro@clientesec.com',
+        phone='(41) 98765-4321',
+        contacts=[{'name': 'Ana', 'email': 'ana@clientesec.com',
+                   'phone': '(41) 91234-5678', 'role': 'Compras'}],
+        created_by=user,
+    )
+    defaults.update(kwargs)
+    return Customer.objects.create(**defaults)
+
+
+@pytest.mark.django_db
+class TestCustomerPiiMasking:
+    """SEC-004: CustomerSerializer mascara document/email/phone e zera contacts
+    para role=viewer; admin/manager/operator mantêm completo. Espelha a regra de
+    masking do Prospect (tech_analysis_notes / _SENSITIVE_FIELDS)."""
+
+    def _serialize(self, customer, user):
+        from rest_framework.test import APIRequestFactory
+        from sales.serializers import CustomerSerializer
+        request = APIRequestFactory().get('/')
+        request.user = user
+        return CustomerSerializer(customer, context={'request': request}).data
+
+    def test_viewer_receives_masked_pii(self, viewer_user, manager_user):
+        customer = make_customer(manager_user)
+        data = self._serialize(customer, viewer_user)
+        assert data['document'] == '***.***.***-99'
+        assert data['email'] == 'fi******ro@***.com'
+        assert data['phone'] == '(41) *****-4321'
+        assert data['contacts'] == []
+
+    def test_manager_receives_full_pii(self, manager_user):
+        customer = make_customer(manager_user)
+        data = self._serialize(customer, manager_user)
+        assert data['document'] == '12.345.678/0001-99'
+        assert data['email'] == 'financeiro@clientesec.com'
+        assert data['phone'] == '(41) 98765-4321'
+        assert len(data['contacts']) == 1
+
+
+# ─── SEC-014: auditoria de mudança de PII do Customer ───────────────────────
+
+@pytest.mark.django_db
+class TestCustomerPiiAudit:
+    """SEC-014: PATCH que altera document/email/phone gera registro em
+    audit_log (action=customer_pii_change). Espelha _audit_status_change."""
+
+    CUST_URL = '/api/v1/sales/customers/'
+
+    def test_patch_changing_pii_creates_audit_log(self, manager_client, manager_user):
+        customer = make_customer(manager_user, email='old@clientesec.com')
+        response = manager_client.patch(
+            f'{self.CUST_URL}{customer.id}/',
+            {'email': 'new@clientesec.com', 'document': '98.765.432/0001-11'},
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        entry = AuditLog.objects.filter(
+            action='customer_pii_change', resource_id=str(customer.id),
+        ).order_by('-id').first()
+        assert entry is not None
+        assert entry.resource_type == 'customer'
+        assert entry.user_id == manager_user.id
+        assert entry.old_value.get('email') == 'old@clientesec.com'
+        assert entry.new_value.get('email') == 'new@clientesec.com'
+        assert entry.new_value.get('document') == '98.765.432/0001-11'
+
+    def test_patch_without_pii_change_creates_no_audit(self, manager_client, manager_user):
+        customer = make_customer(manager_user)
+        before = AuditLog.objects.filter(
+            action='customer_pii_change', resource_id=str(customer.id),
+        ).count()
+        response = manager_client.patch(
+            f'{self.CUST_URL}{customer.id}/', {'notes': 'apenas uma nota'},
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert AuditLog.objects.filter(
+            action='customer_pii_change', resource_id=str(customer.id),
+        ).count() == before

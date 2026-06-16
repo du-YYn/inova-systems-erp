@@ -10,12 +10,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
+# SEC-015: usuário não-root para rodar a aplicação
+RUN groupadd -r django && useradd -r -g django django
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/staticfiles /app/media
+# Criar diretórios de volumes e garantir permissões do usuário não-root
+RUN mkdir -p /app/staticfiles /app/media && chown -R django:django /app
+
+USER django
 
 EXPOSE 8000
 

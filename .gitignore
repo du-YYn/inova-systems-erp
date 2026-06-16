@@ -71,6 +71,9 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+# Cobertura genérica: .env.production / .env.prod / .env.staging futuros
+.env.*
+!.env.example
 
 # Docker
 .docker/

@@ -2,6 +2,7 @@ import logging
 
 from django.db import transaction
 from rest_framework import serializers
+from core.logging_utils import mask_cpf_cnpj, mask_email, mask_phone
 from core.validators import validate_cpf, validate_cnpj
 from .models import (
     Customer, Prospect, Proposal, Contract, ProspectActivity,
@@ -17,6 +18,20 @@ class CustomerSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+
+    def to_representation(self, instance):
+        # LGPD: role=viewer recebe PII mascarada (document/email/phone) e sem a
+        # lista de contatos (que carrega PII aninhada). admin/manager/operator
+        # mantêm o cadastro completo. Espelha ProspectSerializer.to_representation.
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        if user and getattr(user, 'role', None) == 'viewer':
+            data['document'] = mask_cpf_cnpj(data.get('document'))
+            data['email'] = mask_email(data.get('email'))
+            data['phone'] = mask_phone(data.get('phone'))
+            data['contacts'] = []
+        return data
 
     class Meta:
         model = Customer
