@@ -1159,7 +1159,7 @@ class ProposalViewSet(viewsets.ModelViewSet):
         prospect = proposal.prospect
         if prospect is None:
             return None
-        from django.db import DatabaseError, IntegrityError
+        from django.db import IntegrityError
         try:
             try:
                 with transaction.atomic():

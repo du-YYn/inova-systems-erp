@@ -226,9 +226,8 @@ def _create_predev_project(case):
         )
         return None
 
-    # tipo (fechado/recorrente): da proposta vinculada -> prospect -> default.
+    # tipo (fechado/recorrente): do prospect vinculado -> default.
     tipo = ''
-    proposal = getattr(case, 'proposal', None)
     prospect = None
     if customer.pk:
         prospect = customer.prospects.order_by('-created_at').first()

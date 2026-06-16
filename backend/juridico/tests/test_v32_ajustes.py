@@ -22,7 +22,7 @@ from rest_framework.test import APIClient
 
 from core.models import AuditLog
 from finance.models import Invoice
-from juridico.models import LegalCase, LegalCaseEvent
+from juridico.models import LegalCase
 from projects.models import ChangeRequest, Project
 from sales.models import ClientOnboarding, Customer, Proposal, Prospect
 

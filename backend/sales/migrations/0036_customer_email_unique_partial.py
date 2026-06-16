@@ -60,8 +60,10 @@ def check_no_duplicate_emails(apps, schema_editor):
         )
         lines.append(f"  {row['email']!r}: {row['n']} registros (ids={ids})")
     detail = '\n'.join(lines)
+    # A query real e via ORM (acima). O texto abaixo so cita um SELECT de
+    # verificacao manual (nao executado) — ruff S608 e falso-positivo aqui.
     raise RuntimeError(
-        'Migration sales.0036 abortada: existem Customers com e-mail '
+        'Migration sales.0036 abortada: existem Customers com e-mail '  # noqa: S608
         'NÃO-VAZIO duplicado, o que impede a criação da UniqueConstraint '
         "parcial 'uniq_customer_email_not_blank' (o AddConstraint falharia "
         'com IntegrityError no deploy).\n'
