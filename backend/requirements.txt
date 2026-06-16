@@ -26,7 +26,8 @@ reportlab==4.2.5
 # Sanitiza propostas HTML enviadas pelo time comercial antes de servir
 # publicamente. Allow-list de tags + filtro de atributos `on*`/`srcdoc`.
 # `bleach.css_sanitizer` precisa de `tinycss2` para validar inline styles.
-bleach[css]==6.2.0
+# 6.4.0: fix GHSA-gj48-438w-jh9v + GHSA-8rfp-98v4-mmr6 (CVEs em 6.2.0)
+bleach[css]==6.4.0
 
 # ─── Authentication / 2FA ────────────────────────────────────────────────────
 pyotp==2.9.0
