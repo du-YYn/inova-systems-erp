@@ -7,7 +7,6 @@ password/token/secret) sejam redigidas em:
 - event['logentry'];
 - data dos breadcrumbs.
 """
-import pytest
 
 from core.sentry_scrubbing import (
     REDACTED, scrub_breadcrumb, scrub_event,
