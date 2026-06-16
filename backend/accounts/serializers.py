@@ -37,18 +37,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 
-class AdminUserSerializer(serializers.ModelSerializer):
-    """UserSerializer com role/sectors editáveis — usado apenas por admins."""
-    full_name = serializers.ReadOnlyField()
+class SectorsValidationMixin:
+    """v32 F3 / SEC-002: valida User.sectors (lista de slugs SECTOR_CHOICES).
 
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
-                  'role', 'sectors', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at', 'is_2fa_enabled']
+    Reutilizado por AdminUserSerializer (PATCH) e AdminUserCreateSerializer
+    (POST) — usuários manager/operator devem poder nascer já com setor,
+    evitando recriar o estado inseguro de sectors=[] (escrita fail-closed).
+    """
 
     def validate_sectors(self, value):
-        """v32 F3: sectors deve ser lista de slugs válidos (SECTOR_CHOICES)."""
         if not isinstance(value, list):
             raise serializers.ValidationError('Setores deve ser uma lista.')
         valid = {c[0] for c in User.SECTOR_CHOICES}
@@ -61,13 +58,29 @@ class AdminUserSerializer(serializers.ModelSerializer):
         return value
 
 
-class AdminUserCreateSerializer(serializers.ModelSerializer):
-    """RegisterSerializer com role editável — usado apenas por admins."""
+class AdminUserSerializer(SectorsValidationMixin, serializers.ModelSerializer):
+    """UserSerializer com role/sectors editáveis — usado apenas por admins."""
+    full_name = serializers.ReadOnlyField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name',
+                  'role', 'sectors', 'is_2fa_enabled', 'phone', 'avatar', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at', 'is_2fa_enabled']
+
+
+class AdminUserCreateSerializer(SectorsValidationMixin, serializers.ModelSerializer):
+    """RegisterSerializer com role/sectors editáveis — usado apenas por admins.
+
+    SEC-002: inclui `sectors` para que manager/operator novos já nasçam com
+    setor (a escrita por setor é fail-closed quando sectors=[]).
+    """
     password = serializers.CharField(write_only=True, min_length=8)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'password', 'first_name', 'last_name', 'role', 'is_active']
+        fields = ['username', 'email', 'password', 'first_name', 'last_name',
+                  'role', 'sectors', 'is_active']
 
     def create(self, validated_data):
         password = validated_data.pop('password')

@@ -1161,19 +1161,20 @@ class TestOnboardingFormAndWeeklyUpdate:
 class TestSectorRBAC:
     WEEKLY_URL = '/api/v1/projects/weekly-updates/'
 
-    def test_operator_without_sector_falls_back_to_role(self, db, project):
-        """H2 (code review): operador SEM sectors cai no comportamento legado
-        role-based (escreve como operator) — não é trancado no deploy do RBAC
-        por setor numa base de produção sem o campo `sectors`."""
+    def test_operator_without_sector_reads_but_write_fail_closed(self, db, project):
+        """SEC-002: operador SEM sectors mantém a LEITURA legada (não é trancado
+        no deploy do RBAC por setor numa base de produção sem o campo
+        `sectors`), mas a ESCRITA é fail-closed (403)."""
         user = User.objects.create_user(
             username='semsetor_f5', email='semsetor@f5test.com',
             password='x_pass_123', role='operator', sectors=[],
         )
         client = make_client(user)
+        assert client.get(self.WEEKLY_URL).status_code == status.HTTP_200_OK
         response = client.post(self.WEEKLY_URL, {
             'project': project.id, 'week_start': '2026-06-08', 'summary': 'x',
         })
-        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_suporte_operator_reads_but_cannot_write(
         self, suporte_user, project,

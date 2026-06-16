@@ -145,23 +145,21 @@ def HasSectorAccess(sector, access_map=None):
                 # partner (e papéis futuros) não acessam recursos de setor
                 return False
             user_sectors = set(user.sectors or [])
-            # H2 (code review) — FALLBACK ROLE-BASED PARA PROD:
+            # SEC-002 — FAIL-CLOSED NA ESCRITA SEM SETOR:
             # aplicar RBAC por setor sobre uma base que NÃO tem o campo
-            # `sectors` preenchido (ERP em produção) trancaria os usuários
-            # reais (403 em toda escrita). Como NÃO há mapeamento confiável
+            # `sectors` preenchido (ERP em produção) não pode trancar a
+            # LEITURA dos usuários reais. Como NÃO há mapeamento confiável
             # role->setor no modelo de dados (role é admin/manager/operator/
-            # viewer; setor é comercial/juridico/...), um backfill seria um
-            # chute e poderia conceder o setor errado. Em vez disso: se o
-            # usuário não tem NENHUM setor, cai no comportamento legado
-            # role-based (= IsAdminOrManagerOrOperator: leitura p/ todos,
-            # escrita p/ manager/operator). Ninguém é trancado no deploy; à
-            # medida que John atribui `sectors`, a regra por setor passa a
-            # valer para aquele usuário (a interseção abaixo). Idempotente e
-            # reversível, sem tocar dados.
+            # viewer; setor é comercial/juridico/...), mantemos a leitura
+            # legada (SAFE_METHODS -> True) para não derrubar ninguém no
+            # deploy. A ESCRITA, porém, é fail-closed: sem setor não há
+            # interseção possível com write_set, então negamos (403). Admin
+            # é checado antes (bypass total). À medida que John atribui
+            # `sectors`, a escrita por setor passa a valer (interseção abaixo).
             if not user_sectors:
                 if request.method in SAFE_METHODS:
                     return True
-                return user.role in ('manager', 'operator')
+                return False
             if request.method in SAFE_METHODS:
                 return bool(user_sectors & read_set)
             return bool(user_sectors & write_set)
