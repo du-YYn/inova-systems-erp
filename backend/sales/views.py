@@ -354,39 +354,74 @@ class CustomerViewSet(viewsets.ModelViewSet):
         # Hash determinístico curto (6 hex chars) para identificar registro anonimizado
         h = hashlib.sha256(f'{customer.id}:{customer.created_at}'.encode()).hexdigest()[:6].upper()
 
-        customer.name = f'CLIENTE-ANON-{h}'
-        customer.company_name = f'ANON-{h}'
-        customer.document = ''
-        customer.email = f'anon-{h.lower()}@anonymized.local'
-        customer.phone = ''
-        if hasattr(customer, 'whatsapp'):
-            customer.whatsapp = ''
-        if hasattr(customer, 'address'):
-            customer.address = ''
-        if hasattr(customer, 'city'):
-            customer.city = ''
-        if hasattr(customer, 'state'):
-            customer.state = ''
-        if hasattr(customer, 'zip_code'):
-            customer.zip_code = ''
-        customer.is_active = False  # anonymized != active
-        customer.save()
+        # SEC-013: a anonimizacao do titular precisa alcancar os Prospects
+        # vinculados (PII do quiz/WhatsApp/transcricao) e o conteudo das
+        # ProspectMessage. Tudo na MESMA transacao — ou anonimiza tudo, ou nada.
+        with transaction.atomic():
+            customer.name = f'CLIENTE-ANON-{h}'
+            customer.company_name = f'ANON-{h}'
+            customer.document = ''
+            customer.email = f'anon-{h.lower()}@anonymized.local'
+            customer.phone = ''
+            if hasattr(customer, 'whatsapp'):
+                customer.whatsapp = ''
+            if hasattr(customer, 'address'):
+                customer.address = ''
+            if hasattr(customer, 'city'):
+                customer.city = ''
+            if hasattr(customer, 'state'):
+                customer.state = ''
+            if hasattr(customer, 'zip_code'):
+                customer.zip_code = ''
+            customer.is_active = False  # anonymized != active
+            customer.save()
 
-        log_audit(
-            request.user, 'customer_anonymize', 'customer', customer.id,
-            old_value=snapshot,
-            new_value={
-                'company_name': customer.company_name,
-                'email': customer.email,
-                'is_active': False,
-            },
-            details=f'LGPD Art. 18 VI — anonimizacao solicitada por {request.user.username}',
-            request=request,
-        )
+            # ── Prospects vinculados ao titular ──────────────────────────────
+            prospects = list(customer.prospects.all())
+            prospects_snapshot = [
+                {
+                    'id': p.id,
+                    'contact_name': p.contact_name,
+                    'contact_email': p.contact_email,
+                    'contact_phone': p.contact_phone,
+                }
+                for p in prospects
+            ]
+            messages_anonymized = 0
+            for p in prospects:
+                p.contact_name = f'CONTATO-ANON-{h}'
+                p.contact_email = ''
+                p.contact_phone = ''
+                p.quiz_data = {}
+                p.meeting_transcript = ''
+                p.save(update_fields=[
+                    'contact_name', 'contact_email', 'contact_phone',
+                    'quiz_data', 'meeting_transcript',
+                ])
+                # Conteudo das mensagens (WhatsApp/e-mail/SMS) — PII livre.
+                messages_anonymized += ProspectMessage.objects.filter(
+                    prospect=p,
+                ).update(content='', metadata=None)
+
+            log_audit(
+                request.user, 'customer_anonymize', 'customer', customer.id,
+                old_value={**snapshot, 'prospects': prospects_snapshot},
+                new_value={
+                    'company_name': customer.company_name,
+                    'email': customer.email,
+                    'is_active': False,
+                    'prospects_anonymized': len(prospects),
+                    'messages_anonymized': messages_anonymized,
+                },
+                details=f'LGPD Art. 18 VI — anonimizacao solicitada por {request.user.username}',
+                request=request,
+            )
         return Response({
             'status': 'anonymized',
             'customer_id': customer.id,
             'anonymized_identifier': f'ANON-{h}',
+            'prospects_anonymized': len(prospects),
+            'messages_anonymized': messages_anonymized,
             'note': 'Dados pessoais substituidos. FKs preservadas por obrigacao fiscal.',
         })
 

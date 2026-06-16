@@ -15,7 +15,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 
 from core.models import AuditLog
-from sales.models import Customer, Contract
+from sales.models import Customer, Contract, Prospect, ProspectMessage
 from finance.models import (
     Invoice, PaymentProvider, PaymentProviderRate, BankAccount,
 )
@@ -260,6 +260,84 @@ class TestAnonymize:
         )
         inv.refresh_from_db()
         assert inv.customer_id == customer.id  # FK intacta
+
+
+# ─── SEC-013: anonymize cascateia para Prospects + ProspectMessage ─────────
+
+@pytest.mark.django_db
+class TestAnonymizeCascadesToProspects:
+    URL = '/api/v1/sales/customers/{id}/anonymize/'
+
+    def test_anonymize_clears_prospect_and_message_pii(
+        self, admin_client, customer, admin_user,
+    ):
+        """Apos anonymize, nao pode sobrar PII nos Prospects e ProspectMessage
+        do mesmo titular (contato, quiz, transcricao, conteudo das mensagens)."""
+        prospect = Prospect.objects.create(
+            customer=customer,
+            created_by=admin_user,
+            company_name='Cliente LGPD Ltda',
+            contact_name='Joao da Silva',
+            contact_email='joao.silva@lgpd.com',
+            contact_phone='11 99999-1111',
+            quiz_data={'document': '123.456.789-01', 'budget': '50k'},
+            meeting_transcript='Cliente falou que o CPF dele e 123.456.789-01.',
+        )
+        msg = ProspectMessage.objects.create(
+            prospect=prospect,
+            direction='inbound',
+            channel='whatsapp',
+            content='Oi, meu telefone e 11 99999-1111 e o email joao@lgpd.com',
+            sent_at=timezone.now(),
+            metadata={'wamid': 'abc', 'phone': '5511999991111'},
+        )
+
+        r = admin_client.post(
+            self.URL.format(id=customer.id),
+            {'confirm': 'ANONIMIZAR'}, format='json',
+        )
+        assert r.status_code == status.HTTP_200_OK
+        assert r.data['prospects_anonymized'] == 1
+        assert r.data['messages_anonymized'] == 1
+
+        prospect.refresh_from_db()
+        assert prospect.contact_email == ''
+        assert prospect.contact_phone == ''
+        assert 'Silva' not in prospect.contact_name
+        assert prospect.quiz_data == {}
+        assert prospect.meeting_transcript == ''
+        # FK preservada (registro continua vinculado ao titular)
+        assert prospect.customer_id == customer.id
+
+        msg.refresh_from_db()
+        assert msg.content == ''
+        assert msg.metadata is None
+        assert msg.prospect_id == prospect.id  # FK intacta
+
+    def test_anonymize_snapshots_prospect_pii_in_audit(
+        self, admin_client, customer, admin_user,
+    ):
+        """O snapshot do audit log preserva a PII dos prospects (so ali)."""
+        Prospect.objects.create(
+            customer=customer,
+            created_by=admin_user,
+            company_name='Cliente LGPD Ltda',
+            contact_name='Maria Souza',
+            contact_email='maria@lgpd.com',
+            contact_phone='11 98888-2222',
+        )
+        admin_client.post(
+            self.URL.format(id=customer.id),
+            {'confirm': 'ANONIMIZAR'}, format='json',
+        )
+        audit = AuditLog.objects.filter(
+            action='customer_anonymize', resource_id=str(customer.id),
+        ).first()
+        assert audit is not None
+        snap = audit.old_value['prospects']
+        assert snap[0]['contact_email'] == 'maria@lgpd.com'
+        assert snap[0]['contact_phone'] == '11 98888-2222'
+        assert audit.new_value['prospects_anonymized'] == 1
 
 
 # ─── F3a: audit em operacoes financeiras ──────────────────────────────────

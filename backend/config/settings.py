@@ -523,12 +523,19 @@ SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 if SENTRY_DSN:
     try:
         import sentry_sdk
+        from core.sentry_scrubbing import scrub_breadcrumb, scrub_event
         sentry_sdk.init(
             dsn=SENTRY_DSN,
             traces_sample_rate=0.2,
             profiles_sample_rate=0.1,
             environment='production' if not DEBUG else 'development',
             send_default_pii=False,
+            # LGPD (SEC-006): não capturar locals por padrão e, ainda assim,
+            # redigir chaves sensíveis em extra/exception-locals/logentry e nos
+            # breadcrumbs antes de qualquer evento sair para o Sentry.
+            include_local_variables=False,
+            before_send=scrub_event,
+            before_breadcrumb=scrub_breadcrumb,
         )
     except ImportError:
         pass  # sentry-sdk não instalado ainda
