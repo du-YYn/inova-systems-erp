@@ -131,8 +131,40 @@ class CustomerViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(customer_type=customer_type)
         return queryset
 
+    # Campos de PII auditados em create/update (LGPD): mudança nesses campos
+    # gera trilha em audit_log. Espelha ProspectViewSet._audit_status_change.
+    _PII_FIELDS = ('document', 'email', 'phone')
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        customer = serializer.save(created_by=self.request.user)
+        new_pii = {f: getattr(customer, f, '') for f in self._PII_FIELDS}
+        # Só registra se algum campo de PII foi preenchido no cadastro.
+        if any(new_pii.values()):
+            self._audit_pii_change(customer, {}, new_pii)
+
+    def perform_update(self, serializer):
+        old_pii = {
+            f: getattr(serializer.instance, f, '') for f in self._PII_FIELDS
+        }
+        customer = serializer.save()
+        new_pii = {f: getattr(customer, f, '') for f in self._PII_FIELDS}
+        changed_old = {f: old_pii[f] for f in self._PII_FIELDS if old_pii[f] != new_pii[f]}
+        changed_new = {f: new_pii[f] for f in self._PII_FIELDS if old_pii[f] != new_pii[f]}
+        if changed_old or changed_new:
+            self._audit_pii_change(customer, changed_old, changed_new)
+
+    def _audit_pii_change(self, customer, old_value, new_value):
+        """Trilha de auditoria de mudança de PII do cliente (LGPD)."""
+        log_audit(
+            self.request.user,
+            action='customer_pii_change',
+            resource_type='customer',
+            resource_id=customer.id,
+            details=f'PII alterada: {", ".join(sorted(new_value.keys()))}',
+            old_value=old_value,
+            new_value=new_value,
+            request=self.request,
+        )
 
     def destroy(self, request, *args, **kwargs):
         customer = self.get_object()
@@ -2338,8 +2370,12 @@ class WebsiteLeadCreateView(APIView):
         # impede). Lista vazia = bloqueia tudo (forçar config explícita).
         allowed_origins = getattr(django_settings, 'WEBSITE_ALLOWED_ORIGINS', []) or []
         origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+        # SEC-018: comparação por IGUALDADE (ou prefixo de path com "/" após o
+        # origin) — startswith puro deixava passar
+        # 'https://inovasystems.com.evil.com' como prefixo de 'https://inovasystems.com'.
         if not allowed_origins or not any(
-            origin.startswith(o) for o in allowed_origins if o
+            o == origin or origin.startswith(o + '/')
+            for o in allowed_origins if o
         ):
             logger.warning(
                 f"Website lead origin rejected from {client_ip} "

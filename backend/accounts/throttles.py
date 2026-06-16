@@ -12,7 +12,7 @@ class PasswordResetThrottle(AnonRateThrottle):
 
 
 class TwoFactorRateThrottle(AnonRateThrottle):
-    """Máximo 10 tentativas de código 2FA por hora por IP."""
+    """Máximo 5 tentativas de código 2FA por minuto por IP (settings.py:224)."""
     scope = 'two_factor'
 
 
