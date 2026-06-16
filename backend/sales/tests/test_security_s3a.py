@@ -275,6 +275,7 @@ class TestAnonymizeCascadesToProspects:
         do mesmo titular (contato, quiz, transcricao, conteudo das mensagens)."""
         prospect = Prospect.objects.create(
             customer=customer,
+            created_by=admin_user,
             company_name='Cliente LGPD Ltda',
             contact_name='Joao da Silva',
             contact_email='joao.silva@lgpd.com',
@@ -314,11 +315,12 @@ class TestAnonymizeCascadesToProspects:
         assert msg.prospect_id == prospect.id  # FK intacta
 
     def test_anonymize_snapshots_prospect_pii_in_audit(
-        self, admin_client, customer,
+        self, admin_client, customer, admin_user,
     ):
         """O snapshot do audit log preserva a PII dos prospects (so ali)."""
         Prospect.objects.create(
             customer=customer,
+            created_by=admin_user,
             company_name='Cliente LGPD Ltda',
             contact_name='Maria Souza',
             contact_email='maria@lgpd.com',
