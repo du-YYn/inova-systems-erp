@@ -1,9 +1,11 @@
-Django==5.1.4
+# Django 5.1.x — >=5.1.15 (último patch da série 5.1; CVE-2025-64459 corrigido em 5.1.14)
+Django>=5.1.15,<5.2
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.6.0
 psycopg[binary]==3.2.3
 python-dotenv==1.0.1
 gunicorn==23.0.0
-Pillow==11.0.0
+# Pillow >=11.3.0 — alinhado ao backend principal (correções de CVE em decoders de imagem)
+Pillow>=11.3.0
 whitenoise==6.8.2
