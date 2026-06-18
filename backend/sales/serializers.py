@@ -686,7 +686,15 @@ class WebsiteLeadSerializer(serializers.Serializer):
         import re
         if not re.match(r'^[\d\s()+\-]{8,20}$', value):
             raise serializers.ValidationError('Formato de telefone inválido.')
-        return value
+        # Normaliza para formato internacional (+55DDDNUMERO). O agente de
+        # WhatsApp (n8n) precisa do número com DDI; o form do site enviava sem
+        # o +55 (ex.: 17999741755) e o lead nao era abordado, enquanto o
+        # formsads ja enviava com +55. Idempotente para numeros que ja trazem o
+        # 55 (>11 digitos). LeadSearchView ja compara so por digitos.
+        digits = re.sub(r'\D', '', value)
+        if len(digits) <= 11:  # numero nacional (DDD + 8/9 digitos) sem DDI
+            digits = '55' + digits
+        return '+' + digits
 
     def validate_servico(self, value):
         if value:

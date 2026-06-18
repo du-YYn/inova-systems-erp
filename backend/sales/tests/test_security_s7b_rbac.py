@@ -484,6 +484,51 @@ class TestS7B_8_WebsiteLeadOriginCheck:
         assert r.status_code == 403
 
 
+# ─── WebsiteLead: normalização de telefone (+55 / E.164 BR) ───────────────
+
+
+@pytest.mark.django_db
+class TestWebsiteLeadPhoneNormalization:
+    """O telefone do lead é normalizado para +55DDDNUMERO ao salvar, para que o
+    agente de WhatsApp (n8n) consiga abordar o lead. O form do site enviava sem
+    o DDI (+55) e o lead não era abordado; o formsads já enviava com."""
+    URL = '/api/v1/sales/website-lead/'
+
+    @pytest.fixture
+    def setup_website(self, settings):
+        settings.WEBSITE_API_KEY = 'test-website-key-s7b'
+        settings.WEBSITE_ALLOWED_ORIGINS = ['https://inovasystemssolutions.com']
+        return settings
+
+    def _create(self, api_client, whatsapp, email):
+        payload = {
+            'nome': 'Lead Tel', 'empresa': 'Empresa Tel', 'email': email,
+            'whatsapp': whatsapp, 'servico': 'Aplicação Web',
+        }
+        r = api_client.post(
+            self.URL, payload, format='json',
+            HTTP_ORIGIN='https://inovasystemssolutions.com',
+            HTTP_X_API_KEY='test-website-key-s7b',
+        )
+        assert r.status_code == 201, r.content
+        return Prospect.objects.get(contact_email=email)
+
+    def test_adds_country_code_when_missing(self, api_client, setup_website):
+        """Site: 11 dígitos sem +55 → +5517999741755."""
+        p = self._create(api_client, '17999741755', 'sem-ddi@t.com')
+        assert p.contact_phone == '+5517999741755'
+
+    def test_keeps_existing_country_code(self, api_client, setup_website):
+        """formsads: já vem com +55 → idempotente."""
+        p = self._create(api_client, '+5517999751389', 'com-ddi@t.com')
+        assert p.contact_phone == '+5517999751389'
+
+    def test_strips_mask_and_adds_country_code(self, api_client, setup_website):
+        """Máscara + sem DDI → só dígitos com +55."""
+        p = self._create(api_client, '(17) 99974-1755', 'mascara@t.com')
+        assert p.contact_phone == '+5517999741755'
+
+
 # ─── S7B.9: n8n-bot is_active + IsN8NBot ──────────────────────────────────
 
 
