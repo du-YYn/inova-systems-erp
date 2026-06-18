@@ -2400,34 +2400,39 @@ class WebsiteLeadCreateView(APIView):
                 {'error': 'Payload too large'}, status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
             )
 
-        # S7B.8: valida Origin/Referer antes da API key — bot externo com
-        # API key vazada ainda precisa spoofar o header (e CORS no browser
-        # impede). Lista vazia = bloqueia tudo (forçar config explícita).
-        allowed_origins = getattr(django_settings, 'WEBSITE_ALLOWED_ORIGINS', []) or []
-        origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
-        # SEC-018: comparação por IGUALDADE (ou prefixo de path com "/" após o
-        # origin) — startswith puro deixava passar
-        # 'https://inovasystems.com.evil.com' como prefixo de 'https://inovasystems.com'.
-        if not allowed_origins or not any(
-            o == origin or origin.startswith(o + '/')
-            for o in allowed_origins if o
-        ):
-            logger.warning(
-                f"Website lead origin rejected from {client_ip} "
-                f"(origin={origin[:80] if origin else 'empty'})"
-            )
-            return Response(
-                {'error': 'Origin not allowed'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Validação timing-safe da API Key
+        # Validação timing-safe da API Key — checada ANTES do Origin para
+        # permitir chamadas server-to-server legítimas (proxies cURL do site
+        # e do formsads não enviam header Origin/Referer). A API key é o
+        # gate de autenticação primário; o Origin é defense-in-depth.
         api_key = request.headers.get('X-API-Key', '')
         expected_key = getattr(django_settings, 'WEBSITE_API_KEY', '')
         if not expected_key or not hmac.compare_digest(api_key, expected_key):
             logger.warning(f"Unauthorized lead submission attempt from {client_ip}")
             return Response(
                 {'error': 'Unauthorized'}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # S7B.8 / defense-in-depth: valida Origin/Referer DEPOIS da API key.
+        # Bot externo com API key vazada vindo de um browser ainda precisa
+        # spoofar o header (e CORS impede). Só rejeitamos quando o header
+        # está PRESENTE e não casa a allowlist — server-to-server legítimo
+        # (sem Origin/Referer) + API key válida prossegue.
+        # SEC-018: comparação por IGUALDADE (ou prefixo de path com "/" após o
+        # origin) — startswith puro deixava passar
+        # 'https://inovasystems.com.evil.com' como prefixo de 'https://inovasystems.com'.
+        allowed_origins = getattr(django_settings, 'WEBSITE_ALLOWED_ORIGINS', []) or []
+        origin = request.META.get('HTTP_ORIGIN') or request.META.get('HTTP_REFERER', '')
+        if origin and not any(
+            o == origin or origin.startswith(o + '/')
+            for o in allowed_origins if o
+        ):
+            logger.warning(
+                f"Website lead origin rejected from {client_ip} "
+                f"(origin={origin[:80]})"
+            )
+            return Response(
+                {'error': 'Origin not allowed'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         serializer = WebsiteLeadSerializer(data=request.data)

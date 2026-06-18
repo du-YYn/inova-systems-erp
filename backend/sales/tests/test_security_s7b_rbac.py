@@ -386,13 +386,34 @@ class TestS7B_8_WebsiteLeadOriginCheck:
             'descricao': '',
         }
 
-    def test_rejects_missing_origin(self, api_client, setup_website):
+    def test_accepts_valid_key_without_origin(self, api_client, setup_website):
+        """Regressão server-to-server: API key VÁLIDA + SEM Origin/Referer
+        deve retornar 201. Os proxies PHP (site + formsads) usam cURL e não
+        enviam header Origin — antes do fix isso tomava 403 'Origin not
+        allowed' e o lead nunca entrava no CRM."""
         r = api_client.post(
             self.URL, self._valid_payload(), format='json',
             HTTP_X_API_KEY='test-website-key-s7b',
         )
-        assert r.status_code == 403
-        assert 'origin' in r.json().get('error', '').lower()
+        assert r.status_code == 201, r.content
+
+    def test_rejects_invalid_key_without_origin(self, api_client, setup_website):
+        """API key INVÁLIDA sem Origin → 401 (key é checada primeiro)."""
+        r = api_client.post(
+            self.URL, self._valid_payload(), format='json',
+            HTTP_X_API_KEY='wrong-key',
+        )
+        assert r.status_code == 401
+
+    def test_rejects_invalid_key_with_valid_origin(self, api_client, setup_website):
+        """API key INVÁLIDA com Origin válido → 401 (key é checada primeiro;
+        não vaza ao atacante se o Origin estava certo)."""
+        r = api_client.post(
+            self.URL, self._valid_payload(), format='json',
+            HTTP_ORIGIN='https://inovasystemssolutions.com',
+            HTTP_X_API_KEY='wrong-key',
+        )
+        assert r.status_code == 401
 
     def test_rejects_unknown_origin(self, api_client, setup_website):
         r = api_client.post(
@@ -438,15 +459,28 @@ class TestS7B_8_WebsiteLeadOriginCheck:
         )
         assert r.status_code == 403
 
-    def test_origin_check_before_api_key(self, api_client, setup_website):
-        """Origin rejeitado primeiro → não vaza se API key existe."""
+    def test_api_key_check_before_origin(self, api_client, setup_website):
+        """A API key é checada ANTES do Origin: key inválida → 401 mesmo com
+        Origin fora da allowlist. Isso destrava o fluxo server-to-server
+        legítimo (sem Origin) sem abrir mão da defense-in-depth do Origin,
+        que continua valendo quando a key É válida (ver
+        test_rejects_unknown_origin)."""
         r = api_client.post(
             self.URL, self._valid_payload(), format='json',
             HTTP_ORIGIN='https://attacker.com',
             HTTP_X_API_KEY='wrong-key',
         )
-        # Deve ser 403 (Origin) e não 401 (API key) — não dá pista
-        # ao atacante sobre validade da key.
+        assert r.status_code == 401
+
+    def test_defense_in_depth_origin_with_valid_key(self, api_client, setup_website):
+        """Defense-in-depth PRESERVADA: API key VÁLIDA + Origin PRESENTE fora
+        da allowlist → 403 (bot com key vazada vindo de browser ainda é
+        barrado pelo Origin)."""
+        r = api_client.post(
+            self.URL, self._valid_payload(), format='json',
+            HTTP_ORIGIN='https://attacker.com',
+            HTTP_X_API_KEY='test-website-key-s7b',
+        )
         assert r.status_code == 403
 
 
