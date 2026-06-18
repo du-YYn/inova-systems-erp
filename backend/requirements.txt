@@ -30,7 +30,7 @@ reportlab==4.2.5
 bleach[css]==6.4.0
 
 # ─── Authentication / 2FA ────────────────────────────────────────────────────
-pyotp==2.9.0
+pyotp==2.10.0
 qrcode==7.4.2
 # cryptography eh dep transitiva (pyjwt[crypto]) mas pinamos explicitamente
 # para F3b — Fernet encrypt do totp_secret em repouso
