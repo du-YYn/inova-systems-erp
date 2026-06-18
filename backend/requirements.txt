@@ -14,7 +14,7 @@ python-dotenv==1.2.2
 
 # ─── WSGI Server ─────────────────────────────────────────────────────────────
 # gunicorn 22.0.0 corrige CVE-2024-1135 e CVE-2024-6827 (HTTP request smuggling)
-gunicorn==22.0.0
+gunicorn==26.0.0
 
 # ─── Media / Reports ─────────────────────────────────────────────────────────
 # Pillow 12.2.0 corrige CVE-2026-40192
