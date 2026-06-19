@@ -159,3 +159,30 @@ A documentar após merge + validação.
 | Login `temp_token` 2FA em response body | LOW | XSS necessário para explorar, e temos CSP nonce em script-src bloqueando XSS. Defense-in-depth. |
 | `client_max_body_size 1m` global poderia ser menor | LOW | 1M já cobre 99% dos JSON requests. Reduzir mais quebra uploads legítimos. |
 | Open API docs `/api/docs/` exposto em DEBUG | MEDIUM | Design intencional para dev. Em prod, `DEBUG=False` esconde. |
+
+---
+
+## 2026-06-05 — Fase 2.5: Hotfix higiênico (auditoria via Claude extension)
+
+**Trigger:** auditoria externa via Claude extension identificou 2 LOW findings de fingerprinting.
+
+**Mudanças aplicadas:**
+- `frontend/next.config.js`: `poweredByHeader: false` → suprime `X-Powered-By: Next.js`
+- `backend/core/middleware.py::SecurityHeadersMiddleware`: remove `Server` e `X-Powered-By` da response (gunicorn adiciona por default)
+
+**Trade-off:**
+- Zero impacto funcional (headers invisíveis para usuário)
+- Atacante perde sinais imediatos de stack (Next.js + Gunicorn)
+- Não bloqueia ataque, mas dificulta reconnaissance (mapping de CVE específico de versão)
+- Compliance: requerido por PCI-DSS, ISO 27001 e checklist OWASP
+
+**Decisão de NÃO mexer no spacing do login:**
+- Configuração atual: DRF `'login': '5/minute'` (5 tentativas/min/IP)
+- Combinado com per-user lockout do #25 (5 falhas reais → 15min exponencial)
+- Trade-off de mudar para `1/minute`: usuário típico que typo de senha espera 60s
+- Decisão: manter `5/minute` por agora. Per-user lockout cobre o vetor catastrófico.
+- Revisitar se houver tentativa de brute-force real observada nos logs.
+
+**Quando revisitar:**
+- Se Gunicorn versão futura adicionar outros headers de fingerprinting
+- Se Easypanel/Traefik começar a inserir headers próprios revelando stack

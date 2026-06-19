@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  // Remove o header `X-Powered-By: Next.js` das respostas do frontend.
+  // Defesa em profundidade contra fingerprinting de stack (LOW finding da
+  // auditoria 2026-06-05). Nao bloqueia ataque, dificulta reconhecimento.
+  poweredByHeader: false,
   images: {
     unoptimized: true,
   },
