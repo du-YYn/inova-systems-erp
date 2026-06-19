@@ -150,6 +150,10 @@ class LeadUpdateView(N8NBaseView):
         'closed': 'won',
         'not_closed': 'not_closed',
         'follow_up': 'follow_up',
+        # Espelha o status do n8n: lead pediu para não ser mais contatado.
+        # Antes do mapeamento, 'opt_out' caía no silent-skip (valor não estava
+        # nas STATUS_CHOICES e era descartado em LeadUpdateView.patch).
+        'opt_out': 'opt_out',
     }
 
     ALLOWED_FIELDS = {

@@ -154,9 +154,10 @@ const statusLabels: Record<string, string> = {
   projeto_fechado: 'Projeto Fechado',
   em_producao: 'Em Produção',
   // Ramos
-  disqualified: 'Não Qualificado',
+  disqualified: 'Desqualificado',
   no_show: 'No-Show',
   follow_up: 'Follow-Up',
+  opt_out: 'Opt-out',
   // Equivalentes legados v32 (registros antigos seguem; rotulados como os novos)
   won: 'Projeto Fechado',
   data_collection: 'Coleta de Dados',
@@ -192,6 +193,7 @@ const statusColors: Record<string, string> = {
   not_closed: 'bg-orange-100 text-orange-800',
   lost: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
   follow_up: 'bg-orange-100 text-orange-800',
+  opt_out: 'bg-zinc-200 text-zinc-800',
 };
 
 const statusBadgeVariant: Record<string, BadgeVariant> = {
@@ -218,6 +220,7 @@ const statusBadgeVariant: Record<string, BadgeVariant> = {
   not_closed: 'warning',
   lost: 'neutral',
   follow_up: 'warning',
+  opt_out: 'neutral',
 };
 
 const PROJECT_TYPE_LABELS: Record<string, string> = {
@@ -233,8 +236,9 @@ const FOLLOW_UP_REASONS = [
 
 // Colunas do kanban — caminho principal v32 + funil otimizado da proposta
 // (doc 09 §04/§05) alinhado ao backend b1: Proposta → Coleta de Dados →
-// Projeto Fechado → Em Produção. Ramos no_show/follow_up. Desqualificado só na
-// lista; legados na coluna "Legados".
+// Projeto Fechado → Em Produção. Ramos no_show/follow_up. Terminais
+// Desqualificado e Opt-out têm coluna própria (espelham os status do n8n);
+// legados na coluna "Legados".
 const PIPELINE_COLUMNS = [
   'new',
   'qualifying',
@@ -251,6 +255,8 @@ const PIPELINE_COLUMNS = [
   'em_producao',
   'no_show',
   'follow_up',
+  'disqualified',
+  'opt_out',
 ];
 
 // Equivalência status legado → coluna nova (doc 09 §04). Cards antigos em
@@ -965,7 +971,7 @@ export default function FunilTab() {
 
   const handleWonSubmit = async () => {
     if (!wonModalProspect) return;
-    const invalidStatuses = ['lost', 'disqualified'];
+    const invalidStatuses = ['lost', 'disqualified', 'opt_out'];
     if (invalidStatuses.includes(wonModalProspect.status)) {
       toast.error('Este lead não pode ser fechado (status inválido).');
       return;
