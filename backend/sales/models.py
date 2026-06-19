@@ -124,7 +124,7 @@ class Prospect(models.Model):
         ('projeto_fechado', 'Projeto Fechado'),        # cliente enviou o forms (assinatura/pagamento pendentes)
         ('em_producao',     'Em Produção'),            # leitura: projeto iniciado pela Produção
         # ── Ramos e terminais ────────────────────────────────────────────────
-        ('disqualified',    'Não Qualificado'),        # não atende critérios mínimos (terminal)
+        ('disqualified',    'Desqualificado'),         # não atende critérios mínimos (terminal)
         ('no_show',         'Não Compareceu'),         # lead não apareceu na reunião
         ('follow_up',       'Em Follow-up'),           # sequência de reativação
         ('opt_out',         'Opt-out'),                # lead pediu para não ser mais contatado (terminal; espelha o status do n8n)

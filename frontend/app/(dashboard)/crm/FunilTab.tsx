@@ -971,7 +971,7 @@ export default function FunilTab() {
 
   const handleWonSubmit = async () => {
     if (!wonModalProspect) return;
-    const invalidStatuses = ['lost', 'disqualified'];
+    const invalidStatuses = ['lost', 'disqualified', 'opt_out'];
     if (invalidStatuses.includes(wonModalProspect.status)) {
       toast.error('Este lead não pode ser fechado (status inválido).');
       return;
