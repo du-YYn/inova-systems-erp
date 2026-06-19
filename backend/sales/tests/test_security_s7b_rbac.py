@@ -575,3 +575,53 @@ class TestSEC019SendEmailFrom:
         assert r.status_code == 200, r.content
         assert len(mail.outbox) == 1
         assert mail.outbox[0].from_email == 'noreply@inovasystems.test'
+
+
+# ─── opt_out: n8n consegue mover o card para o status terminal Opt-out ─────
+
+
+@pytest.mark.django_db
+class TestN8NLeadUpdateOptOut:
+    """Espelha no ERP o status 'opt_out' que o n8n já usa.
+
+    Antes do fix, 'opt_out' não estava no STATUS_MAP nem nas STATUS_CHOICES do
+    Prospect, então o LeadUpdateView fazia silent-skip (o card nunca movia).
+    Agora o n8n manda {"status": "opt_out"} e o card vai para o terminal Opt-out.
+    """
+
+    @pytest.fixture
+    def setup_n8n(self, settings):
+        settings.N8N_API_KEY = 'test-n8n-key-opt-out'
+        return settings
+
+    @pytest.fixture
+    def prospect(self, admin_user):
+        return Prospect.objects.create(
+            company_name='Lead Opt-out',
+            contact_name='Maria Silva',
+            contact_email='maria@optout.com',
+            contact_phone='11988887777',
+            source='website',
+            status='qualifying',
+            created_by=admin_user,
+        )
+
+    def _url(self, prospect):
+        return f'/api/v1/sales/n8n/leads/{prospect.id}/update/'
+
+    def test_n8n_can_set_opt_out_status(self, api_client, setup_n8n, prospect):
+        r = api_client.patch(
+            self._url(prospect),
+            {'status': 'opt_out'},
+            format='json',
+            HTTP_X_API_KEY='test-n8n-key-opt-out',
+        )
+        assert r.status_code == 200, r.content
+        prospect.refresh_from_db()
+        assert prospect.status == 'opt_out'
+
+    def test_opt_out_is_a_valid_prospect_choice(self):
+        """'opt_out' precisa estar nas STATUS_CHOICES — senão o LeadUpdateView
+        volta a fazer silent-skip (valor inválido é descartado)."""
+        valid = {s[0] for s in Prospect.STATUS_CHOICES}
+        assert 'opt_out' in valid
