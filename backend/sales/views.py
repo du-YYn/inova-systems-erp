@@ -44,6 +44,21 @@ from .serializers import (
 
 logger = logging.getLogger('sales')
 
+# v32: status do funil que já estão NO fechamento ou ADIANTE dele. Mover um card
+# para 'proposal' (ou rebaixá-lo de qualquer forma a partir destes) é regressão.
+# Usado por:
+#   - ProposalViewSet.send() — não rebaixar para 'proposal' ao (re)enviar proposta;
+#   - ProposalViewSet._on_proposal_approved() — não mover para 'coleta_de_dados'.
+# Inclui os equivalentes legados (won≈projeto_fechado, data_collection≈
+# coleta_de_dados, production≈em_producao) e os ramos terminais (lost/
+# disqualified/not_closed). Constante única para os dois pontos não divergirem.
+ADVANCED_FUNNEL_STATUSES = (
+    'coleta_de_dados', 'data_collection',
+    'projeto_fechado', 'won',
+    'em_producao', 'production',
+    'concluded', 'lost', 'disqualified', 'not_closed',
+)
+
 # v32 ajustes (doc 09 §T-E2E P2.8): o Comercial passa a usar RBAC por setor
 # (padrão F3, accounts.permissions.HasSectorAccess), espelhando o Financeiro
 # (finance.views.FinanceSectorAccess). Fecha a segregação financeiro->comercial:
@@ -819,7 +834,9 @@ class ProspectViewSet(viewsets.ModelViewSet):
         """Conclui projeto — resolve faturas pendentes e desativa cliente."""
         from finance.models import Invoice
         prospect = self.get_object()
-        if prospect.status != 'production':
+        # v32: o status novo é 'em_producao'; 'production' é o alias legado.
+        # Aceita ambos para que cards v32 também possam ser concluídos.
+        if prospect.status not in ('production', 'em_producao'):
             return Response(
                 {'error': 'Só projetos em produção podem ser concluídos.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -1136,11 +1153,15 @@ class ProposalViewSet(viewsets.ModelViewSet):
         proposal.status = 'sent'
         proposal.sent_at = timezone.now()
         proposal.save()
-        # Mover lead para "Proposta Enviada" ao enviar
-        # v32: data_collection vem DEPOIS de won — não rebaixar para proposal
+        # Mover lead para "Proposta Enviada" ao enviar.
+        # v32: os status de fechamento/produção vêm DEPOIS de 'proposal'. Reenviar
+        # (ou enviar uma 2ª proposta) NÃO pode rebaixar um card já avançado para
+        # 'proposal'. Usa a constante compartilhada com _on_proposal_approved para
+        # os dois pontos não divergirem (inclui coleta_de_dados/projeto_fechado/
+        # em_producao/concluded/disqualified + legados).
         if proposal.prospect_id:
             Prospect.objects.filter(pk=proposal.prospect_id).exclude(
-                status__in=['won', 'data_collection', 'lost', 'not_closed'],
+                status__in=ADVANCED_FUNNEL_STATUSES,
             ).update(status='proposal')
         if proposal.prospect:
             log_crm_activity(proposal.prospect, 'proposal_sent', f'Proposta #{proposal.number} enviada', request.user)
@@ -1381,14 +1402,10 @@ class ProposalViewSet(viewsets.ModelViewSet):
                 update_fields.append('project_type')
 
             # Move o card para Coleta de Dados (não rebaixa terminais nem
-            # estados já avançados do fechamento).
+            # estados já avançados do fechamento). Mesma constante compartilhada
+            # com send() para os dois pontos não divergirem.
             old_status = prospect.status
-            advanced = (
-                'coleta_de_dados', 'data_collection', 'projeto_fechado', 'won',
-                'em_producao', 'production', 'concluded',
-                'lost', 'disqualified', 'not_closed',
-            )
-            if old_status not in advanced:
+            if old_status not in ADVANCED_FUNNEL_STATUSES:
                 prospect.status = 'coleta_de_dados'
                 update_fields.append('status')
 

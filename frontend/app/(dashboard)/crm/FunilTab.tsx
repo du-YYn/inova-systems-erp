@@ -591,6 +591,10 @@ export default function FunilTab() {
   });
   const [savingWon, setSavingWon] = useState(false);
   const [onboardingLink, setOnboardingLink] = useState('');
+  // v32: status de fechamento que o submit do WonModal deve gravar.
+  // 'projeto_fechado' é o caminho primário do funil v32; 'won' é o alias legado.
+  // O backend trata ambos como CLOSING_STATUSES (cria Customer + onboarding).
+  const [wonTargetStatus, setWonTargetStatus] = useState<'won' | 'projeto_fechado'>('projeto_fechado');
 
   // Modal de conclusão (quando lead vai para concluído)
   const [concludeProspect, setConcludeProspect] = useState<Prospect | null>(null);
@@ -863,8 +867,13 @@ export default function FunilTab() {
       setFollowUpForm({ reason: '', next_contact_date: '', notes: '' });
       return;
     }
-    // Bloquear movimentação para Fechado — abrir modal de cadastro de cliente
-    if (newStatus === 'won') {
+    // Bloquear movimentação para Fechado — abrir modal de cadastro de cliente.
+    // v32: 'projeto_fechado' é o caminho primário do funil (a coluna "Projeto
+    // Fechado"); 'won' continua sendo o alias legado. Os dois abrem o MESMO
+    // WonModal (que cria Customer + link de onboarding); o submit grava o
+    // status correspondente ao que o usuário arrastou.
+    if (newStatus === 'won' || newStatus === 'projeto_fechado') {
+      setWonTargetStatus(newStatus);
       setWonModalProspect(prospect);
       setOnboardingLink('');
       setWonForm({
@@ -978,8 +987,11 @@ export default function FunilTab() {
     }
     setSavingWon(true);
     try {
-      // 1. Mover lead para "Fechado" + salvar condições de pagamento
-      const paymentData: Record<string, unknown> = { status: 'won' };
+      // 1. Mover lead para "Fechado" + salvar condições de pagamento.
+      // v32: grava o status que o usuário arrastou ('projeto_fechado' no
+      // caminho primário, 'won' no legado). Ambos são CLOSING_STATUSES no
+      // backend (geram recebíveis/comissão e habilitam o onboarding).
+      const paymentData: Record<string, unknown> = { status: wonTargetStatus };
       if (wonForm.payment_method) paymentData.payment_method = wonForm.payment_method;
       if (wonForm.payment_type) paymentData.payment_type = wonForm.payment_type;
       if (wonForm.payment_split_pct) paymentData.payment_split_pct = Number(wonForm.payment_split_pct);
