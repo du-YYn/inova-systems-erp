@@ -416,6 +416,7 @@ class ClientOnboardingPublicView(APIView):
                     user_agent=request.META.get('HTTP_USER_AGENT', '')[:500],
                 )
                 self._sync_customer(onboarding)
+                self._advance_prospect_on_submit(onboarding)
         except Exception as exc:
             logger.exception(
                 'Onboarding %s: falha durante submit/sync, rollback aplicado: %s',
@@ -496,6 +497,35 @@ class ClientOnboardingPublicView(APIView):
             'Customer %s atualizado via onboarding %s (empresa: %s)',
             customer_id, onboarding.id,
             mask_company_name(onboarding.company_legal_name),
+        )
+
+    # v32: status do funil em que o card AINDA está aguardando o cliente
+    # preencher o onboarding (Coleta de Dados). Inclui o legado data_collection.
+    _PENDING_DATA_COLLECTION_STATUSES = ('coleta_de_dados', 'data_collection')
+
+    @classmethod
+    def _advance_prospect_on_submit(cls, onboarding):
+        """Avança o card ligado de Coleta de Dados -> Projeto Fechado no submit.
+
+        v32: quando o cliente envia o formulário de onboarding, o card do funil
+        precisa progredir de 'coleta_de_dados' (ou do legado 'data_collection')
+        para 'projeto_fechado'.
+
+        IDEMPOTENTE e sem regressão: só avança se o prospect estiver num dos
+        status de coleta. Cards já em terminal/adiante (projeto_fechado,
+        em_producao, concluded, lost, ...) NÃO são alterados — um reenvio/
+        reprocessamento não rebaixa o funil.
+        """
+        prospect = getattr(onboarding, 'prospect', None)
+        if prospect is None:
+            return
+        if prospect.status not in cls._PENDING_DATA_COLLECTION_STATUSES:
+            return
+        prospect.status = 'projeto_fechado'
+        prospect.save(update_fields=['status'])
+        logger.info(
+            'Onboarding %s submetido: prospect %s avançado para projeto_fechado.',
+            onboarding.id, prospect.id,
         )
 
     @staticmethod
