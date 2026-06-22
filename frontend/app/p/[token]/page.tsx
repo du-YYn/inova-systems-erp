@@ -4,20 +4,24 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// UUID em qualquer posição do segmento (NÃO ancorado): permite EXTRAIR o token
+// mesmo quando o link chega com lixo grudado no fim (espaço, %20, ponto, quebra
+// de linha — comum em WhatsApp/e-mail). Se nada casar, o token fica vazio.
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 export default function ProposalPublicPage() {
   const params = useParams();
-  const token = params.token as string;
+  // Normaliza o token: extrai o UUID do segmento e padroniza p/ minúsculas.
+  // Tolera lixo grudado no fim do link (espaço, %20, ponto, quebra de linha)
+  // sem perder o acesso. Vazio ⇒ "Link inválido." no efeito abaixo.
+  const token = ((params.token as string) || '').match(UUID_REGEX)?.[0]?.toLowerCase() ?? '';
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
-
-    // F7B.6: validar formato do token client-side antes de qualquer fetch.
-    // Defense-in-depth — Next.js API route ja valida, mas evita uma roundtrip.
-    if (!UUID_REGEX.test(token)) {
+    // F7B.6: token já extraído/validado acima (formato UUID). Vazio = formato
+    // inválido — não faz fetch. Defense-in-depth: a API route revalida server-side.
+    if (!token) {
       setError('Link inválido.');
       setLoading(false);
       return;
