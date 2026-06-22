@@ -516,6 +516,18 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Inova Systems Solutio
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+# URL base publica das propostas — FONTE DA VERDADE do link compartilhavel
+# `/p/<token>` (em producao, o subdominio dedicado `proposta.*`). O
+# ProposalSerializer expoe `public_url` a partir daqui para o frontend NAO
+# precisar adivinhar o host no cliente (o fallback antigo
+# `window.location.origin.replace('erp.', 'proposta.')` quebrava silenciosamente
+# quando o ERP era acessado por qualquer host sem o prefixo `erp.`). Default cai
+# no FRONTEND_URL quando nao configurado (dev/local). `.rstrip('/')` evita barra
+# dupla ao concatenar `/p/<token>`.
+PROPOSAL_PUBLIC_BASE_URL = os.environ.get(
+    'PROPOSAL_PUBLIC_BASE_URL', FRONTEND_URL
+).rstrip('/')
+
 # ─── SENTRY ────────────────────────────────────────────────────────────────────
 
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
