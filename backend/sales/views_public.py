@@ -54,8 +54,12 @@ class ProposalPublicView(APIView):
     """Retorna metadados da proposta (para tracking)."""
     permission_classes = [AllowAny]
     authentication_classes = []
-    # F7B.5: dois layers — IP (anti-fan-out) + token (anti-enumeration focada)
-    throttle_classes = [ProposalPublicThrottle, ProposalTokenViewThrottle]
+    # Sem throttle: visualização de um link público de proposta. Cada abertura
+    # faz 2 chamadas (metadados + html); o limite por-token (antes 30/min)
+    # estourava com ~15 aberturas/min e o proxy do frontend mascarava o 429
+    # como 404/502 ("Proposta não encontrada"). Token é UUIDv4 (não enumerável)
+    # e o conteúdo já é do cliente — ler não consome cota.
+    throttle_classes = []
 
     def get(self, request, token):
         try:
@@ -117,7 +121,8 @@ class ProposalPublicHTMLView(APIView):
     """Serve o arquivo HTML diretamente — renderiza no browser."""
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [ProposalPublicThrottle, ProposalTokenViewThrottle]
+    # Link público de proposta — sem limite de abertura (ver ProposalPublicView).
+    throttle_classes = []
 
     WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '5541998594938')
 
