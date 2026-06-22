@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getInternalBackendUrls } from '@/lib/internalBackend';
+import { getInternalBackendUrls, forwardedClientHeaders } from '@/lib/internalBackend';
 
 const BACKEND_URLS = getInternalBackendUrls();
 
@@ -17,10 +17,12 @@ export async function GET(
     return NextResponse.json({ error: 'Token inválido.' }, { status: 400 });
   }
 
+  const fwd = forwardedClientHeaders(request);
+
   for (const baseUrl of BACKEND_URLS) {
     try {
       const res = await fetch(`${baseUrl}/sales/proposals/public/${token}/`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...fwd },
         cache: 'no-store',
       });
       if (res.ok) {
