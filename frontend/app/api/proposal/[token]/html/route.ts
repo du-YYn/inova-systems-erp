@@ -30,20 +30,21 @@ export async function GET(
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            // CSP estrita: HTML público de proposta — sem scripts, sem rede
-            // externa. Permite estilos/fontes/imagens inline e dados embutidos
-            // (data:) que o template do backend usa.
-            // frame-ancestors 'self': este HTML É EXIBIDO dentro do iframe da
-            // página /p/<token> (mesma origem). Com 'none' o navegador recusa o
-            // iframe e mostra "recusou a conexão" — proposta não abre em lugar
-            // nenhum. 'self' permite só a própria origem embedar (anti-clickjacking
-            // de terceiros mantido).
+            // CSP do iframe ISOLADO (CodePen-style): este HTML roda num iframe
+            // sandbox `allow-scripts` SEM `allow-same-origin` (origin opaco).
+            // Permite o JS/estilo inline da própria proposta (animações, capa,
+            // scroll-reveal), mas trava `connect-src 'none'` (sem rede/exfil) e
+            // mantém `frame-ancestors 'self'` (só a /p/<token> embeda). O iframe
+            // não acessa cookies/storage/sessão do ERP nem o DOM pai.
+            // (Reaplicada pelo middleware — mantida aqui alinhada.)
             'Content-Security-Policy': [
-              "default-src 'none'",
-              "script-src 'none'",
-              "style-src 'self' 'unsafe-inline'",
-              "font-src 'self' data:",
-              "img-src 'self' data: https:",
+              "default-src 'self' data: blob:",
+              "script-src 'unsafe-inline' 'unsafe-eval' data: blob:",
+              "style-src 'unsafe-inline' *",
+              "img-src * data: blob:",
+              "font-src * data:",
+              "media-src * data: blob:",
+              "connect-src 'none'",
               "frame-ancestors 'self'",
               "base-uri 'none'",
               "object-src 'none'",
