@@ -318,8 +318,9 @@ img:not([src]), img[src=""] { display: none !important; }
 #intro, .intro, [class~="splash"], [class~="preloader"], [class~="loader-overlay"] {
     animation: _introAutoDone 1.2s 4.2s forwards !important;
 }
+/* NB: !important dentro de @keyframes é IGNORADO pela spec CSS — manter SEM. */
 @keyframes _introAutoDone {
-    to { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
+    to { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 /* Destrava o scroll caso a convenção JS o tivesse bloqueado. */
 html, body { overflow-y: auto !important; }
