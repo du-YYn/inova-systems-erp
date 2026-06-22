@@ -162,29 +162,39 @@ class ProposalPublicHTMLView(APIView):
             response['X-Robots-Tag'] = 'noindex, nofollow'
             return response
 
-        # F7B.3 (extensao): sanitizar on-the-fly antes de servir.
-        # - Uploads novos ja sao sanitizados em ProposalViewSet.upload_pdf,
-        #   mas re-sanitizar aqui custa ~1-5ms e e' idempotente (defesa dupla).
-        # - Uploads antigos (pre-deploy F7B) NAO foram sanitizados na origem.
-        #   Esta passagem garante que TODO HTML servido publicamente passe
-        #   pelo bleach, mesmo links emitidos antes da fase de hardening.
-        # - Falha de sanitizacao nao impede o serve — preserva fallback para
-        #   o conteudo cru, ja que o iframe sandbox + CSP restritivo continuam
-        #   bloqueando JS mesmo se o HTML tiver `<script>`.
-        from .html_sanitizer import sanitize_proposal_html
-        try:
-            content = sanitize_proposal_html(content).encode('utf-8')
-        except Exception as exc:
-            logger.warning(
-                'Falha ao sanitizar HTML on-the-fly da proposta %s: %s',
-                proposal.number, exc,
-            )
+        # MODO IFRAME ISOLADO (CodePen-style) — 2026-06-22.
+        # O HTML é servido COM o JS preservado e renderizado num iframe
+        # sandbox `allow-scripts` SEM `allow-same-origin` (origin opaco): o
+        # script roda (animações/capa/scroll-reveal) mas NÃO acessa cookies/
+        # storage/sessão do ERP nem o DOM da página pai, e `connect-src 'none'`
+        # na CSP impede saída de rede. Por isso NÃO removemos mais o JS via
+        # bleach (que quebrava propostas legítimas) — qualquer proposta funciona
+        # como projetada. O sanitizer (html_sanitizer.py) segue disponível caso
+        # se queira reativar a remoção de JS no futuro.
+        # `content` segue como bytes; _inject_cta_buttons decodifica.
 
         # HTML — injetar botões CTA no final
         content = self._inject_cta_buttons(content, proposal)
 
         response = HttpResponse(content, content_type='text/html; charset=utf-8')
-        csp = "script-src 'none'; object-src 'none'; style-src 'unsafe-inline' *; font-src *; img-src * data:;"
+        # CSP do iframe isolado: permite JS/estilos inline da própria proposta,
+        # mas TRAVA saída de rede (connect-src 'none' → sem exfiltração/fetch
+        # externo) e mantém frame-ancestors 'self'. (A CSP efetiva ao cliente é
+        # reaplicada pelo proxy do frontend/middleware; aqui é defesa + acesso
+        # direto ao backend.)
+        csp = (
+            "default-src 'self' data: blob:; "
+            "script-src 'unsafe-inline' 'unsafe-eval' data: blob:; "
+            "style-src 'unsafe-inline' *; "
+            "img-src * data: blob:; "
+            "font-src * data:; "
+            "media-src * data: blob:; "
+            "connect-src 'none'; "
+            "frame-ancestors 'self'; "
+            "base-uri 'none'; "
+            "form-action 'none'; "
+            "object-src 'none'"
+        )
         response['Content-Security-Policy'] = csp
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-XSS-Protection'] = '1; mode=block'

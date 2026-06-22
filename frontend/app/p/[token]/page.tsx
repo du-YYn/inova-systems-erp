@@ -50,7 +50,13 @@ export default function ProposalPublicPage() {
       <iframe
         title="Proposta"
         src={`/api/proposal/${token}/html`}
-        sandbox="allow-popups allow-popups-to-escape-sandbox"
+        // Iframe ISOLADO estilo CodePen: allow-scripts roda o JS da proposta
+        // (animações/capa/scroll-reveal), mas SEM allow-same-origin → origin
+        // opaco: o script NÃO acessa cookies/storage/sessão do ERP nem o DOM
+        // da página pai. connect-src 'none' na CSP impede saída de rede. Assim
+        // QUALQUER proposta (com ou sem JS) funciona sem comprometer o ERP.
+        // NUNCA adicionar allow-same-origin aqui (quebraria o isolamento).
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         style={{ width: '100vw', height: '100vh', border: 'none', display: 'block' }}
       />
     );

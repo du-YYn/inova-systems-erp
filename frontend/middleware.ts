@@ -80,6 +80,32 @@ function buildCsp(nonce: string, embeddableSameOrigin = false): string {
 }
 
 
+/**
+ * CSP do HTML público da proposta, exibido num iframe ISOLADO (sandbox
+ * `allow-scripts` SEM `allow-same-origin` → origin opaco). Permite o JS e os
+ * estilos inline da própria proposta (animações, capa, scroll-reveal), mas
+ * trava `connect-src 'none'` (sem fetch/XHR/exfiltração) e mantém
+ * `frame-ancestors 'self'`. É seguro porque o iframe não acessa cookies/
+ * storage/sessão do ERP nem o DOM da página pai (origin opaco). Padrão usado
+ * por CodePen/JSFiddle para rodar HTML/JS arbitrário com segurança.
+ */
+function buildIframeProposalCsp(): string {
+  return [
+    "default-src 'self' data: blob:",
+    "script-src 'unsafe-inline' 'unsafe-eval' data: blob:",
+    "style-src 'unsafe-inline' *",
+    "img-src * data: blob:",
+    "font-src * data:",
+    "media-src * data: blob:",
+    "connect-src 'none'",
+    "frame-ancestors 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+  ].join('; ');
+}
+
+
 /** Valida se um pathname pode ser usado como ?redirect=... de forma segura
  * (evita open redirect via `//evil.com`, `\\evil.com`, `/\\evil`, `javascript:`
  * e URLs absolutas). Aceita apenas paths relativos simples. */
@@ -107,7 +133,10 @@ export function middleware(request: NextRequest) {
   // "recusou a conexão" — a proposta não abre em lugar nenhum. Demais rotas
   // permanecem travadas (anti-clickjacking).
   const isEmbeddableProposalHtml = /^\/api\/proposal\/[^/]+\/html\/?$/.test(pathname);
-  const csp = buildCsp(nonce, isEmbeddableProposalHtml);
+  // O /html roda num iframe ISOLADO (sandbox allow-scripts, SEM same-origin):
+  // usa uma CSP que permite o JS/estilo inline da própria proposta mas trava a
+  // saída de rede. Todas as demais rotas usam a CSP nonce-based forte.
+  const csp = isEmbeddableProposalHtml ? buildIframeProposalCsp() : buildCsp(nonce);
 
   const finish = (response: NextResponse): NextResponse => {
     response.headers.set('Content-Security-Policy', csp);
