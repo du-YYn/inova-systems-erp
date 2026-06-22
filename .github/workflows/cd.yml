@@ -167,4 +167,24 @@ jobs:
               exit 1
             fi
 
+            # ── Verificação de hosts públicos (erp./proposta.) — AVISO-ONLY ──
+            # O deploy NÃO é derrubado aqui de propósito: "connection refused" ou
+            # falha de TLS em subdomínio costuma ser roteamento/cert no
+            # Easypanel/Traefik (infra), NÃO a imagem — rollback não resolveria e
+            # só geraria churn. O gap real (caso do ERR_CONNECTION_REFUSED em
+            # proposta.) era ninguém detectar; agora vira um log alto e acionável
+            # a cada deploy. Probe via curl do container backend (o host pode não
+            # ter curl). Detalhes: docs/deploy-dominios.md.
+            check_public_host() {
+              code=$(docker compose exec -T backend curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "https://$1/" 2>/dev/null || echo "000")
+              case "$code" in
+                2*|3*) echo "  ✓ $1 → HTTP $code" ;;
+                000)   echo "  ⚠ $1 → SEM CONEXÃO (connection refused / TLS / DNS). No Easypanel: confira o domínio mapeado para o container e o certificado emitido. Um cert wildcard *.inovasystemssolutions.com evita falha ao adicionar subdomínio novo." ;;
+                *)     echo "  ⚠ $1 → HTTP $code inesperado (proxy/app). Confira Traefik/Easypanel e os logs do frontend." ;;
+              esac
+            }
+            echo "=== Hosts públicos (aviso-only, não derruba o deploy) ==="
+            check_public_host erp.inovasystemssolutions.com
+            check_public_host proposta.inovasystemssolutions.com
+
             echo "Deploy OK — tag ${NEW_TAG:0:12} ($(date))"
