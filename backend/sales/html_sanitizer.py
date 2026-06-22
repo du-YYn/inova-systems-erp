@@ -307,6 +307,15 @@ _REVEAL_FIX_CSS = '''
    esconde o ícone de "imagem quebrada" em vez de exibi-lo. A logo só aparece
    quando for embutida na geração — isto apenas evita o visual quebrado. */
 img:not([src]), img[src=""] { display: none !important; }
+/* Capa/splash de abertura (#intro/.intro) que sai via JS (classe .done no
+   clique "entrar"): sem JS no iframe (sandbox sem allow-scripts) ela trava a
+   tela inteira e o clique não faz nada. Remove a capa → vai direto ao <main>.
+   (.intro exata, NÃO .intro-p/.intro-text, que são conteúdo do corpo.) */
+#intro, .intro, [class~="splash"], [class~="preloader"], [class~="loader-overlay"] {
+    display: none !important;
+}
+/* Destrava o scroll caso a convenção JS o tivesse bloqueado. */
+html, body { overflow-y: auto !important; }
 </style>
 '''
 
