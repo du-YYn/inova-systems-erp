@@ -308,11 +308,18 @@ _REVEAL_FIX_CSS = '''
    quando for embutida na geração — isto apenas evita o visual quebrado. */
 img:not([src]), img[src=""] { display: none !important; }
 /* Capa/splash de abertura (#intro/.intro) que sai via JS (classe .done no
-   clique "entrar"): sem JS no iframe (sandbox sem allow-scripts) ela trava a
-   tela inteira e o clique não faz nada. Remove a capa → vai direto ao <main>.
+   clique "entrar"): sem JS no iframe (sandbox sem allow-scripts) ela travaria
+   a tela inteira. Em vez de removê-la (perderia a abertura), deixamos a
+   animação CSS de abertura rodar e a capa SAIR SOZINHA por CSS (~4.2s, após a
+   última animação terminar ~3.8s) — replica o efeito do .done que o JS faria
+   no clique. A .intro base não tem animation própria, então este `animation`
+   não conflita com as dos filhos (orbit/seed/logo/textos).
    (.intro exata, NÃO .intro-p/.intro-text, que são conteúdo do corpo.) */
 #intro, .intro, [class~="splash"], [class~="preloader"], [class~="loader-overlay"] {
-    display: none !important;
+    animation: _introAutoDone 1.2s 4.2s forwards !important;
+}
+@keyframes _introAutoDone {
+    to { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
 }
 /* Destrava o scroll caso a convenção JS o tivesse bloqueado. */
 html, body { overflow-y: auto !important; }
