@@ -295,13 +295,18 @@ _REVEAL_FIX_CSS = '''
 .hidden, .invisible, .opacity-0,
 [data-aos], [data-animation], [data-animate], [data-fade],
 [data-reveal], [data-scroll-reveal],
-[class*="hidden-until"], [class*="reveal-on"],
+[class*="hidden-until"], [class*="reveal"], [class~="reveal"],
+[class*="in-view"], [class*="scroll-reveal"],
 [class*="fade-up"], [class*="fade-down"], [class*="fade-in"],
 [class*="slide-up"], [class*="slide-down"], [class*="slide-in"] {
     opacity: 1 !important;
     visibility: visible !important;
     transform: none !important;
 }
+/* Imagens sem src (logo do cliente não embutida na geração da proposta):
+   esconde o ícone de "imagem quebrada" em vez de exibi-lo. A logo só aparece
+   quando for embutida na geração — isto apenas evita o visual quebrado. */
+img:not([src]), img[src=""] { display: none !important; }
 </style>
 '''
 
@@ -336,15 +341,20 @@ def sanitize_proposal_html(content: bytes | str) -> str:
         strip_comments=True,
     )
 
-    # F7B.4: se removemos pelo menos um <script>, injeta CSS reveal-fix
-    # antes de </body> (ou no final, se nao houver) pra neutralizar
-    # "hide com CSS, mostra com JS".
-    if had_script:
-        body_close = re.search(r'</body\s*>', cleaned, re.IGNORECASE)
-        if body_close:
-            insert_pos = body_close.start()
-            cleaned = cleaned[:insert_pos] + _REVEAL_FIX_CSS + cleaned[insert_pos:]
-        else:
-            cleaned = cleaned + _REVEAL_FIX_CSS
+    # F7B.4 (revisado 2026-06-22): SEMPRE injeta o reveal-fix abrangente antes
+    # de </body>. Antes só injetava quando removia <script> (had_script), mas há
+    # templates gerados por ferramentas externas que já vêm "estáticos" (sem
+    # <script>) e embutem um reveal-fix PRÓPRIO incompleto — ex.: a proposta
+    # Barter usa .reveal (opacity:0 + JS), o reveal-fix embutido não cobria
+    # .reveal, e o JS não existe no iframe (sandbox sem allow-scripts) → textos
+    # invisíveis. Injetar sempre é seguro: o CSS só força visível elementos com
+    # classes de animação conhecidas; o nosso vem por último → vence o embutido.
+    # (had_script mantido só para o pre-strip de <script> acima.)
+    body_close = re.search(r'</body\s*>', cleaned, re.IGNORECASE)
+    if body_close:
+        insert_pos = body_close.start()
+        cleaned = cleaned[:insert_pos] + _REVEAL_FIX_CSS + cleaned[insert_pos:]
+    else:
+        cleaned = cleaned + _REVEAL_FIX_CSS
 
     return cleaned
