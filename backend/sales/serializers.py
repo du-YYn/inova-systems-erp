@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.db import transaction
 from rest_framework import serializers
 from core.logging_utils import mask_cpf_cnpj, mask_email, mask_phone
@@ -365,6 +366,7 @@ def _sync_contract_services(contract, service_ids):
 class ProposalSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField()
     prospect_company = serializers.SerializerMethodField()
+    public_url = serializers.SerializerMethodField()
     assigned_to_name = serializers.CharField(
         source="assigned_to.username", read_only=True
     )
@@ -405,6 +407,19 @@ class ProposalSerializer(serializers.ModelSerializer):
             return obj.prospect.company_name or ''
         return ''
 
+    def get_public_url(self, obj):
+        """Link publico compartilhavel da proposta (`<base>/p/<token>`).
+
+        FONTE DA VERDADE do link — o frontend consome este valor em vez de
+        derivar o host no cliente. Retorna None enquanto a proposta nao tem
+        `public_token` (gerado no upload do arquivo), espelhando a UI que so
+        mostra o botao "Copiar link" quando ha token.
+        """
+        if not obj.public_token:
+            return None
+        base = (settings.PROPOSAL_PUBLIC_BASE_URL or '').rstrip('/')
+        return f'{base}/p/{obj.public_token}'
+
     class Meta:
         model = Proposal
         fields = [
@@ -432,6 +447,7 @@ class ProposalSerializer(serializers.ModelSerializer):
             "terms",
             "proposal_file",
             "public_token",
+            "public_url",
             "view_count",
             "sent_at",
             "viewed_at",

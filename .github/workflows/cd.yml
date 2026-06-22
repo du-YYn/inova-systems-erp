@@ -35,6 +35,7 @@ jobs:
             context: ./frontend
             build_args: |
               NEXT_PUBLIC_API_URL=https://erp.inovasystemssolutions.com/api/v1
+              NEXT_PUBLIC_PROPOSAL_URL=https://proposta.inovasystemssolutions.com
           - name: apresentacao-backend
             context: ./apresentacao/backend
             build_args: ""

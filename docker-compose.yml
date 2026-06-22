@@ -66,6 +66,7 @@ services:
       - WEBSITE_API_KEY=${WEBSITE_API_KEY}
       - N8N_API_KEY=${N8N_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - PROPOSAL_PUBLIC_BASE_URL=${PROPOSAL_PUBLIC_BASE_URL:-}
       - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       - EMAIL_HOST=${EMAIL_HOST:-smtp.resend.com}
       - EMAIL_PORT=${EMAIL_PORT:-587}
@@ -118,6 +119,7 @@ services:
       - WEBSITE_API_KEY=${WEBSITE_API_KEY}
       - N8N_API_KEY=${N8N_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - PROPOSAL_PUBLIC_BASE_URL=${PROPOSAL_PUBLIC_BASE_URL:-}
       - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       - EMAIL_HOST=${EMAIL_HOST:-smtp.resend.com}
       - EMAIL_PORT=${EMAIL_PORT:-587}
@@ -152,6 +154,7 @@ services:
       - WEBSITE_API_KEY=${WEBSITE_API_KEY}
       - N8N_API_KEY=${N8N_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - PROPOSAL_PUBLIC_BASE_URL=${PROPOSAL_PUBLIC_BASE_URL:-}
       - EMAIL_BACKEND=${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
       - EMAIL_HOST=${EMAIL_HOST:-smtp.resend.com}
       - EMAIL_PORT=${EMAIL_PORT:-587}

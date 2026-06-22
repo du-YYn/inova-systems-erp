@@ -33,6 +33,7 @@ interface Proposal {
   hourly_rate: string;
   proposal_file: string | null;
   public_token: string | null;
+  public_url: string | null;
   view_count: number;
   created_at: string;
   services?: { id?: number; service: number; service_name?: string; service_code?: string }[];
@@ -48,6 +49,25 @@ interface Proposal {
     recurring_duration_months?: number | null;
     recurring_first_due?: string | null;
   } | null;
+}
+
+/**
+ * Monta o link público da proposta. Ordem de prioridade:
+ *  1. `public_url` vindo do backend — FONTE DA VERDADE
+ *     (settings.PROPOSAL_PUBLIC_BASE_URL). Elimina o chute de host no cliente.
+ *  2. `NEXT_PUBLIC_PROPOSAL_URL` — base injetada no build do frontend.
+ *  3. Fallback derivado do host atual: troca o subdomínio `erp.` (logo após o
+ *     esquema) por `proposta.`; se não houver `erp.`, usa a própria origin.
+ *     O replace é ancorado (`^https?://erp.`) p/ não trocar um `erp.` que
+ *     apareça em outra posição da URL.
+ */
+function buildProposalPublicUrl(p: Pick<Proposal, 'public_url' | 'public_token'>): string {
+  if (p.public_url) return p.public_url;
+  const envBase = process.env.NEXT_PUBLIC_PROPOSAL_URL;
+  if (envBase) return `${envBase.replace(/\/+$/, '')}/p/${p.public_token}`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const base = origin.replace(/^(https?:\/\/)erp\./, '$1proposta.');
+  return `${base}/p/${p.public_token}`;
 }
 
 interface ProspectOption {
@@ -378,10 +398,7 @@ export default function PropostasTab() {
                         {/* Copiar link público */}
                         {p.public_token && (
                           <button onClick={() => {
-                            const proposalDomain = process.env.NEXT_PUBLIC_PROPOSAL_URL
-                              || window.location.origin.replace('erp.', 'proposta.');
-                            const url = `${proposalDomain}/p/${p.public_token}`;
-                            navigator.clipboard.writeText(url);
+                            navigator.clipboard.writeText(buildProposalPublicUrl(p));
                             toast.success('Link copiado!');
                           }} className="p-1.5 text-gray-300 hover:text-accent-gold transition-colors" title="Copiar link público">
                             <Copy className="w-4 h-4" />
@@ -575,11 +592,10 @@ export default function PropostasTab() {
                   <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Link Público</p>
                   <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3">
                     <p className="text-[10px] text-gray-400 font-mono break-all mb-2">
-                      {(process.env.NEXT_PUBLIC_PROPOSAL_URL || window.location.origin.replace('erp.', 'proposta.'))}/p/{viewingProposal.public_token}
+                      {buildProposalPublicUrl(viewingProposal)}
                     </p>
                     <button onClick={() => {
-                      const baseUrl = process.env.NEXT_PUBLIC_PROPOSAL_URL || window.location.origin.replace('erp.', 'proposta.');
-                      navigator.clipboard.writeText(`${baseUrl}/p/${viewingProposal.public_token}`);
+                      navigator.clipboard.writeText(buildProposalPublicUrl(viewingProposal));
                       toast.success('Link copiado!');
                     }} className="w-full flex items-center justify-center gap-2 py-2 bg-accent-gold text-white rounded-lg text-sm font-medium hover:bg-accent-gold-dark transition-colors">
                       <Copy className="w-4 h-4" /> Copiar Link

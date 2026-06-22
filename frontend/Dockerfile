@@ -12,6 +12,12 @@ WORKDIR /app
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
+# Base pública das propostas (subdomínio proposta.*). NEXT_PUBLIC_* é inlinado
+# em build-time, então precisa vir como build-arg (não basta env de runtime).
+# Fallback de robustez no cliente; a fonte da verdade é o `public_url` do backend.
+ARG NEXT_PUBLIC_PROPOSAL_URL
+ENV NEXT_PUBLIC_PROPOSAL_URL=${NEXT_PUBLIC_PROPOSAL_URL}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
