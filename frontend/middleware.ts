@@ -39,7 +39,7 @@ function generateNonce(): string {
  *   OWASP CSP cheatsheet aceita esse trade-off para apps React/Vue.
  *   Ver docs/security-decisions.md para detalhe completo.
  */
-function buildCsp(nonce: string): string {
+function buildCsp(nonce: string, embeddableSameOrigin = false): string {
   const publicApi = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   // F0: connect-src precisa da ORIGIN (sem path). Na CSP, um source com path
   // sem barra final casa SO aquele path exato: 'http://host/api/v1' bloqueia
@@ -69,7 +69,10 @@ function buildCsp(nonce: string): string {
     "img-src 'self' data: blob:",
     `connect-src 'self' ${connectExtra}`,
     "font-src 'self' data:",
-    "frame-ancestors 'none'",
+    // O HTML público da proposta (/api/proposal/<token>/html) é exibido dentro
+    // do iframe da página /p/<token> (mesma origem). Para essa rota, 'self';
+    // todo o resto fica 'none' (anti-clickjacking).
+    embeddableSameOrigin ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
@@ -97,11 +100,21 @@ export function middleware(request: NextRequest) {
   // Gera nonce e propaga via header da request para Server Components lerem.
   const nonce = generateNonce();
   request.headers.set('x-nonce', nonce);
-  const csp = buildCsp(nonce);
+
+  // A rota /api/proposal/<token>/html serve o HTML público da proposta para ser
+  // exibido DENTRO do iframe da página /p/<token> (mesma origem). Precisa permitir
+  // frame same-origin; com DENY/'none' o navegador recusa o iframe e mostra
+  // "recusou a conexão" — a proposta não abre em lugar nenhum. Demais rotas
+  // permanecem travadas (anti-clickjacking).
+  const isEmbeddableProposalHtml = /^\/api\/proposal\/[^/]+\/html\/?$/.test(pathname);
+  const csp = buildCsp(nonce, isEmbeddableProposalHtml);
 
   const finish = (response: NextResponse): NextResponse => {
     response.headers.set('Content-Security-Policy', csp);
     response.headers.set('x-nonce', nonce);
+    // X-Frame-Options gerenciado aqui (removido do next.config para poder variar
+    // por rota): SAMEORIGIN só para o HTML embedável; DENY para o resto.
+    response.headers.set('X-Frame-Options', isEmbeddableProposalHtml ? 'SAMEORIGIN' : 'DENY');
     return response;
   };
 

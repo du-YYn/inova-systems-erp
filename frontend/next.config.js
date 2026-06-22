@@ -18,7 +18,9 @@ const nextConfig = {
       {
         source: '/(.*)',
         headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
+          // X-Frame-Options é setado no middleware.ts (por rota): DENY em tudo,
+          // SAMEORIGIN só no HTML público de proposta, que é embedado no iframe
+          // da página /p/<token>. Aqui era DENY global e quebrava esse embed.
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },

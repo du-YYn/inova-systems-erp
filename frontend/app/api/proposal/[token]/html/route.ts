@@ -31,19 +31,27 @@ export async function GET(
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
             // CSP estrita: HTML público de proposta — sem scripts, sem rede
-            // externa, sem iframes. Permite estilos/fontes/imagens inline e
-            // dados embutidos (data:) que o template do backend usa.
+            // externa. Permite estilos/fontes/imagens inline e dados embutidos
+            // (data:) que o template do backend usa.
+            // frame-ancestors 'self': este HTML É EXIBIDO dentro do iframe da
+            // página /p/<token> (mesma origem). Com 'none' o navegador recusa o
+            // iframe e mostra "recusou a conexão" — proposta não abre em lugar
+            // nenhum. 'self' permite só a própria origem embedar (anti-clickjacking
+            // de terceiros mantido).
             'Content-Security-Policy': [
               "default-src 'none'",
               "script-src 'none'",
               "style-src 'self' 'unsafe-inline'",
               "font-src 'self' data:",
               "img-src 'self' data: https:",
-              "frame-ancestors 'none'",
+              "frame-ancestors 'self'",
               "base-uri 'none'",
               "object-src 'none'",
               "form-action 'none'",
             ].join('; '),
+            // Sobrescreve o X-Frame-Options: DENY global (next.config) para esta
+            // rota — DENY impediria o embed same-origin na página /p/.
+            'X-Frame-Options': 'SAMEORIGIN',
             'X-Content-Type-Options': 'nosniff',
             'X-XSS-Protection': '1; mode=block',
             'Cache-Control': 'no-store, no-cache',
