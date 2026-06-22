@@ -171,7 +171,13 @@ class ProposalPublicHTMLView(APIView):
         # bleach (que quebrava propostas legítimas) — qualquer proposta funciona
         # como projetada. O sanitizer (html_sanitizer.py) segue disponível caso
         # se queira reativar a remoção de JS no futuro.
-        # `content` segue como bytes; _inject_cta_buttons decodifica.
+        #
+        # Fallback p/ HTML gerado por IA que usa CSS dependente de JS (.reveal/
+        # capa .intro) mas SEM incluir o <script> correspondente: se o HTML não
+        # tem <script>, injeta o reveal-fix CSS (revela conteúdo + capa sai
+        # sozinha). Se tem <script>, confia no JS da proposta.
+        from .html_sanitizer import prepare_for_isolated_iframe
+        content = prepare_for_isolated_iframe(content).encode('utf-8')
 
         # HTML — injetar botões CTA no final
         content = self._inject_cta_buttons(content, proposal)

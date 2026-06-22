@@ -375,3 +375,28 @@ def sanitize_proposal_html(content: bytes | str) -> str:
         cleaned = cleaned + _REVEAL_FIX_CSS
 
     return cleaned
+
+
+def prepare_for_isolated_iframe(content: bytes | str) -> str:
+    """Prepara o HTML da proposta para o iframe ISOLADO (allow-scripts).
+
+    NÃO remove o JS — ele roda no sandbox `allow-scripts` (sem same-origin),
+    então propostas COM `<script>` funcionam como projetadas.
+
+    PORÉM, muitos HTMLs gerados por IA usam CSS que depende de JS para revelar
+    conteúdo (`.reveal` com `.in`, capa `.intro` com `.done`) e às vezes NEM
+    incluem o `<script>` correspondente — aí o conteúdo ficaria invisível e a
+    capa travaria, mesmo com JS habilitado. Por isso: se o HTML NÃO tem
+    `<script>`, injeta o reveal-fix CSS (revela `.reveal`/etc. e faz a capa sair
+    sozinha). Se TEM `<script>`, confia no JS da proposta e NÃO injeta (não
+    estragar as animações reais).
+    """
+    text = content.decode('utf-8', errors='replace') if isinstance(content, (bytes, bytearray)) else content
+    has_script = bool(_SCRIPT_BLOCK_RE.search(text) or _SCRIPT_OPEN_RE.search(text))
+    if has_script:
+        return text
+    body_close = re.search(r'</body\s*>', text, re.IGNORECASE)
+    if body_close:
+        i = body_close.start()
+        return text[:i] + _REVEAL_FIX_CSS + text[i:]
+    return text + _REVEAL_FIX_CSS
