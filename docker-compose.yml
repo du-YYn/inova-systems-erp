@@ -87,6 +87,13 @@ services:
       easypanel:
         aliases:
           - grupo_ry_inova-erp_backend
+          # Alias hifenizado e ÚNICO usado pelo proxy server-side do frontend.
+          # `grupo_ry_inova-erp_backend` tem UNDERSCORE, que a regex de Host do
+          # Django (^[a-z0-9.-]+$) rejeita ANTES do ALLOWED_HOSTS → 400 → o proxy
+          # caía no `backend` (ambíguo na rede easypanel compartilhada → round-
+          # robin → 404). Hífen passa na regex e o nome é único → 1 IP (inova).
+          # Requer `inova-erp-backend` no ALLOWED_HOSTS (ver .env / .env.example).
+          - inova-erp-backend
     command: >
       sh -c "
         python manage.py migrate --no-input &&
