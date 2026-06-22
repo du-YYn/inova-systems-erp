@@ -172,6 +172,14 @@ services:
     restart: unless-stopped
     environment:
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+      # Backend interno para as rotas server-side do Next (proxy-login,
+      # /api/proposal/[token], /api/onboarding/[token]). O serviço frontend NÃO
+      # tem env_file, então estas vars PRECISAM ser listadas aqui para chegarem
+      # ao container — sem isso o proxy caía no nome curto `backend`, AMBÍGUO na
+      # rede easypanel compartilhada. Default vazio: o código já prefere o alias
+      # único do projeto; definir no .env força um destino explícito.
+      - INTERNAL_BACKEND_URL=${INTERNAL_BACKEND_URL:-}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-}
     depends_on:
       backend:
         condition: service_healthy
