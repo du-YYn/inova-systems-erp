@@ -143,29 +143,31 @@ class TestAcceptButtonTarget:
         # rel noopener noreferrer no link de onboarding
         assert 'rel="noopener noreferrer"' in result
 
-    # ── Bug #9 (LGPD): HTML publico NAO pode expor token do onboarding ──────
-    def test_inject_cta_does_not_leak_onboarding_token(
+    # ── Decisão de processo (2026-06): o botão "Aceito proposta de
+    #    investimento" leva ao link ÚNICO de cadastro (onboarding) do lead.
+    #    Isso REVERTE o Bug #9 (que apontava para WhatsApp para não expor o
+    #    token). Mitigação: o token é ÚNICO por lead (ClientOnboarding.
+    #    public_token, OneToOne com o prospect) → sem cruzamento de dados.
+    #    Ver ProposalPublicHTMLView._build_accept_url. ──────────────────────
+    def test_inject_cta_links_accept_to_unique_onboarding(
         self, proposal, onboarding,
     ):
-        """Bug #9 (LGPD): qualquer um com o link publico da proposta tinha
-        tambem o link do onboarding (token UUID embutido no HTML). Permitia
-        preencher dados em nome da empresa antes do cliente real.
-        Agora o botao 'Aceito' aponta para WhatsApp — equipe envia o link
-        de onboarding por canal direto.
+        """O botão 'Aceito' aponta para o link de cadastro ÚNICO do lead.
+
+        Substitui o antigo guard do Bug #9 (que exigia ausência do token):
+        por decisão de processo, o link de cadastro voltou ao HTML público, e a
+        proteção passou a ser o token único por lead.
         """
         from sales.views_public import ProposalPublicHTMLView
         view = ProposalPublicHTMLView()
         html = b'<html><body><h1>Proposta</h1></body></html>'
         result = view._inject_cta_buttons(html, proposal).decode()
 
-        # O token do onboarding NAO deve aparecer no HTML publico
-        assert str(onboarding.public_token) not in result, (
-            'Token do onboarding vazou no HTML publico da proposta'
+        # O botão "Aceito" deve linkar o cadastro único do lead.
+        assert str(onboarding.public_token) in result, (
+            'O botão Aceito deveria linkar o cadastro único do lead'
         )
-        # Tambem nao deve aparecer o host de cadastro com path completo
-        assert '/cadastro' not in result.lower() or 'cadastro.inova' not in result, (
-            'Host de onboarding nao deveria estar no HTML publico'
-        )
+        assert view.ONBOARDING_BASE_URL in result
 
 
 # ─── F7B.2: IDOR / LGPD ───────────────────────────────────────────────────
