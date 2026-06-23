@@ -495,6 +495,44 @@ class ClientOnboardingPublicView(APIView):
         )
 
     @staticmethod
+    def _get_or_create_customer(onboarding):
+        """Dedup/cria um Customer quando o onboarding nao tem nenhum vinculado.
+
+        Bug B: leads que chegam em Coleta de Dados sem passar pela aprovacao da
+        proposta (ex.: movidos manualmente no Kanban) ficavam sem Customer, e o
+        gatilho do Juridico exige Customer. Espelha a dedup da aprovacao
+        (email -> razao social/empresa -> cria). O submit publico e anonimo e
+        Customer.created_by e obrigatorio, entao usa o dono do prospect.
+        """
+        prospect = onboarding.prospect
+        email = (prospect.contact_email or '').strip()
+        company = (onboarding.company_legal_name or prospect.company_name or '').strip()
+
+        customer = None
+        if email:
+            customer = Customer.objects.filter(email=email).first()
+        if customer is None and company:
+            customer = Customer.objects.filter(company_name__iexact=company).first()
+        if customer is None:
+            customer = Customer.objects.create(
+                customer_type='PJ',
+                company_name=company,
+                name=(prospect.contact_name or '').strip(),
+                email=email,
+                phone=(prospect.contact_phone or '').strip(),
+                source='crm',
+                created_by=prospect.created_by,
+            )
+            logger.info(
+                'Bug B: Customer %s auto-criado no submit do onboarding %s '
+                '(prospect %s).', customer.id, onboarding.id, prospect.id,
+            )
+        if not prospect.customer_id:
+            prospect.customer = customer
+            prospect.save(update_fields=['customer'])
+        return customer
+
+    @staticmethod
     def _sync_customer(onboarding):
         """Atualiza o Customer vinculado com os dados do onboarding (com lock).
 
@@ -510,9 +548,11 @@ class ClientOnboardingPublicView(APIView):
             if prospect_customer:
                 customer_id = prospect_customer.id
         if not customer_id:
-            # Sem customer ainda — onboarding sera vinculado ao fechar o lead.
-            # Nao e' erro.
-            return
+            # Bug B: sem Customer vinculado (lead em Coleta de Dados que pulou a
+            # aprovacao da proposta). Cria/deduplica para o submit ter destino no
+            # Juridico (que exige Customer). Antes retornava sem criar e o
+            # LegalCase nunca nascia.
+            customer_id = ClientOnboardingPublicView._get_or_create_customer(onboarding).id
 
         # Lock no customer para evitar race com edicao concorrente.
         customer = Customer.objects.select_for_update().get(id=customer_id)
@@ -570,6 +610,18 @@ class ClientOnboardingPublicView(APIView):
         if prospect is None:
             return
         if prospect.status not in cls._PENDING_DATA_COLLECTION_STATUSES:
+            # Bug B: skip diagnosticavel. Card num status ANTERIOR a Coleta de
+            # Dados (nao avancado) -> o submit chegou mas o funil nao progride;
+            # avisa para nao ficar cego. Status ja avancados/terminais sao skip
+            # legitimo (reprocessamento idempotente nao deve gerar ruido).
+            from sales.views import ADVANCED_FUNNEL_STATUSES
+            if prospect.status not in ADVANCED_FUNNEL_STATUSES:
+                logger.warning(
+                    'Onboarding %s submetido com prospect %s em status %r '
+                    '(anterior a Coleta de Dados) — card NAO avancado para '
+                    'projeto_fechado.',
+                    onboarding.id, prospect.id, prospect.status,
+                )
             return
         prospect.status = 'projeto_fechado'
         prospect.save(update_fields=['status'])
