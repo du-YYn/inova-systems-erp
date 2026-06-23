@@ -30,6 +30,9 @@ import {
   Edit,
   Mail,
   Phone,
+  Eye,
+  MapPin,
+  Wallet,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { CardSkeleton } from '@/components/ui/Skeleton';
@@ -69,7 +72,48 @@ interface FinanceCustomer {
   source: string;
   notes: string;
   created_at: string;
+  onboarding_data: OnboardingData | null;
 }
+
+// Dados do formulário de cadastro (cadastro.inovasystemssolutions.com) que o
+// lead preenche — espelha o painel "Dados do Cliente" do Jurídico.
+interface OnboardingData {
+  id: number;
+  status: string;
+  company_legal_name: string;
+  company_cnpj: string;
+  company_cep: string;
+  company_street: string;
+  company_number: string;
+  company_complement: string;
+  company_neighborhood: string;
+  company_city: string;
+  company_state: string;
+  rep_full_name: string;
+  rep_cpf: string;
+  rep_marital_status: string;
+  rep_profession: string;
+  rep_cep: string;
+  rep_street: string;
+  rep_number: string;
+  rep_complement: string;
+  rep_neighborhood: string;
+  rep_city: string;
+  rep_state: string;
+  finance_contact_name: string;
+  finance_contact_email: string;
+  finance_contact_phone: string;
+  submitted_at: string | null;
+}
+
+const MARITAL_STATUS_LABELS: Record<string, string> = {
+  solteiro: 'Solteiro(a)',
+  casado: 'Casado(a)',
+  divorciado: 'Divorciado(a)',
+  viuvo: 'Viúvo(a)',
+  separado: 'Separado(a)',
+  uniao_estavel: 'União Estável',
+};
 
 const CUSTOMER_EMPTY_FORM = {
   customer_type: 'PJ',
@@ -222,6 +266,19 @@ const formatCurrency = (value: number | string) =>
 
 const formatDate = (date: string) => new Date(date).toLocaleDateString('pt-BR');
 
+// Linha label/valor read-only do modal "Dados do Cadastro" (Gestão → Clientes).
+function FinDetailRow({ label, value, sensitive }: { label: string; value?: string | null; sensitive?: boolean }) {
+  const text = value && value.trim() ? value : '—';
+  return (
+    <div className="flex flex-col">
+      <dt className="text-[11px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{label}</dt>
+      <dd className="text-sm text-gray-800 dark:text-gray-200 break-words">
+        {sensitive ? <Sensitive>{text}</Sensitive> : text}
+      </dd>
+    </div>
+  );
+}
+
 // v32 F4: badges do ciclo de cobrança (pré-cadastro → assinatura → ativa → paga)
 const BILLING_CYCLE_BADGES: Record<string, { label: string; className: string }> = {
   pre_cadastro: {
@@ -373,6 +430,7 @@ export default function FinancePage() {
   const [editingCustomer, setEditingCustomer] = useState<FinanceCustomer | null>(null);
   const [savingCustomer, setSavingCustomer] = useState(false);
   const [confirmDeleteCustomer, setConfirmDeleteCustomer] = useState<FinanceCustomer | null>(null);
+  const [viewingCustomer, setViewingCustomer] = useState<FinanceCustomer | null>(null);
   const [customerForm, setCustomerForm] = useState({ ...CUSTOMER_EMPTY_FORM });
 
   // ── Overview fetch ────────────────────────────────────────────────────────
@@ -1746,6 +1804,11 @@ export default function FinancePage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1 justify-end">
+                          <button onClick={() => setViewingCustomer(c)} aria-label="Ver dados do cadastro"
+                            title={c.onboarding_data ? 'Ver dados do cadastro' : 'Cliente sem cadastro preenchido'}
+                            className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
+                            <Eye className="w-4 h-4" />
+                          </button>
                           <button onClick={() => openEditCustomer(c)} aria-label="Editar"
                             className="p-1.5 text-gray-400 hover:text-accent-gold transition-colors">
                             <Edit className="w-4 h-4" />
@@ -1766,6 +1829,85 @@ export default function FinancePage() {
       )}
 
       {/* ═══════════════════════ MODALS ══════════════════════════════════════ */}
+
+      {/* Dados do Cadastro (onboarding) — read-only */}
+      {viewingCustomer && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
+          <FocusTrap onClose={() => setViewingCustomer(null)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto shadow-modal animate-modal-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Dados do Cadastro</h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <Sensitive>{viewingCustomer.company_name || viewingCustomer.name || '—'}</Sensitive>
+                </p>
+              </div>
+              <button onClick={() => setViewingCustomer(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg" aria-label="Fechar">
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+              </button>
+            </div>
+
+            {viewingCustomer.onboarding_data ? (
+              <div className="p-6">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                  {/* Empresa (Contratante) */}
+                  <div className="p-4">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                      <Building2 className="w-3 h-3" /> Empresa (Contratante)
+                    </p>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <FinDetailRow label="Razão Social" value={viewingCustomer.onboarding_data.company_legal_name} sensitive />
+                      <FinDetailRow label="CNPJ" value={viewingCustomer.onboarding_data.company_cnpj} sensitive />
+                      <FinDetailRow label="CEP" value={viewingCustomer.onboarding_data.company_cep} />
+                      <FinDetailRow label="Logradouro" value={[viewingCustomer.onboarding_data.company_street, viewingCustomer.onboarding_data.company_number].filter(Boolean).join(', ')} sensitive />
+                      <FinDetailRow label="Complemento" value={viewingCustomer.onboarding_data.company_complement} sensitive />
+                      <FinDetailRow label="Bairro" value={viewingCustomer.onboarding_data.company_neighborhood} />
+                      <FinDetailRow label="Cidade/UF" value={[viewingCustomer.onboarding_data.company_city, viewingCustomer.onboarding_data.company_state].filter(Boolean).join(' / ')} />
+                    </dl>
+                  </div>
+                  {/* Representante Legal */}
+                  <div className="p-4">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                      <User className="w-3 h-3" /> Representante Legal
+                    </p>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <FinDetailRow label="Nome" value={viewingCustomer.onboarding_data.rep_full_name} sensitive />
+                      <FinDetailRow label="CPF" value={viewingCustomer.onboarding_data.rep_cpf} sensitive />
+                      <FinDetailRow label="Estado Civil" value={MARITAL_STATUS_LABELS[viewingCustomer.onboarding_data.rep_marital_status] ?? viewingCustomer.onboarding_data.rep_marital_status} />
+                      <FinDetailRow label="Profissão" value={viewingCustomer.onboarding_data.rep_profession} />
+                      <FinDetailRow label="CEP" value={viewingCustomer.onboarding_data.rep_cep} />
+                      <FinDetailRow label="Logradouro" value={[viewingCustomer.onboarding_data.rep_street, viewingCustomer.onboarding_data.rep_number].filter(Boolean).join(', ')} sensitive />
+                      <FinDetailRow label="Complemento" value={viewingCustomer.onboarding_data.rep_complement} sensitive />
+                      <FinDetailRow label="Bairro" value={viewingCustomer.onboarding_data.rep_neighborhood} />
+                      <FinDetailRow label="Cidade/UF" value={[viewingCustomer.onboarding_data.rep_city, viewingCustomer.onboarding_data.rep_state].filter(Boolean).join(' / ')} />
+                    </dl>
+                  </div>
+                  {/* Contato Financeiro */}
+                  <div className="p-4">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                      <Wallet className="w-3 h-3" /> Contato Financeiro
+                    </p>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <FinDetailRow label="Nome" value={viewingCustomer.onboarding_data.finance_contact_name} sensitive />
+                      <FinDetailRow label="E-mail" value={viewingCustomer.onboarding_data.finance_contact_email} sensitive />
+                      <FinDetailRow label="Telefone" value={viewingCustomer.onboarding_data.finance_contact_phone} sensitive />
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6">
+                <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400 rounded-lg border border-dashed border-gray-200 dark:border-gray-700">
+                  <MapPin className="w-10 h-10 mb-3 opacity-30" />
+                  <p className="font-medium mb-1">Cadastro não preenchido</p>
+                  <p className="text-sm text-center">Este cliente ainda não enviou o formulário de cadastro.</p>
+                </div>
+              </div>
+            )}
+          </div>
+          </FocusTrap>
+        </div>
+      )}
 
       {/* Invoice Modal */}
       {showInvoiceModal && (
