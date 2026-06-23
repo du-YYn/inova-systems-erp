@@ -2321,6 +2321,9 @@ class ClientOnboardingViewSet(viewsets.ModelViewSet):
         queryset = super().get_queryset()
         onboarding_status = self.request.query_params.get('status', None)
         search = self.request.query_params.get('search', None)
+        prospect_id = self.request.query_params.get('prospect', None)
+        if prospect_id:
+            queryset = queryset.filter(prospect_id=prospect_id)
         if onboarding_status:
             queryset = queryset.filter(status=onboarding_status)
         if search:
