@@ -125,6 +125,12 @@ class ProposalPublicHTMLView(APIView):
     throttle_classes = []
 
     WHATSAPP_NUMBER = os.environ.get('WHATSAPP_NUMBER', '5541998594938')
+    # Base do link público de cadastro (onboarding). Cada lead tem um token
+    # ÚNICO (ClientOnboarding.public_token), então o botão "Aceito proposta"
+    # leva ao cadastro do próprio lead — sem cruzamento de dados entre leads.
+    ONBOARDING_BASE_URL = os.environ.get(
+        'ONBOARDING_PUBLIC_BASE_URL', 'https://cadastro.inovasystemssolutions.com',
+    ).rstrip('/')
 
     def get(self, request, token):
         try:
@@ -208,30 +214,53 @@ class ProposalPublicHTMLView(APIView):
         response['X-Robots-Tag'] = 'noindex, nofollow'
         return response
 
+    def _build_accept_url(self, proposal) -> str:
+        """URL do botão "Aceito proposta de investimento".
+
+        Aponta para o link ÚNICO de cadastro (onboarding) do lead — gerado
+        automaticamente no upload da proposta (ProposalViewSet.upload_pdf).
+        Como cada lead tem seu próprio ClientOnboarding.public_token, não há
+        cruzamento de dados entre leads. Faz fallback para o WhatsApp de aceite
+        quando ainda não há onboarding (proposta sem prospect ou enviada antes
+        do auto-create).
+        """
+        if proposal.prospect_id and self.ONBOARDING_BASE_URL:
+            onboarding = (
+                ClientOnboarding.objects
+                .filter(prospect_id=proposal.prospect_id)
+                .only('public_token')
+                .first()
+            )
+            if onboarding and onboarding.public_token:
+                return f'{self.ONBOARDING_BASE_URL}/{onboarding.public_token}'
+        # Fallback: WhatsApp de aceite (comportamento anterior — quando não há
+        # link de cadastro disponível).
+        return (
+            f'https://wa.me/{self.WHATSAPP_NUMBER}'
+            f'?text=Aceito%20a%20proposta%20%23{proposal.number}%20e%20gostaria%20'
+            f'de%20receber%20o%20cadastro%20para%20iniciar.'
+        )
+
     def _inject_cta_buttons(self, content: bytes, proposal) -> bytes:
         """Injeta botões de ação no final do HTML (puro CSS, sem JS).
 
-        Bug #9 (LGPD): o link de onboarding NAO eh mais injetado no HTML
-        publico. Antes, o token UUID do onboarding ficava exposto no
-        proprio HTML servido por ProposalPublicHTMLView — qualquer um com
-        o link da proposta tinha tambem o link do onboarding e podia
-        preencher os dados em nome da empresa antes do cliente real.
+        - "Aceito proposta de investimento" → link ÚNICO de cadastro
+          (onboarding) do lead, gerado automaticamente no upload da proposta.
+          Cada lead tem seu próprio token → sem cruzamento de dados.
+        - "Tirar Dúvidas" → WhatsApp da equipe.
 
-        Agora o botao 'Aceito proposta' aponta para WhatsApp com mensagem
-        de aceite — a equipe envia o link de onboarding por canal direto
-        (email/WhatsApp) ao representante autorizado.
+        Histórico: o Bug #9 (LGPD) havia trocado o link de cadastro por WhatsApp
+        porque o token do onboarding ficava exposto no HTML público
+        (compartilhável). Por decisão de processo o link de cadastro voltou — a
+        mitigação é o token ser ÚNICO por lead. Ver _build_accept_url (faz
+        fallback p/ WhatsApp se não houver onboarding).
         """
         whatsapp_url = (
             f'https://wa.me/{self.WHATSAPP_NUMBER}'
             f'?text=Ol%C3%A1!%20Vi%20a%20proposta%20e%20gostaria%20de%20tirar%20algumas%20d%C3%BAvidas.'
         )
-        # WhatsApp para aceite (acao "intent to accept" — gera contato direto
-        # com a equipe, que envia o cadastro por canal autenticado).
-        accept_url = (
-            f'https://wa.me/{self.WHATSAPP_NUMBER}'
-            f'?text=Aceito%20a%20proposta%20%23{proposal.number}%20e%20gostaria%20'
-            f'de%20receber%20o%20cadastro%20para%20iniciar.'
-        )
+        # "Aceito proposta" → cadastro ÚNICO do lead (ou WhatsApp de fallback).
+        accept_url = self._build_accept_url(proposal)
 
         buttons_html = f'''
 <!-- Inova Systems — Botões CTA -->
