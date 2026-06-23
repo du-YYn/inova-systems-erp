@@ -19,6 +19,52 @@ class CustomerSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(
         source="created_by.username", read_only=True
     )
+    onboarding_data = serializers.SerializerMethodField()
+
+    def get_onboarding_data(self, obj):
+        """📋 Dados do cadastro (onboarding) do cliente — painel read-only.
+
+        Retorna TODOS os campos preenchidos pelo lead no formulário de cadastro
+        (cadastro.inovasystemssolutions.com), tomando o último onboarding enviado
+        vinculado a este cliente. None se o cliente não tem cadastro preenchido.
+        """
+        # Itera sobre obj.onboardings.all() (não .exclude()/.order_by(), que
+        # disparariam nova query ignorando o prefetch_related da viewset → N+1).
+        submitted = [o for o in obj.onboardings.all() if o.status != 'pending']
+        if not submitted:
+            return None
+        ob = max(submitted, key=lambda o: (o.submitted_at or o.created_at, o.id))
+        return {
+            'id': ob.id,
+            'status': ob.status,
+            # empresa (contratante)
+            'company_legal_name': ob.company_legal_name,
+            'company_cnpj': ob.company_cnpj,
+            'company_cep': ob.company_cep,
+            'company_street': ob.company_street,
+            'company_number': ob.company_number,
+            'company_complement': ob.company_complement,
+            'company_neighborhood': ob.company_neighborhood,
+            'company_city': ob.company_city,
+            'company_state': ob.company_state,
+            # representante legal
+            'rep_full_name': ob.rep_full_name,
+            'rep_cpf': ob.rep_cpf,
+            'rep_marital_status': ob.rep_marital_status,
+            'rep_profession': ob.rep_profession,
+            'rep_cep': ob.rep_cep,
+            'rep_street': ob.rep_street,
+            'rep_number': ob.rep_number,
+            'rep_complement': ob.rep_complement,
+            'rep_neighborhood': ob.rep_neighborhood,
+            'rep_city': ob.rep_city,
+            'rep_state': ob.rep_state,
+            # contato financeiro
+            'finance_contact_name': ob.finance_contact_name,
+            'finance_contact_email': ob.finance_contact_email,
+            'finance_contact_phone': ob.finance_contact_phone,
+            'submitted_at': ob.submitted_at,
+        }
 
     def to_representation(self, instance):
         # LGPD: role=viewer recebe PII mascarada (document/email/phone) e sem a
@@ -32,6 +78,12 @@ class CustomerSerializer(serializers.ModelSerializer):
             data['email'] = mask_email(data.get('email'))
             data['phone'] = mask_phone(data.get('phone'))
             data['contacts'] = []
+            ob = data.get('onboarding_data')
+            if ob:
+                ob['company_cnpj'] = mask_cpf_cnpj(ob.get('company_cnpj'))
+                ob['rep_cpf'] = mask_cpf_cnpj(ob.get('rep_cpf'))
+                ob['finance_contact_email'] = mask_email(ob.get('finance_contact_email'))
+                ob['finance_contact_phone'] = mask_phone(ob.get('finance_contact_phone'))
         return data
 
     class Meta:
@@ -60,6 +112,7 @@ class CustomerSerializer(serializers.ModelSerializer):
             "source",
             "notes",
             "public_token",
+            "onboarding_data",
             "created_by",
             "created_by_name",
             "created_at",

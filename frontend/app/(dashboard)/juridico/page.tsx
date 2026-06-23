@@ -34,12 +34,24 @@ interface OnboardingData {
   status: string;
   company_legal_name: string;
   company_cnpj: string;
+  company_cep: string;
+  company_street: string;
+  company_number: string;
+  company_complement: string;
+  company_neighborhood: string;
   company_city: string;
   company_state: string;
   rep_full_name: string;
   rep_cpf: string;
   rep_marital_status: string;
   rep_profession: string;
+  rep_cep: string;
+  rep_street: string;
+  rep_number: string;
+  rep_complement: string;
+  rep_neighborhood: string;
+  rep_city: string;
+  rep_state: string;
   finance_contact_name: string;
   finance_contact_email: string;
   finance_contact_phone: string;
@@ -575,6 +587,14 @@ export default function JuridicoPage() {
                         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                           <DetailRow label="Razão Social" value={detailCase.onboarding_data.company_legal_name} sensitive />
                           <DetailRow label="CNPJ" value={detailCase.onboarding_data.company_cnpj} sensitive />
+                          <DetailRow label="CEP" value={detailCase.onboarding_data.company_cep} />
+                          <DetailRow
+                            label="Logradouro"
+                            value={[detailCase.onboarding_data.company_street, detailCase.onboarding_data.company_number].filter(Boolean).join(', ')}
+                            sensitive
+                          />
+                          <DetailRow label="Complemento" value={detailCase.onboarding_data.company_complement} sensitive />
+                          <DetailRow label="Bairro" value={detailCase.onboarding_data.company_neighborhood} />
                           <DetailRow
                             label="Cidade/UF"
                             value={[detailCase.onboarding_data.company_city, detailCase.onboarding_data.company_state].filter(Boolean).join(' / ')}
@@ -591,6 +611,18 @@ export default function JuridicoPage() {
                           <DetailRow label="CPF" value={detailCase.onboarding_data.rep_cpf} sensitive />
                           <DetailRow label="Estado Civil" value={MARITAL_STATUS_LABELS[detailCase.onboarding_data.rep_marital_status] ?? detailCase.onboarding_data.rep_marital_status} />
                           <DetailRow label="Profissão" value={detailCase.onboarding_data.rep_profession} />
+                          <DetailRow label="CEP" value={detailCase.onboarding_data.rep_cep} />
+                          <DetailRow
+                            label="Logradouro"
+                            value={[detailCase.onboarding_data.rep_street, detailCase.onboarding_data.rep_number].filter(Boolean).join(', ')}
+                            sensitive
+                          />
+                          <DetailRow label="Complemento" value={detailCase.onboarding_data.rep_complement} sensitive />
+                          <DetailRow label="Bairro" value={detailCase.onboarding_data.rep_neighborhood} />
+                          <DetailRow
+                            label="Cidade/UF"
+                            value={[detailCase.onboarding_data.rep_city, detailCase.onboarding_data.rep_state].filter(Boolean).join(' / ')}
+                          />
                         </dl>
                       </div>
                       {/* Contato Financeiro */}

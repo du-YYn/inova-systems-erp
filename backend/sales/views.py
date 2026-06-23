@@ -126,7 +126,9 @@ class DynamicPageSizePagination(PageNumberPagination):
 
 @extend_schema(tags=['sales'])
 class CustomerViewSet(viewsets.ModelViewSet):
-    queryset = Customer.objects.select_related('created_by')
+    # prefetch_related('onboardings'): CustomerSerializer.onboarding_data acessa
+    # a relação reversa por cliente — sem prefetch isso seria N+1 na listagem.
+    queryset = Customer.objects.select_related('created_by').prefetch_related('onboardings')
     serializer_class = CustomerSerializer
     permission_classes = [CommercialSectorAccess]
     pagination_class = DynamicPageSizePagination
