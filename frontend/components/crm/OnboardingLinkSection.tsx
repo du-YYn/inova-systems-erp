@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { FileText, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -26,8 +26,34 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 export default function OnboardingLinkSection({ prospectId }: Props) {
   const [onboarding, setOnboarding] = useState<OnboardingInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(true);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+
+  // Bug C: hidrata o estado do onboarding ao montar o card. Sem isso, o card
+  // sempre mostrava "Gerar Cadastro" mesmo quando o cadastro já existia ou
+  // estava preenchido; o estado "Preenchido" só aparecia após clicar (o POST
+  // de create-onboarding é idempotente e devolvia o existente, mascarando o bug).
+  useEffect(() => {
+    let active = true;
+    setHydrating(true);
+    api
+      .get<{ results?: OnboardingInfo[] }>(`/sales/onboardings/?prospect=${prospectId}`)
+      .then((data) => {
+        if (active && data.results && data.results.length > 0) {
+          setOnboarding(data.results[0]);
+        }
+      })
+      .catch(() => {
+        // Sem onboarding ainda (ou erro de rede): mantém a ação de gerar.
+      })
+      .finally(() => {
+        if (active) setHydrating(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [prospectId]);
 
   const createOnboarding = useCallback(async () => {
     setLoading(true);
@@ -60,6 +86,19 @@ export default function OnboardingLinkSection({ prospectId }: Props) {
       setTimeout(() => setCopied(false), 2000);
     }
   }, [onboarding]);
+
+  // Bug C: enquanto hidrata o estado inicial, evita o flash de "Gerar Cadastro"
+  // antes de sabermos se o cadastro já existe.
+  if (hydrating && !onboarding) {
+    return (
+      <div className="border border-dashed border-slate-600 dark:border-slate-700 rounded-xl p-4">
+        <div className="flex items-center gap-2 text-slate-400">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm">Carregando cadastro...</span>
+        </div>
+      </div>
+    );
+  }
 
   // Not yet created — show action button
   if (!onboarding) {
