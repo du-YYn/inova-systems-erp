@@ -11,6 +11,7 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import type { LegalCaseTask } from './types';
 
 interface LegalCaseEvent {
   id: number;
@@ -77,6 +78,8 @@ interface LegalCase {
   signed_at: string | null;
   notes: string;
   events: LegalCaseEvent[];
+  attachment: string | null;
+  tasks: LegalCaseTask[];
   created_at: string;
 }
 
@@ -287,6 +290,80 @@ export default function JuridicoPage() {
   const applyUpdated = (updated: LegalCase) => {
     setCases((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
     setDetailCase((prev) => (prev && prev.id === updated.id ? updated : prev));
+  };
+
+  // ── Checklist (LegalCaseTask) ──────────────────────────────────────────────
+  const patchDetailTasks = (mut: (tasks: LegalCaseTask[]) => LegalCaseTask[]) =>
+    setDetailCase((prev) => (prev ? { ...prev, tasks: mut(prev.tasks) } : prev));
+
+  const toggleTask = async (task: LegalCaseTask) => {
+    try {
+      const updated = await api.patch<LegalCaseTask>(
+        `/juridico/legal-case-tasks/${task.id}/`, { done: !task.done },
+      );
+      patchDetailTasks((tasks) => tasks.map((t) => (t.id === updated.id ? updated : t)));
+    } catch {
+      toast.error('Não foi possível atualizar a tarefa.');
+    }
+  };
+
+  const addTask = async (caseId: number, label: string) => {
+    if (!label.trim()) return;
+    try {
+      const created = await api.post<LegalCaseTask>(
+        '/juridico/legal-case-tasks/', { case: caseId, label: label.trim() },
+      );
+      patchDetailTasks((tasks) => [...tasks, created]);
+    } catch {
+      toast.error('Não foi possível adicionar a tarefa.');
+    }
+  };
+
+  const removeTask = async (task: LegalCaseTask) => {
+    try {
+      await api.delete(`/juridico/legal-case-tasks/${task.id}/`);
+      patchDetailTasks((tasks) => tasks.filter((t) => t.id !== task.id));
+    } catch {
+      toast.error('Não foi possível remover a tarefa.');
+    }
+  };
+
+  // ── Ferramentas (documento / notas / autentique) ───────────────────────────
+  const uploadAttachment = async (caseId: number, file: File) => {
+    try {
+      const updated = await api.upload<LegalCase>(
+        `/juridico/legal-cases/${caseId}/upload-attachment/`, file, 'attachment',
+      );
+      applyUpdated(updated);
+      toast.success('Documento anexado.');
+    } catch {
+      toast.error('Falha ao anexar o documento (verifique tipo/tamanho).');
+    }
+  };
+
+  const saveNotes = async (caseId: number, notes: string) => {
+    try {
+      const updated = await api.post<LegalCase>(
+        `/juridico/legal-cases/${caseId}/notes/`, { notes },
+      );
+      applyUpdated(updated);
+      toast.success('Notas salvas.');
+    } catch {
+      toast.error('Não foi possível salvar as notas.');
+    }
+  };
+
+  const saveAutentique = async (caseId: number, autentiqueId: string, autentiqueLink: string) => {
+    try {
+      const updated = await api.post<LegalCase>(
+        `/juridico/legal-cases/${caseId}/autentique/`,
+        { autentique_id: autentiqueId, autentique_link: autentiqueLink },
+      );
+      applyUpdated(updated);
+      toast.success('Link do Autentique atualizado.');
+    } catch {
+      toast.error('Não foi possível atualizar o link.');
+    }
   };
 
   const doTransition = async (
