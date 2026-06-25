@@ -258,6 +258,7 @@ class LegalCaseTaskViewSet(viewsets.ModelViewSet):
         serializer.save(is_custom=True, stage=stage, order=order)
 
     def perform_update(self, serializer):
+        serializer.validated_data.pop('case', None)  # case é imutável após criar (sem re-parent)
         was_done = serializer.instance.done
         task = serializer.save()
         if task.done and not was_done:

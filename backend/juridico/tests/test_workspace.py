@@ -212,3 +212,13 @@ class TestLegalCaseTaskViewSet:
         client = client_for(suporte_operator)
         case = make_case(customer)
         assert client.get(TASK_URL, {'case': case.id}).status_code == status.HTTP_403_FORBIDDEN
+
+    def test_case_is_immutable_on_update(self, juridico_client, customer):
+        case = make_case(customer)
+        other = make_case(customer)  # outro caso do mesmo cliente
+        task = LegalCaseTask.objects.create(case=case, stage='preparacao', label='X')
+        resp = juridico_client.patch(f'{TASK_URL}{task.id}/', {'case': other.id, 'label': 'Y'})
+        assert resp.status_code == status.HTTP_200_OK
+        task.refresh_from_db()
+        assert task.case_id == case.id   # NÃO re-parenteou
+        assert task.label == 'Y'         # demais campos atualizam normalmente
