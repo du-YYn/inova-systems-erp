@@ -7,6 +7,7 @@ import {
   Ban, Rocket, ClipboardList, Building2, User, Wallet, History, FileSignature,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api from '@/lib/api';
@@ -239,6 +240,7 @@ export default function JuridicoPage() {
   const [autentiqueId, setAutentiqueId] = useState('');
   const [autentiqueLink, setAutentiqueLink] = useState('');
   const [transitioning, setTransitioning] = useState<number | null>(null);
+  const [pendingAdvance, setPendingAdvance] = useState<LegalCase | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -392,7 +394,7 @@ export default function JuridicoPage() {
     }
   };
 
-  const handleAdvanceClick = (legalCase: LegalCase) => {
+  const proceedAdvance = (legalCase: LegalCase) => {
     const target = nextStatus(legalCase);
     if (!target) return;
     // Upload no Autentique acontece na transição Preparação → Envio.
@@ -407,6 +409,16 @@ export default function JuridicoPage() {
     } else {
       doTransition(legalCase, target);
     }
+  };
+
+  const handleAdvanceClick = (legalCase: LegalCase) => {
+    const stageTasks = legalCase.tasks?.filter((t) => t.stage === legalCase.status) ?? [];
+    const hasPending = stageTasks.some((t) => !t.done);
+    if (hasPending) {
+      setPendingAdvance(legalCase);   // abre o ConfirmDialog
+      return;
+    }
+    proceedAdvance(legalCase);
   };
 
   const handleReject = (legalCase: LegalCase) => {
@@ -572,6 +584,16 @@ export default function JuridicoPage() {
                             <span className="text-[11px] text-gray-400 dark:text-gray-500">
                               {new Date(legalCase.created_at).toLocaleDateString('pt-BR')}
                             </span>
+                          {(() => {
+                            const stageTasks = legalCase.tasks?.filter((t) => t.stage === legalCase.status) ?? [];
+                            if (stageTasks.length === 0) return null;
+                            const done = stageTasks.filter((t) => t.done).length;
+                            return (
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> {done}/{stageTasks.length}
+                              </span>
+                            );
+                          })()}
                             <div className="flex items-center gap-1.5">
                               {canReject(legalCase) && (
                                 <button
@@ -979,6 +1001,20 @@ export default function JuridicoPage() {
           </FocusTrap>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingAdvance !== null}
+        danger={false}
+        title="Tarefas pendentes"
+        description="Há tarefas pendentes nesta etapa. Avançar mesmo assim?"
+        confirmLabel="Avançar"
+        onCancel={() => setPendingAdvance(null)}
+        onConfirm={() => {
+          const c = pendingAdvance;
+          setPendingAdvance(null);
+          if (c) proceedAdvance(c);
+        }}
+      />
     </div>
   );
 }
