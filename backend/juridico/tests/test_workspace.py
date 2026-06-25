@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from core.models import AuditLog
+from juridico.checklists import CHECKLIST_TEMPLATES, seed_stage_tasks
 from juridico.models import LegalCase, LegalCaseTask
 from sales.models import Customer
 
@@ -88,4 +89,37 @@ class TestLegalCaseTaskModel:
         assert task.done_by is None
         assert task.is_custom is False
         assert task.order == 0
+        assert case.tasks.filter(stage='envio_assinatura').count() == 1
+
+
+@pytest.mark.django_db
+class TestSeedStageTasks:
+    def test_seeds_template_for_a_non_current_stage(self, customer):
+        # Usa 'assinado' (não é a etapa atual) p/ não colidir com o signal de criação.
+        case = make_case(customer)
+        created = seed_stage_tasks(case, 'assinado')
+        labels = list(case.tasks.filter(stage='assinado').values_list('label', flat=True))
+        assert labels == CHECKLIST_TEMPLATES[('contrato', 'assinado')]
+        assert len(created) == len(labels)
+        assert all(t.is_custom is False for t in created)
+
+    def test_idempotent(self, customer):
+        case = make_case(customer)
+        seed_stage_tasks(case, 'assinado')
+        seed_stage_tasks(case, 'assinado')
+        assert case.tasks.filter(stage='assinado').count() == \
+            len(CHECKLIST_TEMPLATES[('contrato', 'assinado')])
+
+    def test_unknown_combo_creates_nothing(self, customer):
+        case = make_case(customer, process_type='encerramento')
+        created = seed_stage_tasks(case, 'aprovado_dev')  # não existe p/ encerramento
+        assert created == []
+        assert case.tasks.filter(stage='aprovado_dev').count() == 0
+
+    def test_does_not_touch_existing_custom_items(self, customer):
+        case = make_case(customer)
+        LegalCaseTask.objects.create(
+            case=case, stage='envio_assinatura', label='Pendência X', is_custom=True,
+        )
+        seed_stage_tasks(case, 'envio_assinatura')  # já existe item nessa etapa → no-op
         assert case.tasks.filter(stage='envio_assinatura').count() == 1
