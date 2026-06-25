@@ -153,3 +153,62 @@ class TestCaseSerializerTasks:
         assert first['done'] is False
         assert first['is_custom'] is False
         assert 'done_by_name' in first
+
+
+@pytest.mark.django_db
+class TestLegalCaseTaskViewSet:
+    def test_list_filtered_by_case_returns_plain_list(self, juridico_client, customer):
+        case = make_case(customer)  # semeado preparacao
+        resp = juridico_client.get(TASK_URL, {'case': case.id})
+        assert resp.status_code == status.HTTP_200_OK
+        assert isinstance(resp.data, list)
+        assert len(resp.data) >= 1
+
+    def test_create_custom_task_defaults_to_current_stage(self, juridico_client, customer):
+        case = make_case(customer)
+        resp = juridico_client.post(TASK_URL, {'case': case.id, 'label': 'Pendência extra'})
+        assert resp.status_code == status.HTTP_201_CREATED, resp.data
+        task = LegalCaseTask.objects.get(id=resp.data['id'])
+        assert task.is_custom is True
+        assert task.stage == 'preparacao'
+        assert task.done is False
+
+    def test_toggle_done_sets_done_by_and_at(self, juridico_client, juridico_operator, customer):
+        case = make_case(customer)
+        task = LegalCaseTask.objects.create(case=case, stage='preparacao', label='X')
+        resp = juridico_client.patch(f'{TASK_URL}{task.id}/', {'done': True})
+        assert resp.status_code == status.HTTP_200_OK
+        task.refresh_from_db()
+        assert task.done is True
+        assert task.done_at is not None
+        assert task.done_by == juridico_operator
+
+    def test_untoggle_clears_done(self, juridico_client, customer):
+        case = make_case(customer)
+        task = LegalCaseTask.objects.create(case=case, stage='preparacao', label='X', done=True)
+        resp = juridico_client.patch(f'{TASK_URL}{task.id}/', {'done': False})
+        assert resp.status_code == status.HTTP_200_OK
+        task.refresh_from_db()
+        assert task.done is False
+        assert task.done_at is None
+        assert task.done_by is None
+
+    def test_delete_task(self, juridico_client, customer):
+        case = make_case(customer)
+        task = LegalCaseTask.objects.create(case=case, stage='preparacao', label='X')
+        resp = juridico_client.delete(f'{TASK_URL}{task.id}/')
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert not LegalCaseTask.objects.filter(id=task.id).exists()
+
+    def test_comercial_reads_but_cannot_write(self, comercial_operator, customer):
+        client = client_for(comercial_operator)
+        case = make_case(customer)
+        task = LegalCaseTask.objects.create(case=case, stage='preparacao', label='X')
+        assert client.get(TASK_URL, {'case': case.id}).status_code == status.HTTP_200_OK
+        assert client.post(TASK_URL, {'case': case.id, 'label': 'Y'}).status_code == status.HTTP_403_FORBIDDEN
+        assert client.patch(f'{TASK_URL}{task.id}/', {'done': True}).status_code == status.HTTP_403_FORBIDDEN
+
+    def test_suporte_has_no_access(self, suporte_operator, customer):
+        client = client_for(suporte_operator)
+        case = make_case(customer)
+        assert client.get(TASK_URL, {'case': case.id}).status_code == status.HTTP_403_FORBIDDEN

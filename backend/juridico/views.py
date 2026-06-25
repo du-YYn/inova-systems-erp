@@ -11,8 +11,10 @@ from accounts.permissions import HasSectorAccess
 from core.audit import log_audit
 from sales.views import DynamicPageSizePagination
 
-from .models import LegalCase
-from .serializers import LegalCaseSerializer, LegalCaseTransitionSerializer
+from .models import LegalCase, LegalCaseTask
+from .serializers import (
+    LegalCaseSerializer, LegalCaseTaskSerializer, LegalCaseTransitionSerializer,
+)
 
 logger = logging.getLogger('juridico')
 
@@ -22,7 +24,7 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
     queryset = (
         LegalCase.objects
         .select_related('customer', 'project', 'created_by', 'onboarding', 'proposal')
-        .prefetch_related('events', 'events__created_by')
+        .prefetch_related('events', 'events__created_by', 'tasks', 'tasks__done_by')
     )
     serializer_class = LegalCaseSerializer
     permission_classes = [HasSectorAccess('juridico')]
@@ -229,3 +231,40 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
                     'Falha ao aprovar ChangeRequest do Aditivo (LegalCase %s): %s',
                     case.id, exc,
                 )
+
+
+@extend_schema(tags=['juridico'])
+class LegalCaseTaskViewSet(viewsets.ModelViewSet):
+    """Checklist por etapa do card (workspace). Itens criados via POST são avulsos."""
+    queryset = LegalCaseTask.objects.select_related('case', 'done_by')
+    serializer_class = LegalCaseTaskSerializer
+    permission_classes = [HasSectorAccess('juridico')]
+    pagination_class = None  # lista plana — o front consome direto
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+        if params.get('case'):
+            qs = qs.filter(case_id=params['case'])
+        if params.get('stage'):
+            qs = qs.filter(stage=params['stage'])
+        return qs
+
+    def perform_create(self, serializer):
+        case = serializer.validated_data['case']
+        stage = serializer.validated_data.get('stage') or case.status
+        last = case.tasks.filter(stage=stage).order_by('-order').first()
+        order = (last.order + 1) if last else 0
+        serializer.save(is_custom=True, stage=stage, order=order)
+
+    def perform_update(self, serializer):
+        was_done = serializer.instance.done
+        task = serializer.save()
+        if task.done and not was_done:
+            task.done_at = timezone.now()
+            task.done_by = self.request.user
+            task.save(update_fields=['done_at', 'done_by', 'updated_at'])
+        elif not task.done and was_done:
+            task.done_at = None
+            task.done_by = None
+            task.save(update_fields=['done_at', 'done_by', 'updated_at'])
