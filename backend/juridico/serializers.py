@@ -6,7 +6,7 @@ de ação POST /transition/ — nunca por PATCH direto de campo.
 """
 from rest_framework import serializers
 
-from .models import LegalCase, LegalCaseEvent
+from .models import LegalCase, LegalCaseEvent, LegalCaseTask
 
 
 class LegalCaseEventSerializer(serializers.ModelSerializer):
@@ -30,6 +30,26 @@ class LegalCaseEventSerializer(serializers.ModelSerializer):
         return obj.created_by.full_name if obj.created_by else 'Automação'
 
 
+class LegalCaseTaskSerializer(serializers.ModelSerializer):
+    """Item de checklist do card (workspace). Usado nested (read) e no viewset (write)."""
+    done_by_name = serializers.SerializerMethodField(read_only=True)
+    stage = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = LegalCaseTask
+        fields = [
+            'id', 'case', 'stage', 'label', 'done', 'done_at', 'done_by',
+            'done_by_name', 'order', 'is_custom', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'done_at', 'done_by', 'done_by_name', 'order', 'is_custom',
+            'created_at', 'updated_at',
+        ]
+
+    def get_done_by_name(self, obj):
+        return obj.done_by.full_name if obj.done_by else ''
+
+
 class LegalCaseSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField(read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True, default=None)
@@ -41,6 +61,7 @@ class LegalCaseSerializer(serializers.ModelSerializer):
     onboarding_data = serializers.SerializerMethodField(read_only=True)
     proposal_data = serializers.SerializerMethodField(read_only=True)
     events = LegalCaseEventSerializer(many=True, read_only=True)
+    tasks = LegalCaseTaskSerializer(many=True, read_only=True)
 
     class Meta:
         model = LegalCase
@@ -50,7 +71,7 @@ class LegalCaseSerializer(serializers.ModelSerializer):
             'process_type', 'process_type_display', 'status', 'status_display',
             'source', 'autentique_id', 'autentique_link', 'signed_at',
             'notes', 'attachment', 'created_by', 'created_by_name',
-            'events', 'created_at', 'updated_at',
+            'events', 'tasks', 'created_at', 'updated_at',
         ]
         # status muda apenas via POST /transition/ (validação de ordem +
         # auditoria). Campos Autentique/assinatura são definidos pelo fluxo

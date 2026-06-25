@@ -139,3 +139,17 @@ class TestSeedingWiring:
         case.refresh_from_db()
         assert case.tasks.filter(stage='envio_assinatura').count() == \
             len(CHECKLIST_TEMPLATES[('contrato', 'envio_assinatura')])
+
+
+@pytest.mark.django_db
+class TestCaseSerializerTasks:
+    def test_case_detail_includes_tasks(self, juridico_client, customer):
+        case = make_case(customer)  # semeado em 'preparacao'
+        resp = juridico_client.get(f'{URL}{case.id}/')
+        assert resp.status_code == status.HTTP_200_OK
+        stages = {t['stage'] for t in resp.data['tasks']}
+        assert 'preparacao' in stages
+        first = resp.data['tasks'][0]
+        assert first['done'] is False
+        assert first['is_custom'] is False
+        assert 'done_by_name' in first
