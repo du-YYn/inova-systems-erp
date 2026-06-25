@@ -11,6 +11,7 @@ import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import StageWorkspace from './StageWorkspace';
 import type { LegalCaseTask } from './types';
 
 interface LegalCaseEvent {
@@ -153,6 +154,9 @@ const MODALITIES: Modality[] = [
 ];
 
 const modalityByKey = (key: string) => MODALITIES.find((m) => m.key === key);
+
+const stageLabelFor = (status: string): string =>
+  (MODALITIES.flatMap((m) => m.columns).find((c) => c.key === status)?.label) ?? status;
 
 // Classes estáticas (Tailwind JIT não gera de interpolação) — nº de colunas por modalidade.
 const GRID_COLS: Record<number, string> = {
@@ -638,12 +642,28 @@ export default function JuridicoPage() {
               </div>
 
               <div className="p-6 space-y-6">
+                {/* Zona 1 — Etapa atual (workspace) */}
+                <StageWorkspace
+                  stageLabel={stageLabelFor(detailCase.status)}
+                  tasks={detailCase.tasks.filter((t) => t.stage === detailCase.status)}
+                  attachmentUrl={detailCase.attachment}
+                  notes={detailCase.notes}
+                  autentiqueId={detailCase.autentique_id}
+                  autentiqueLink={detailCase.autentique_link}
+                  onToggle={toggleTask}
+                  onAdd={(label) => addTask(detailCase.id, label)}
+                  onRemove={removeTask}
+                  onUpload={(file) => uploadAttachment(detailCase.id, file)}
+                  onSaveNotes={(n) => saveNotes(detailCase.id, n)}
+                  onSaveAutentique={(id, link) => saveAutentique(detailCase.id, id, link)}
+                />
+
                 {/* Painel 1: Dados do Cliente (do onboarding vinculado) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group" open>
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <Building2 className="w-4 h-4 text-accent-gold" />
                     Dados do Cliente
-                  </h3>
+                  </summary>
                   {detailCase.onboarding_data ? (
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                       {/* Empresa */}
@@ -687,14 +707,14 @@ export default function JuridicoPage() {
                       Sem Coleta de Dados vinculada (caso manual).
                     </p>
                   )}
-                </section>
+                </details>
 
                 {/* Painel 2: Proposta fechada (documento + valor/forma de pagamento) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group" open>
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <FileText className="w-4 h-4 text-accent-gold" />
                     Proposta Fechada
-                  </h3>
+                  </summary>
                   {detailCase.proposal_data ? (
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -735,7 +755,7 @@ export default function JuridicoPage() {
                       Sem proposta vinculada.
                     </p>
                   )}
-                </section>
+                </details>
 
                 {/* Notas do Jurídico */}
                 {detailCase.notes && (
@@ -748,11 +768,11 @@ export default function JuridicoPage() {
                 )}
 
                 {/* Painel 3: Timeline de histórico (LegalCaseEvent) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group">
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <History className="w-4 h-4 text-accent-gold" />
                     Histórico
-                  </h3>
+                  </summary>
                   {detailCase.events && detailCase.events.length > 0 ? (
                     <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-4">
                       {detailCase.events.map((ev) => {
@@ -796,7 +816,7 @@ export default function JuridicoPage() {
                       Nenhum evento registrado.
                     </p>
                   )}
-                </section>
+                </details>
               </div>
             </div>
           </FocusTrap>
