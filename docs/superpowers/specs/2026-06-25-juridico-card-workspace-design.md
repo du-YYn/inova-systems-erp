@@ -37,10 +37,10 @@ ter duas zonas:
 - **Checklist da etapa atual**: itens marcáveis (cada um com quem/quando concluiu); `＋ adicionar
   tarefa` (item avulso); `✕` para remover um item daquele card.
 - **3 ferramentas inline** (abrem ali mesmo, sem sair do modal):
-  - 📎 **Anexar minuta** — sobe/troca o arquivo no ERP (`attachment`); mostra o atual com download.
+  - 📎 **Anexar documento** — sobe/troca o arquivo no ERP (`attachment`); mostra o atual com download.
   - ✎ **Editar notas** — textarea inline com salvar.
   - 🔗 **Link Autentique** — informar/corrigir `autentique_id` + `autentique_link`.
-- **Avançar p/ [próxima etapa]** + aviso `⚠ N tarefas pendentes` quando houver (não bloqueia).
+- **Avançar p/ [próxima etapa]** + aviso `⚠ tarefas pendentes` quando houver (não bloqueia).
   No Aditivo/Aguardando, também o **Recusar**.
 
 **Zona 2 — Contexto (embaixo, seções recolhíveis):** os painéis já existentes — 🏢 Dados do
