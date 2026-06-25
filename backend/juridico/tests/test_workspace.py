@@ -222,3 +222,61 @@ class TestLegalCaseTaskViewSet:
         task.refresh_from_db()
         assert task.case_id == case.id   # NÃO re-parenteou
         assert task.label == 'Y'         # demais campos atualizam normalmente
+
+
+@pytest.mark.django_db
+class TestWorkspaceTools:
+    def test_upload_attachment(self, juridico_client, customer):
+        case = make_case(customer)
+        f = SimpleUploadedFile('minuta.pdf', b'%PDF-1.4 conteudo', content_type='application/pdf')
+        resp = juridico_client.post(
+            f'{URL}{case.id}/upload-attachment/', {'attachment': f}, format='multipart',
+        )
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        case.refresh_from_db()
+        assert case.attachment.name
+        assert case.events.filter(event_type='document').exists()
+        assert AuditLog.objects.filter(
+            action='legal_case_attachment', resource_id=str(case.id),
+        ).exists()
+
+    def test_upload_attachment_rejects_bad_extension(self, juridico_client, customer):
+        case = make_case(customer)
+        f = SimpleUploadedFile('virus.exe', b'MZ', content_type='application/octet-stream')
+        resp = juridico_client.post(
+            f'{URL}{case.id}/upload-attachment/', {'attachment': f}, format='multipart',
+        )
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_upload_attachment_requires_file(self, juridico_client, customer):
+        case = make_case(customer)
+        resp = juridico_client.post(f'{URL}{case.id}/upload-attachment/', {}, format='multipart')
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_update_notes(self, juridico_client, customer):
+        case = make_case(customer)
+        resp = juridico_client.post(f'{URL}{case.id}/notes/', {'notes': 'Revisar cláusula 5'})
+        assert resp.status_code == status.HTTP_200_OK
+        case.refresh_from_db()
+        assert case.notes == 'Revisar cláusula 5'
+        assert AuditLog.objects.filter(
+            action='legal_case_notes', resource_id=str(case.id),
+        ).exists()
+
+    def test_set_autentique(self, juridico_client, customer):
+        case = make_case(customer)
+        resp = juridico_client.post(f'{URL}{case.id}/autentique/', {
+            'autentique_id': 'abc123',
+            'autentique_link': 'https://app.autentique.com.br/d/abc123',
+        })
+        assert resp.status_code == status.HTTP_200_OK
+        case.refresh_from_db()
+        assert case.autentique_id == 'abc123'
+        assert case.autentique_link == 'https://app.autentique.com.br/d/abc123'
+        assert case.events.filter(event_type='document').exists()
+
+    def test_comercial_cannot_use_tools(self, comercial_operator, customer):
+        client = client_for(comercial_operator)
+        case = make_case(customer)
+        resp = client.post(f'{URL}{case.id}/notes/', {'notes': 'x'})
+        assert resp.status_code == status.HTTP_403_FORBIDDEN

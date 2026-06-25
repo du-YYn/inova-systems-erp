@@ -1,14 +1,17 @@
 """ViewSets do CRM Jurídico (v32 F3, doc processo-v32/02-juridico.md)."""
 import logging
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.permissions import HasSectorAccess
 from core.audit import log_audit
+from core.validators import validate_file_extension, validate_file_size
 from sales.views import DynamicPageSizePagination
 
 from .models import LegalCase, LegalCaseTask
@@ -231,6 +234,71 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
                     'Falha ao aprovar ChangeRequest do Aditivo (LegalCase %s): %s',
                     case.id, exc,
                 )
+
+    @action(
+        detail=True, methods=['post'], url_path='upload-attachment',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_attachment(self, request, pk=None):
+        """Anexa/troca a minuta no card (campo attachment). Grava evento + audit."""
+        case = self.get_object()
+        file = request.FILES.get('attachment')
+        if not file:
+            return Response(
+                {'error': 'Arquivo (attachment) é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_file_extension(file)
+            validate_file_size(file)
+        except DjangoValidationError as exc:
+            return Response({'error': exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        case.attachment = file
+        case.save(update_fields=['attachment', 'updated_at'])
+        case.record_event(
+            'document',
+            description=f'Documento anexado: {case.attachment.name}',
+            created_by=request.user,
+        )
+        log_audit(
+            request.user, 'legal_case_attachment', 'legal_case', case.id,
+            details=f'Anexo {case.attachment.name}', request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def notes(self, request, pk=None):
+        """Atualiza as notas do jurídico no card."""
+        case = self.get_object()
+        old = case.notes
+        case.notes = request.data.get('notes', '')
+        case.save(update_fields=['notes', 'updated_at'])
+        log_audit(
+            request.user, 'legal_case_notes', 'legal_case', case.id,
+            old_value={'notes': old}, new_value={'notes': case.notes}, request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def autentique(self, request, pk=None):
+        """Informa/corrige o id + link do Autentique fora da transição."""
+        case = self.get_object()
+        case.autentique_id = request.data.get('autentique_id', case.autentique_id)
+        case.autentique_link = request.data.get('autentique_link', case.autentique_link)
+        case.save(update_fields=['autentique_id', 'autentique_link', 'updated_at'])
+        case.record_event(
+            'document', autentique_link=case.autentique_link,
+            description='Link do Autentique atualizado', created_by=request.user,
+        )
+        log_audit(
+            request.user, 'legal_case_autentique', 'legal_case', case.id,
+            new_value={
+                'autentique_id': case.autentique_id,
+                'autentique_link': case.autentique_link,
+            },
+            request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
 
 
 @extend_schema(tags=['juridico'])
