@@ -93,6 +93,9 @@ htmlcov/
 .tox/
 .nox/
 
+# Superpowers (brainstorm mockups, scratch)
+.superpowers/
+
 # Misc
 *.bak
 *.tmp
