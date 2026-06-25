@@ -164,6 +164,16 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             created_by=request.user,
         )
 
+        # Semeia o checklist da nova etapa (idempotente).
+        from .checklists import seed_stage_tasks
+        try:
+            seed_stage_tasks(case, new_status)
+        except Exception as exc:  # noqa: BLE001 — não derruba a transição
+            logger.exception(
+                'Falha ao semear tarefas (LegalCase %s, etapa %s): %s',
+                case.id, new_status, exc,
+            )
+
         # SAÍDAS por modalidade (doc 02 §3 + doc 09 item 07).
         self._handle_transition_outputs(request, case, new_status)
 

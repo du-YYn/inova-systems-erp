@@ -180,3 +180,20 @@ def on_aditivo_created(sender, instance, created, **kwargs):
             'Falha no pre-cadastro do Aditivo (LegalCase %s): %s',
             instance.id, exc,
         )
+
+
+@receiver(
+    post_save, sender='juridico.LegalCase',
+    dispatch_uid='juridico_seed_stage_tasks',
+)
+def seed_tasks_on_create(sender, instance, created, **kwargs):
+    """Ao criar um LegalCase (qualquer origem), semeia o checklist da etapa inicial."""
+    if not created:
+        return
+    from .checklists import seed_stage_tasks
+    try:
+        seed_stage_tasks(instance, instance.status)
+    except Exception as exc:  # noqa: BLE001 — isolamento de signal
+        logger.exception(
+            'Falha ao semear tarefas do LegalCase %s: %s', instance.id, exc,
+        )

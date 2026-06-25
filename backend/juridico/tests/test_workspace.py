@@ -123,3 +123,19 @@ class TestSeedStageTasks:
         )
         seed_stage_tasks(case, 'envio_assinatura')  # já existe item nessa etapa → no-op
         assert case.tasks.filter(stage='envio_assinatura').count() == 1
+
+
+@pytest.mark.django_db
+class TestSeedingWiring:
+    def test_create_seeds_initial_stage(self, customer):
+        case = make_case(customer)  # post_save → semeia 'preparacao'
+        labels = list(case.tasks.filter(stage='preparacao').values_list('label', flat=True))
+        assert labels == CHECKLIST_TEMPLATES[('contrato', 'preparacao')]
+
+    def test_transition_seeds_new_stage(self, juridico_client, customer):
+        case = make_case(customer)
+        resp = juridico_client.post(f'{URL}{case.id}/transition/', {'status': 'envio_assinatura'})
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+        case.refresh_from_db()
+        assert case.tasks.filter(stage='envio_assinatura').count() == \
+            len(CHECKLIST_TEMPLATES[('contrato', 'envio_assinatura')])
