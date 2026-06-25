@@ -280,3 +280,20 @@ class TestWorkspaceTools:
         case = make_case(customer)
         resp = client.post(f'{URL}{case.id}/notes/', {'notes': 'x'})
         assert resp.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestBackfillCommand:
+    def test_command_seeds_legacy_case(self, customer):
+        # Simula caso legado (sem tarefas): cria e apaga as semeadas pelo signal.
+        case = make_case(customer)
+        case.tasks.all().delete()
+        call_command('seed_legal_case_tasks')
+        assert case.tasks.filter(stage='preparacao').count() == \
+            len(CHECKLIST_TEMPLATES[('contrato', 'preparacao')])
+
+    def test_command_idempotent(self, customer):
+        case = make_case(customer)  # já semeado pelo signal
+        before = case.tasks.count()
+        call_command('seed_legal_case_tasks')
+        assert case.tasks.count() == before
