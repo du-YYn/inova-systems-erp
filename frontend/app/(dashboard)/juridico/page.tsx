@@ -58,6 +58,22 @@ interface ProposalData {
   billing_type: string;
   proposal_file: string | null;
   public_token: string | null;
+  payment_plan: {
+    plan_type: string;
+    plan_type_display: string;
+    one_time_amount: string;
+    one_time_method: string;
+    one_time_method_display: string;
+    one_time_installments: number;
+    one_time_first_due: string | null;
+    recurring_amount: string;
+    recurring_method: string;
+    recurring_method_display: string;
+    recurring_day_of_month: number | null;
+    recurring_duration_months: number | null;
+    recurring_first_due: string | null;
+  } | null;
+  services: { name: string; notes: string }[];
 }
 
 interface LegalCase {
@@ -742,9 +758,50 @@ export default function JuridicoPage() {
                       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <DetailRow label="Número" value={detailCase.proposal_data.number} />
                         <DetailRow label="Título" value={detailCase.proposal_data.title} sensitive />
-                        <DetailRow label="Valor" value={formatCurrency(detailCase.proposal_data.total_value)} sensitive />
-                        <DetailRow label="Forma de Pagamento" value={BILLING_TYPE_LABELS[detailCase.proposal_data.billing_type] ?? detailCase.proposal_data.billing_type} />
+                        {detailCase.proposal_data.payment_plan ? (
+                          <div className="sm:col-span-2 space-y-1.5">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Plano de Pagamento</p>
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{detailCase.proposal_data.payment_plan.plan_type_display}</p>
+                            {Number(detailCase.proposal_data.payment_plan.one_time_amount) > 0 && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <Sensitive>
+                                  {`Setup ${formatCurrency(detailCase.proposal_data.payment_plan.one_time_amount)}`}
+                                  {detailCase.proposal_data.payment_plan.one_time_installments > 1 ? ` em ${detailCase.proposal_data.payment_plan.one_time_installments}x` : ''}
+                                  {detailCase.proposal_data.payment_plan.one_time_method_display ? ` · ${detailCase.proposal_data.payment_plan.one_time_method_display}` : ''}
+                                </Sensitive>
+                              </p>
+                            )}
+                            {Number(detailCase.proposal_data.payment_plan.recurring_amount) > 0 && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <Sensitive>
+                                  {`Mensal ${formatCurrency(detailCase.proposal_data.payment_plan.recurring_amount)}/mês`}
+                                  {detailCase.proposal_data.payment_plan.recurring_method_display ? ` · ${detailCase.proposal_data.payment_plan.recurring_method_display}` : ''}
+                                  {detailCase.proposal_data.payment_plan.recurring_day_of_month ? `, dia ${detailCase.proposal_data.payment_plan.recurring_day_of_month}` : ''}
+                                  {detailCase.proposal_data.payment_plan.recurring_duration_months ? `, por ${detailCase.proposal_data.payment_plan.recurring_duration_months} meses` : ''}
+                                </Sensitive>
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <DetailRow label="Valor" value={formatCurrency(detailCase.proposal_data.total_value)} sensitive />
+                            <DetailRow label="Forma de Pagamento" value={BILLING_TYPE_LABELS[detailCase.proposal_data.billing_type] ?? detailCase.proposal_data.billing_type} />
+                          </>
+                        )}
                       </dl>
+                      {detailCase.proposal_data.services && detailCase.proposal_data.services.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Serviços / Escopo</p>
+                          <ul className="space-y-1">
+                            {detailCase.proposal_data.services.map((s, i) => (
+                              <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex gap-1.5">
+                                <span className="text-accent-gold">•</span>
+                                <Sensitive>{s.notes ? `${s.name} — ${s.notes}` : s.name}</Sensitive>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {(detailCase.proposal_data.proposal_file || detailCase.proposal_data.public_token) && (
                         <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                           {detailCase.proposal_data.proposal_file && (
