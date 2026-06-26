@@ -113,10 +113,42 @@ class LegalCaseSerializer(serializers.ModelSerializer):
         }
 
     def get_proposal_data(self, obj):
-        """📄 Proposta fechada (da proposal) — painel read-only do card."""
+        """📄 Proposta fechada (da proposal) — painel read-only do card.
+
+        Inclui o plano de pagamento completo (setup + mensal) e os serviços
+        do escopo, lidos por referência da proposta aprovada vinculada.
+        """
         p = obj.proposal
         if p is None:
             return None
+        from sales.models import ProposalPaymentPlan
+        # OneToOne reverso (p.payment_plan) levanta se ausente — usar filter().
+        plan = ProposalPaymentPlan.objects.filter(proposal=p).first()
+        plan_data = None
+        if plan is not None:
+            plan_data = {
+                'plan_type': plan.plan_type,
+                'plan_type_display': plan.get_plan_type_display(),
+                'one_time_amount': str(plan.one_time_amount),
+                'one_time_method': plan.one_time_method,
+                'one_time_method_display': (
+                    plan.get_one_time_method_display() if plan.one_time_method else ''
+                ),
+                'one_time_installments': plan.one_time_installments,
+                'one_time_first_due': plan.one_time_first_due,
+                'recurring_amount': str(plan.recurring_amount),
+                'recurring_method': plan.recurring_method,
+                'recurring_method_display': (
+                    plan.get_recurring_method_display() if plan.recurring_method else ''
+                ),
+                'recurring_day_of_month': plan.recurring_day_of_month,
+                'recurring_duration_months': plan.recurring_duration_months,
+                'recurring_first_due': plan.recurring_first_due,
+            }
+        services = [
+            {'name': si.service.name, 'notes': si.notes}
+            for si in p.service_items.select_related('service').order_by('display_order', 'id')
+        ]
         return {
             'id': p.id,
             'number': p.number,
@@ -126,6 +158,8 @@ class LegalCaseSerializer(serializers.ModelSerializer):
             'billing_type': p.billing_type,
             'proposal_file': p.proposal_file.url if p.proposal_file else None,
             'public_token': str(p.public_token) if p.public_token else None,
+            'payment_plan': plan_data,
+            'services': services,
         }
 
 

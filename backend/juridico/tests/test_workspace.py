@@ -297,3 +297,60 @@ class TestBackfillCommand:
         before = case.tasks.count()
         call_command('seed_legal_case_tasks')
         assert case.tasks.count() == before
+
+
+@pytest.mark.django_db
+class TestProposalDataEnriched:
+    def test_proposal_data_has_plan_and_services(self, juridico_client, customer, admin_user):
+        from datetime import date
+
+        from sales.models import (
+            Proposal,
+            ProposalPaymentPlan,
+            ProposalService,
+            Prospect,
+            Service,
+        )
+
+        prospect = Prospect.objects.create(
+            company_name='Cliente Workspace LTDA',
+            contact_name='Fulano de Tal',
+            created_by=admin_user,
+        )
+        proposal = Proposal.objects.create(
+            prospect=prospect,
+            number='PROP-WS-001',
+            title='Proposta Sistema Web',
+            proposal_type='software_dev',
+            billing_type='monthly',
+            valid_until=date(2026, 12, 31),
+            total_value=40000,
+            created_by=admin_user,
+        )
+        ProposalPaymentPlan.objects.create(
+            proposal=proposal,
+            plan_type='setup_plus_recurring',
+            one_time_amount=40000,
+            one_time_method='pix',
+            one_time_installments=1,
+            recurring_amount=3000,
+            recurring_method='credit_card',
+            recurring_day_of_month=15,
+            recurring_duration_months=12,
+        )
+        service = Service.objects.create(code='sistema_web', name='Sistema Web')
+        ProposalService.objects.create(proposal=proposal, service=service, notes='Escopo principal')
+
+        case = make_case(customer, proposal=proposal)
+        resp = juridico_client.get(f'{URL}{case.id}/')
+        assert resp.status_code == status.HTTP_200_OK, resp.data
+
+        pd = resp.data['proposal_data']
+        assert pd is not None
+        assert pd['payment_plan'] is not None
+        assert pd['payment_plan']['plan_type'] == 'setup_plus_recurring'
+        assert pd['payment_plan']['one_time_amount'] == '40000.00'
+        assert pd['payment_plan']['recurring_amount'] == '3000.00'
+        assert pd['payment_plan']['recurring_duration_months'] == 12
+        assert 'plan_type_display' in pd['payment_plan']
+        assert any(s['name'] == 'Sistema Web' for s in pd['services'])
