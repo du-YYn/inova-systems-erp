@@ -7,10 +7,13 @@ import {
   Ban, Rocket, ClipboardList, Building2, User, Wallet, History, FileSignature,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { FormField } from '@/components/ui/FormField';
 import api from '@/lib/api';
 import { Sensitive } from '@/components/ui/Sensitive';
+import StageWorkspace from './StageWorkspace';
+import type { LegalCaseTask } from './types';
 
 interface LegalCaseEvent {
   id: number;
@@ -67,6 +70,22 @@ interface ProposalData {
   billing_type: string;
   proposal_file: string | null;
   public_token: string | null;
+  payment_plan: {
+    plan_type: string;
+    plan_type_display: string;
+    one_time_amount: string;
+    one_time_method: string;
+    one_time_method_display: string;
+    one_time_installments: number;
+    one_time_first_due: string | null;
+    recurring_amount: string;
+    recurring_method: string;
+    recurring_method_display: string;
+    recurring_day_of_month: number | null;
+    recurring_duration_months: number | null;
+    recurring_first_due: string | null;
+  } | null;
+  services: { name: string; notes: string }[];
 }
 
 interface LegalCase {
@@ -89,6 +108,8 @@ interface LegalCase {
   signed_at: string | null;
   notes: string;
   events: LegalCaseEvent[];
+  attachment: string | null;
+  tasks: LegalCaseTask[];
   created_at: string;
 }
 
@@ -162,6 +183,9 @@ const MODALITIES: Modality[] = [
 ];
 
 const modalityByKey = (key: string) => MODALITIES.find((m) => m.key === key);
+
+const stageLabelFor = (status: string): string =>
+  (MODALITIES.flatMap((m) => m.columns).find((c) => c.key === status)?.label) ?? status;
 
 // Classes estáticas (Tailwind JIT não gera de interpolação) — nº de colunas por modalidade.
 const GRID_COLS: Record<number, string> = {
@@ -244,6 +268,7 @@ export default function JuridicoPage() {
   const [autentiqueId, setAutentiqueId] = useState('');
   const [autentiqueLink, setAutentiqueLink] = useState('');
   const [transitioning, setTransitioning] = useState<number | null>(null);
+  const [pendingAdvance, setPendingAdvance] = useState<LegalCase | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -301,6 +326,80 @@ export default function JuridicoPage() {
     setDetailCase((prev) => (prev && prev.id === updated.id ? updated : prev));
   };
 
+  // ── Checklist (LegalCaseTask) ──────────────────────────────────────────────
+  const patchDetailTasks = (mut: (tasks: LegalCaseTask[]) => LegalCaseTask[]) =>
+    setDetailCase((prev) => (prev ? { ...prev, tasks: mut(prev.tasks) } : prev));
+
+  const toggleTask = async (task: LegalCaseTask) => {
+    try {
+      const updated = await api.patch<LegalCaseTask>(
+        `/juridico/legal-case-tasks/${task.id}/`, { done: !task.done },
+      );
+      patchDetailTasks((tasks) => tasks.map((t) => (t.id === updated.id ? updated : t)));
+    } catch {
+      toast.error('Não foi possível atualizar a tarefa.');
+    }
+  };
+
+  const addTask = async (caseId: number, label: string) => {
+    if (!label.trim()) return;
+    try {
+      const created = await api.post<LegalCaseTask>(
+        '/juridico/legal-case-tasks/', { case: caseId, label: label.trim() },
+      );
+      patchDetailTasks((tasks) => [...tasks, created]);
+    } catch {
+      toast.error('Não foi possível adicionar a tarefa.');
+    }
+  };
+
+  const removeTask = async (task: LegalCaseTask) => {
+    try {
+      await api.delete(`/juridico/legal-case-tasks/${task.id}/`);
+      patchDetailTasks((tasks) => tasks.filter((t) => t.id !== task.id));
+    } catch {
+      toast.error('Não foi possível remover a tarefa.');
+    }
+  };
+
+  // ── Ferramentas (documento / notas / autentique) ───────────────────────────
+  const uploadAttachment = async (caseId: number, file: File) => {
+    try {
+      const updated = await api.upload<LegalCase>(
+        `/juridico/legal-cases/${caseId}/upload-attachment/`, file, 'attachment',
+      );
+      applyUpdated(updated);
+      toast.success('Documento anexado.');
+    } catch {
+      toast.error('Falha ao anexar o documento (verifique tipo/tamanho).');
+    }
+  };
+
+  const saveNotes = async (caseId: number, notes: string) => {
+    try {
+      const updated = await api.post<LegalCase>(
+        `/juridico/legal-cases/${caseId}/notes/`, { notes },
+      );
+      applyUpdated(updated);
+      toast.success('Notas salvas.');
+    } catch {
+      toast.error('Não foi possível salvar as notas.');
+    }
+  };
+
+  const saveAutentique = async (caseId: number, autentiqueId: string, autentiqueLink: string) => {
+    try {
+      const updated = await api.post<LegalCase>(
+        `/juridico/legal-cases/${caseId}/autentique/`,
+        { autentique_id: autentiqueId, autentique_link: autentiqueLink },
+      );
+      applyUpdated(updated);
+      toast.success('Link do Autentique atualizado.');
+    } catch {
+      toast.error('Não foi possível atualizar o link.');
+    }
+  };
+
   const doTransition = async (
     legalCase: LegalCase,
     target: string,
@@ -323,7 +422,7 @@ export default function JuridicoPage() {
     }
   };
 
-  const handleAdvanceClick = (legalCase: LegalCase) => {
+  const proceedAdvance = (legalCase: LegalCase) => {
     const target = nextStatus(legalCase);
     if (!target) return;
     // Upload no Autentique acontece na transição Preparação → Envio.
@@ -338,6 +437,16 @@ export default function JuridicoPage() {
     } else {
       doTransition(legalCase, target);
     }
+  };
+
+  const handleAdvanceClick = (legalCase: LegalCase) => {
+    const stageTasks = legalCase.tasks?.filter((t) => t.stage === legalCase.status) ?? [];
+    const hasPending = stageTasks.some((t) => !t.done);
+    if (hasPending) {
+      setPendingAdvance(legalCase);   // abre o ConfirmDialog
+      return;
+    }
+    proceedAdvance(legalCase);
   };
 
   const handleReject = (legalCase: LegalCase) => {
@@ -503,6 +612,16 @@ export default function JuridicoPage() {
                             <span className="text-[11px] text-gray-400 dark:text-gray-500">
                               {new Date(legalCase.created_at).toLocaleDateString('pt-BR')}
                             </span>
+                          {(() => {
+                            const stageTasks = legalCase.tasks?.filter((t) => t.stage === legalCase.status) ?? [];
+                            if (stageTasks.length === 0) return null;
+                            const done = stageTasks.filter((t) => t.done).length;
+                            return (
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400 inline-flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> {done}/{stageTasks.length}
+                              </span>
+                            );
+                          })()}
                             <div className="flex items-center gap-1.5">
                               {canReject(legalCase) && (
                                 <button
@@ -573,12 +692,28 @@ export default function JuridicoPage() {
               </div>
 
               <div className="p-6 space-y-6">
+                {/* Zona 1 — Etapa atual (workspace) */}
+                <StageWorkspace
+                  stageLabel={stageLabelFor(detailCase.status)}
+                  tasks={detailCase.tasks.filter((t) => t.stage === detailCase.status)}
+                  attachmentUrl={detailCase.attachment}
+                  notes={detailCase.notes}
+                  autentiqueId={detailCase.autentique_id}
+                  autentiqueLink={detailCase.autentique_link}
+                  onToggle={toggleTask}
+                  onAdd={(label) => addTask(detailCase.id, label)}
+                  onRemove={removeTask}
+                  onUpload={(file) => uploadAttachment(detailCase.id, file)}
+                  onSaveNotes={(n) => saveNotes(detailCase.id, n)}
+                  onSaveAutentique={(id, link) => saveAutentique(detailCase.id, id, link)}
+                />
+
                 {/* Painel 1: Dados do Cliente (do onboarding vinculado) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group" open>
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <Building2 className="w-4 h-4 text-accent-gold" />
                     Dados do Cliente
-                  </h3>
+                  </summary>
                   {detailCase.onboarding_data ? (
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                       {/* Empresa */}
@@ -642,22 +777,63 @@ export default function JuridicoPage() {
                       Sem Coleta de Dados vinculada (caso manual).
                     </p>
                   )}
-                </section>
+                </details>
 
                 {/* Painel 2: Proposta fechada (documento + valor/forma de pagamento) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group" open>
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <FileText className="w-4 h-4 text-accent-gold" />
                     Proposta Fechada
-                  </h3>
+                  </summary>
                   {detailCase.proposal_data ? (
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                       <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                         <DetailRow label="Número" value={detailCase.proposal_data.number} />
                         <DetailRow label="Título" value={detailCase.proposal_data.title} sensitive />
-                        <DetailRow label="Valor" value={formatCurrency(detailCase.proposal_data.total_value)} sensitive />
-                        <DetailRow label="Forma de Pagamento" value={BILLING_TYPE_LABELS[detailCase.proposal_data.billing_type] ?? detailCase.proposal_data.billing_type} />
+                        {detailCase.proposal_data.payment_plan ? (
+                          <div className="sm:col-span-2 space-y-1.5">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">Plano de Pagamento</p>
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{detailCase.proposal_data.payment_plan.plan_type_display}</p>
+                            {Number(detailCase.proposal_data.payment_plan.one_time_amount) > 0 && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <Sensitive>
+                                  {`Setup ${formatCurrency(detailCase.proposal_data.payment_plan.one_time_amount)}`}
+                                  {detailCase.proposal_data.payment_plan.one_time_installments > 1 ? ` em ${detailCase.proposal_data.payment_plan.one_time_installments}x` : ''}
+                                  {detailCase.proposal_data.payment_plan.one_time_method_display ? ` · ${detailCase.proposal_data.payment_plan.one_time_method_display}` : ''}
+                                </Sensitive>
+                              </p>
+                            )}
+                            {Number(detailCase.proposal_data.payment_plan.recurring_amount) > 0 && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300">
+                                <Sensitive>
+                                  {`Mensal ${formatCurrency(detailCase.proposal_data.payment_plan.recurring_amount)}/mês`}
+                                  {detailCase.proposal_data.payment_plan.recurring_method_display ? ` · ${detailCase.proposal_data.payment_plan.recurring_method_display}` : ''}
+                                  {detailCase.proposal_data.payment_plan.recurring_day_of_month ? `, dia ${detailCase.proposal_data.payment_plan.recurring_day_of_month}` : ''}
+                                  {detailCase.proposal_data.payment_plan.recurring_duration_months ? `, por ${detailCase.proposal_data.payment_plan.recurring_duration_months} meses` : ''}
+                                </Sensitive>
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <DetailRow label="Valor" value={formatCurrency(detailCase.proposal_data.total_value)} sensitive />
+                            <DetailRow label="Forma de Pagamento" value={BILLING_TYPE_LABELS[detailCase.proposal_data.billing_type] ?? detailCase.proposal_data.billing_type} />
+                          </>
+                        )}
                       </dl>
+                      {detailCase.proposal_data.services && detailCase.proposal_data.services.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">Serviços / Escopo</p>
+                          <ul className="space-y-1">
+                            {detailCase.proposal_data.services.map((s, i) => (
+                              <li key={i} className="text-sm text-gray-700 dark:text-gray-300 flex gap-1.5">
+                                <span className="text-accent-gold">•</span>
+                                <Sensitive>{s.notes ? `${s.name} — ${s.notes}` : s.name}</Sensitive>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       {(detailCase.proposal_data.proposal_file || detailCase.proposal_data.public_token) && (
                         <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                           {detailCase.proposal_data.proposal_file && (
@@ -690,7 +866,7 @@ export default function JuridicoPage() {
                       Sem proposta vinculada.
                     </p>
                   )}
-                </section>
+                </details>
 
                 {/* Notas do Jurídico */}
                 {detailCase.notes && (
@@ -703,11 +879,11 @@ export default function JuridicoPage() {
                 )}
 
                 {/* Painel 3: Timeline de histórico (LegalCaseEvent) */}
-                <section>
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                <details className="group">
+                  <summary className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3 cursor-pointer list-none">
                     <History className="w-4 h-4 text-accent-gold" />
                     Histórico
-                  </h3>
+                  </summary>
                   {detailCase.events && detailCase.events.length > 0 ? (
                     <ol className="relative border-l border-gray-200 dark:border-gray-700 ml-2 space-y-4">
                       {detailCase.events.map((ev) => {
@@ -751,7 +927,7 @@ export default function JuridicoPage() {
                       Nenhum evento registrado.
                     </p>
                   )}
-                </section>
+                </details>
               </div>
             </div>
           </FocusTrap>
@@ -914,6 +1090,20 @@ export default function JuridicoPage() {
           </FocusTrap>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingAdvance !== null}
+        danger={false}
+        title="Tarefas pendentes"
+        description="Há tarefas pendentes nesta etapa. Avançar mesmo assim?"
+        confirmLabel="Avançar"
+        onCancel={() => setPendingAdvance(null)}
+        onConfirm={() => {
+          const c = pendingAdvance;
+          setPendingAdvance(null);
+          if (c) proceedAdvance(c);
+        }}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ de ação POST /transition/ — nunca por PATCH direto de campo.
 """
 from rest_framework import serializers
 
-from .models import LegalCase, LegalCaseEvent
+from .models import LegalCase, LegalCaseEvent, LegalCaseTask
 
 
 class LegalCaseEventSerializer(serializers.ModelSerializer):
@@ -30,6 +30,26 @@ class LegalCaseEventSerializer(serializers.ModelSerializer):
         return obj.created_by.full_name if obj.created_by else 'Automação'
 
 
+class LegalCaseTaskSerializer(serializers.ModelSerializer):
+    """Item de checklist do card (workspace). Usado nested (read) e no viewset (write)."""
+    done_by_name = serializers.SerializerMethodField(read_only=True)
+    stage = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = LegalCaseTask
+        fields = [
+            'id', 'case', 'stage', 'label', 'done', 'done_at', 'done_by',
+            'done_by_name', 'order', 'is_custom', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'done_at', 'done_by', 'done_by_name', 'order', 'is_custom',
+            'created_at', 'updated_at',
+        ]
+
+    def get_done_by_name(self, obj):
+        return obj.done_by.full_name if obj.done_by else ''
+
+
 class LegalCaseSerializer(serializers.ModelSerializer):
     customer_name = serializers.SerializerMethodField(read_only=True)
     project_name = serializers.CharField(source='project.name', read_only=True, default=None)
@@ -41,6 +61,7 @@ class LegalCaseSerializer(serializers.ModelSerializer):
     onboarding_data = serializers.SerializerMethodField(read_only=True)
     proposal_data = serializers.SerializerMethodField(read_only=True)
     events = LegalCaseEventSerializer(many=True, read_only=True)
+    tasks = LegalCaseTaskSerializer(many=True, read_only=True)
 
     class Meta:
         model = LegalCase
@@ -50,7 +71,7 @@ class LegalCaseSerializer(serializers.ModelSerializer):
             'process_type', 'process_type_display', 'status', 'status_display',
             'source', 'autentique_id', 'autentique_link', 'signed_at',
             'notes', 'attachment', 'created_by', 'created_by_name',
-            'events', 'created_at', 'updated_at',
+            'events', 'tasks', 'created_at', 'updated_at',
         ]
         # status muda apenas via POST /transition/ (validação de ordem +
         # auditoria). Campos Autentique/assinatura são definidos pelo fluxo
@@ -107,10 +128,42 @@ class LegalCaseSerializer(serializers.ModelSerializer):
         }
 
     def get_proposal_data(self, obj):
-        """📄 Proposta fechada (da proposal) — painel read-only do card."""
+        """📄 Proposta fechada (da proposal) — painel read-only do card.
+
+        Inclui o plano de pagamento completo (setup + mensal) e os serviços
+        do escopo, lidos por referência da proposta aprovada vinculada.
+        """
         p = obj.proposal
         if p is None:
             return None
+        from sales.models import ProposalPaymentPlan
+        # OneToOne reverso (p.payment_plan) levanta se ausente — usar filter().
+        plan = ProposalPaymentPlan.objects.filter(proposal=p).first()
+        plan_data = None
+        if plan is not None:
+            plan_data = {
+                'plan_type': plan.plan_type,
+                'plan_type_display': plan.get_plan_type_display(),
+                'one_time_amount': str(plan.one_time_amount),
+                'one_time_method': plan.one_time_method,
+                'one_time_method_display': (
+                    plan.get_one_time_method_display() if plan.one_time_method else ''
+                ),
+                'one_time_installments': plan.one_time_installments,
+                'one_time_first_due': plan.one_time_first_due,
+                'recurring_amount': str(plan.recurring_amount),
+                'recurring_method': plan.recurring_method,
+                'recurring_method_display': (
+                    plan.get_recurring_method_display() if plan.recurring_method else ''
+                ),
+                'recurring_day_of_month': plan.recurring_day_of_month,
+                'recurring_duration_months': plan.recurring_duration_months,
+                'recurring_first_due': plan.recurring_first_due,
+            }
+        services = [
+            {'name': si.service.name, 'notes': si.notes}
+            for si in p.service_items.select_related('service').order_by('display_order', 'id')
+        ]
         return {
             'id': p.id,
             'number': p.number,
@@ -120,6 +173,8 @@ class LegalCaseSerializer(serializers.ModelSerializer):
             'billing_type': p.billing_type,
             'proposal_file': p.proposal_file.url if p.proposal_file else None,
             'public_token': str(p.public_token) if p.public_token else None,
+            'payment_plan': plan_data,
+            'services': services,
         }
 
 

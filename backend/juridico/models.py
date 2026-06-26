@@ -174,6 +174,7 @@ class LegalCaseEvent(models.Model):
         ('signed', 'Documento assinado'),
         ('rejected', 'Documento recusado'),
         ('linked', 'Vínculo atualizado'),
+        ('document', 'Documento'),
     ]
 
     case = models.ForeignKey(
@@ -210,3 +211,40 @@ class LegalCaseEvent(models.Model):
 
     def __str__(self):
         return f'{self.get_event_type_display()} — caso #{self.case_id}'
+
+
+class LegalCaseTask(models.Model):
+    """Item de checklist por etapa de um LegalCase (workspace do card, doc 02 §2).
+
+    Vem de modelo fixo (`is_custom=False`, semeado por etapa) ou é avulso
+    (`is_custom=True`, adicionado pelo jurídico naquele card). Não bloqueia o
+    avanço — só orienta. A conclusão guarda quem/quando.
+    """
+    case = models.ForeignKey(
+        LegalCase, on_delete=models.CASCADE, related_name='tasks',
+    )
+    stage = models.CharField(
+        max_length=30, help_text='Status/etapa a que a tarefa pertence',
+    )
+    label = models.CharField(max_length=255)
+    done = models.BooleanField(default=False)
+    done_at = models.DateTimeField(null=True, blank=True)
+    done_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='completed_legal_case_tasks',
+    )
+    order = models.PositiveIntegerField(default=0)
+    is_custom = models.BooleanField(
+        default=False, help_text='False = veio do modelo; True = avulsa',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'legal_case_tasks'
+        ordering = ['stage', 'order', 'id']
+        indexes = [models.Index(fields=['case', 'stage'])]
+
+    def __str__(self):
+        mark = '✓' if self.done else '○'
+        return f'{mark} {self.label} (caso #{self.case_id})'

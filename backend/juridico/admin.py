@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import LegalCase, LegalCaseEvent
+from .models import LegalCase, LegalCaseEvent, LegalCaseTask
+
+
+class LegalCaseTaskInline(admin.TabularInline):
+    model = LegalCaseTask
+    extra = 0
+    fields = ('stage', 'label', 'done', 'done_by', 'order', 'is_custom')
+    raw_id_fields = ('done_by',)
 
 
 class LegalCaseEventInline(admin.TabularInline):
@@ -25,7 +32,7 @@ class LegalCaseAdmin(admin.ModelAdmin):
     raw_id_fields = ('customer', 'project', 'created_by', 'onboarding', 'proposal')
     readonly_fields = ('signed_at', 'created_at', 'updated_at')
     date_hierarchy = 'created_at'
-    inlines = [LegalCaseEventInline]
+    inlines = [LegalCaseTaskInline, LegalCaseEventInline]
 
 
 @admin.register(LegalCaseEvent)

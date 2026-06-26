@@ -1,18 +1,23 @@
 """ViewSets do CRM Jurídico (v32 F3, doc processo-v32/02-juridico.md)."""
 import logging
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.permissions import HasSectorAccess
 from core.audit import log_audit
+from core.validators import validate_file_extension, validate_file_size
 from sales.views import DynamicPageSizePagination
 
-from .models import LegalCase
-from .serializers import LegalCaseSerializer, LegalCaseTransitionSerializer
+from .models import LegalCase, LegalCaseTask
+from .serializers import (
+    LegalCaseSerializer, LegalCaseTaskSerializer, LegalCaseTransitionSerializer,
+)
 
 logger = logging.getLogger('juridico')
 
@@ -22,7 +27,7 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
     queryset = (
         LegalCase.objects
         .select_related('customer', 'project', 'created_by', 'onboarding', 'proposal')
-        .prefetch_related('events', 'events__created_by')
+        .prefetch_related('events', 'events__created_by', 'tasks', 'tasks__done_by')
     )
     serializer_class = LegalCaseSerializer
     permission_classes = [HasSectorAccess('juridico')]
@@ -164,6 +169,16 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
             created_by=request.user,
         )
 
+        # Semeia o checklist da nova etapa (idempotente).
+        from .checklists import seed_stage_tasks
+        try:
+            seed_stage_tasks(case, new_status)
+        except Exception as exc:  # noqa: BLE001 — não derruba a transição
+            logger.exception(
+                'Falha ao semear tarefas (LegalCase %s, etapa %s): %s',
+                case.id, new_status, exc,
+            )
+
         # SAÍDAS por modalidade (doc 02 §3 + doc 09 item 07).
         self._handle_transition_outputs(request, case, new_status)
 
@@ -219,3 +234,106 @@ class LegalCaseViewSet(viewsets.ModelViewSet):
                     'Falha ao aprovar ChangeRequest do Aditivo (LegalCase %s): %s',
                     case.id, exc,
                 )
+
+    @action(
+        detail=True, methods=['post'], url_path='upload-attachment',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def upload_attachment(self, request, pk=None):
+        """Anexa/troca a minuta no card (campo attachment). Grava evento + audit."""
+        case = self.get_object()
+        file = request.FILES.get('attachment')
+        if not file:
+            return Response(
+                {'error': 'Arquivo (attachment) é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            validate_file_extension(file)
+            validate_file_size(file)
+        except DjangoValidationError as exc:
+            return Response({'error': exc.messages}, status=status.HTTP_400_BAD_REQUEST)
+        case.attachment = file
+        case.save(update_fields=['attachment', 'updated_at'])
+        case.record_event(
+            'document',
+            description=f'Documento anexado: {case.attachment.name}',
+            created_by=request.user,
+        )
+        log_audit(
+            request.user, 'legal_case_attachment', 'legal_case', case.id,
+            details=f'Anexo {case.attachment.name}', request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def notes(self, request, pk=None):
+        """Atualiza as notas do jurídico no card."""
+        case = self.get_object()
+        old = case.notes
+        case.notes = request.data.get('notes', '')
+        case.save(update_fields=['notes', 'updated_at'])
+        log_audit(
+            request.user, 'legal_case_notes', 'legal_case', case.id,
+            old_value={'notes': old}, new_value={'notes': case.notes}, request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def autentique(self, request, pk=None):
+        """Informa/corrige o id + link do Autentique fora da transição."""
+        case = self.get_object()
+        case.autentique_id = request.data.get('autentique_id', case.autentique_id)
+        case.autentique_link = request.data.get('autentique_link', case.autentique_link)
+        case.save(update_fields=['autentique_id', 'autentique_link', 'updated_at'])
+        case.record_event(
+            'document', autentique_link=case.autentique_link,
+            description='Link do Autentique atualizado', created_by=request.user,
+        )
+        log_audit(
+            request.user, 'legal_case_autentique', 'legal_case', case.id,
+            new_value={
+                'autentique_id': case.autentique_id,
+                'autentique_link': case.autentique_link,
+            },
+            request=request,
+        )
+        return Response(LegalCaseSerializer(case, context={'request': request}).data)
+
+
+@extend_schema(tags=['juridico'])
+class LegalCaseTaskViewSet(viewsets.ModelViewSet):
+    """Checklist por etapa do card (workspace). Itens criados via POST são avulsos."""
+    queryset = LegalCaseTask.objects.select_related('case', 'done_by')
+    serializer_class = LegalCaseTaskSerializer
+    permission_classes = [HasSectorAccess('juridico')]
+    pagination_class = None  # lista plana — o front consome direto
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+        if params.get('case'):
+            qs = qs.filter(case_id=params['case'])
+        if params.get('stage'):
+            qs = qs.filter(stage=params['stage'])
+        return qs
+
+    def perform_create(self, serializer):
+        case = serializer.validated_data['case']
+        stage = serializer.validated_data.get('stage') or case.status
+        last = case.tasks.filter(stage=stage).order_by('-order').first()
+        order = (last.order + 1) if last else 0
+        serializer.save(is_custom=True, stage=stage, order=order)
+
+    def perform_update(self, serializer):
+        serializer.validated_data.pop('case', None)  # case é imutável após criar (sem re-parent)
+        was_done = serializer.instance.done
+        task = serializer.save()
+        if task.done and not was_done:
+            task.done_at = timezone.now()
+            task.done_by = self.request.user
+            task.save(update_fields=['done_at', 'done_by', 'updated_at'])
+        elif not task.done and was_done:
+            task.done_at = None
+            task.done_by = None
+            task.save(update_fields=['done_at', 'done_by', 'updated_at'])
