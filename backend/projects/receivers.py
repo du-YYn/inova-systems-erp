@@ -37,9 +37,6 @@ ADITIVO_FLAG = 'AUTOMATION_PROD_ADITIVO_JURIDICO'      # Solicitar Mudança → 
 
 # Etapas "iniciais" onde o pagamento da entrada/assinatura ainda é esperado
 # (antes do desenvolvimento — doc 04 §1).
-_EARLY_ETAPAS = (
-    'agendar', 'etapa_3_preparacao', 'etapa_4_onboarding',
-)
 _PRE_DEV_ETAPAS = (
     'agendar', 'etapa_3_preparacao', 'etapa_4_onboarding',
     'etapa_5_documentacao', 'etapa_6_validacao_doc',
@@ -59,8 +56,9 @@ def _get_flag(name: str) -> str:
 def entrada_paga(invoice):
     """Hook chamado por finance.events.on_entrada_paga (flag FIN em `on`).
 
-    Seta entrada_paga_at no Project do customer mais recente em etapa ≤ 4
-    (antes da documentação) que ainda não tem entrada paga. Idempotente:
+    Seta entrada_paga_at no Project do customer mais recente em etapa
+    pré-Desenvolvimento (antes da Etapa 7) que ainda não tem entrada paga.
+    Idempotente:
     projeto já marcado não é tocado de novo.
     """
     flag = _get_flag(ENTRADA_FLAG)
@@ -79,7 +77,7 @@ def entrada_paga(invoice):
     project = (
         Project.objects.filter(
             customer_id=invoice.customer_id,
-            etapa_atual__in=_EARLY_ETAPAS,
+            etapa_atual__in=_PRE_DEV_ETAPAS,
             entrada_paga_at__isnull=True,
         )
         .exclude(situacao='cancelado')
@@ -88,7 +86,7 @@ def entrada_paga(invoice):
     )
     if project is None:
         logger.info(
-            'entrada_paga: invoice %s (customer %s) sem projeto em etapa<=4 '
+            'entrada_paga: invoice %s (customer %s) sem projeto pré-Dev '
             'aguardando entrada — nada a fazer (idempotente).',
             invoice.id, invoice.customer_id,
         )
