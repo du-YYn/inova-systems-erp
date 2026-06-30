@@ -558,9 +558,37 @@ class TestEntradaPagaReceiver:
             action='project_entrada_paga', resource_id=str(newer.id),
         ).exists()
 
-    def test_on_skips_projects_past_etapa_4(
+    def test_on_marks_project_in_documentacao(
         self, settings, admin_user, customer,
     ):
+        """Bug fix: entrada paga com o projeto já na Documentação (etapa 5)."""
+        settings.AUTOMATION_PROD_ENTRADA = 'on'
+        project = make_project(
+            admin_user, customer, etapa_atual='etapa_5_documentacao')
+        invoice = make_invoice(admin_user, customer)
+        receivers.entrada_paga(invoice)
+        project.refresh_from_db()
+        assert project.entrada_paga_at is not None
+
+    def test_on_marks_project_in_validacao(
+        self, settings, admin_user, customer,
+    ):
+        """Bug fix (caso real do teste do John): a entrada foi paga DEPOIS de o
+        projeto avançar para a Validação (etapa 6). Antes o pagamento era
+        descartado (filtro etapa<=4) e o Dev gate ficava travado pra sempre."""
+        settings.AUTOMATION_PROD_ENTRADA = 'on'
+        project = make_project(
+            admin_user, customer, etapa_atual='etapa_6_validacao_doc')
+        invoice = make_invoice(admin_user, customer)
+        receivers.entrada_paga(invoice)
+        project.refresh_from_db()
+        assert project.entrada_paga_at is not None
+
+    def test_on_skips_projects_in_development(
+        self, settings, admin_user, customer,
+    ):
+        """Projeto já em Desenvolvimento (ou além) não é marcado: a entrada já
+        deveria ter sido paga antes de passar pelo Dev gate."""
         settings.AUTOMATION_PROD_ENTRADA = 'on'
         project = make_project(
             admin_user, customer, etapa_atual='etapa_7_desenvolvimento')
